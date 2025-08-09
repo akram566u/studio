@@ -1,5 +1,5 @@
 "use client";
-import React, { useContext } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '@/components/providers/AppProvider';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { Card } from '@/components/ui/card';
@@ -21,6 +21,7 @@ import {
 const UserDashboard = () => {
   const context = useContext(AppContext);
   const { toast } = useToast();
+  const [countdown, setCountdown] = useState('00h 00m 00s');
 
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;
@@ -31,6 +32,33 @@ const UserDashboard = () => {
     navigator.clipboard.writeText(text);
     toast({ title: 'Copied to clipboard!' });
   };
+  
+  const depositAddress = "0x4D26340f3B52DCf82dd537cBF3c7e4C1D9b53BDc";
+
+  useEffect(() => {
+    if (currentUser && currentUser.level > 0) {
+      const timer = setInterval(() => {
+        const now = new Date().getTime();
+        const nextCredit = (currentUser.lastInterestCreditTime || now) + (24 * 60 * 60 * 1000);
+        const distance = nextCredit - now;
+
+        if (distance < 0) {
+          setCountdown('Crediting...');
+          // Here you would trigger the interest credit logic
+          return;
+        }
+
+        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+        setCountdown(`${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`);
+      }, 1000);
+      return () => clearInterval(timer);
+    } else {
+      setCountdown('00h 00m 00s');
+    }
+  }, [currentUser]);
+
 
   return (
     <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
@@ -64,7 +92,7 @@ const UserDashboard = () => {
           <Card className="card-gradient-orange-red p-6">
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Daily Interest Credit</h3>
             <p className="text-xl text-gray-200 mb-3">Next credit in:</p>
-            <p className="text-5xl font-bold text-purple-400 text-center">23h 59m 59s</p>
+            <p className="text-5xl font-bold text-purple-400 text-center">{countdown}</p>
           </Card>
 
            <Card className="card-gradient-indigo-fuchsia p-6">
@@ -84,8 +112,8 @@ const UserDashboard = () => {
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Recharge USDT (BEP-20)</h3>
             <p className="text-xl text-gray-200 mb-3">Copy this address to deposit:</p>
             <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
-              <span className="font-mono text-sm break-all text-green-300">0x4D26...3BDc</span>
-              <Button size="icon" variant="ghost" onClick={() => copyToClipboard('0x4D26340f3B52DCf82dd537cBF3c7e4C1D9b53BDc')}>
+              <span className="font-mono text-sm break-all text-green-300">{depositAddress}</span>
+              <Button size="icon" variant="ghost" onClick={() => copyToClipboard(depositAddress)}>
                 <Copy className="size-4" />
               </Button>
             </div>
@@ -152,8 +180,8 @@ const UserDashboard = () => {
                   <TableRow>
                     <TableHead className="text-white">Level</TableHead>
                     <TableHead className="text-white">Min Balance</TableHead>
+                    <TableHead className="text-white">Referrals</TableHead>
                     <TableHead className="text-white">Interest</TableHead>
-                    <TableHead className="text-white">Withdrawal</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -161,8 +189,8 @@ const UserDashboard = () => {
                     <TableRow key={level}>
                       <TableCell><LevelBadge level={parseInt(level, 10)} /></TableCell>
                       <TableCell className="font-mono text-green-300">{details.minBalance} USDT</TableCell>
+                      <TableCell className="font-mono text-blue-300">{details.directReferrals}</TableCell>
                       <TableCell className="font-mono text-purple-300">{(details.interest * 100).toFixed(2)}%</TableCell>
-                      <TableCell className="font-mono text-blue-300">{details.withdrawalLimit} USDT</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

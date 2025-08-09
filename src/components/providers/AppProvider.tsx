@@ -31,11 +31,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const levels: Levels = {
     0: { interest: 0.00, minBalance: 100, directReferrals: 0, withdrawalLimit: 0 },
-    1: { interest: 0.005, minBalance: 100, directReferrals: 0, withdrawalLimit: 150 },
-    2: { interest: 0.006, minBalance: 500, directReferrals: 5, withdrawalLimit: 500 },
-    3: { interest: 0.007, minBalance: 2000, directReferrals: 10, withdrawalLimit: 2000 },
-    4: { interest: 0.008, minBalance: 5000, directReferrals: 15, withdrawalLimit: 5000 },
-    5: { interest: 0.01, minBalance: 10000, directReferrals: 20, withdrawalLimit: 10000 },
+    1: { interest: 0.018, minBalance: 100, directReferrals: 0, withdrawalLimit: 150 },
+    2: { interest: 0.03, minBalance: 800, directReferrals: 8, withdrawalLimit: 500 },
+    3: { interest: 0.05, minBalance: 2000, directReferrals: 20, withdrawalLimit: 2000 },
+    4: { interest: 0.07, minBalance: 8000, directReferrals: 36, withdrawalLimit: 5000 },
+    5: { interest: 0.09, minBalance: 16000, directReferrals: 55, withdrawalLimit: 10000 },
   };
 
   // In a real implementation, all the logic from the user's <script> tag would be
@@ -59,24 +59,34 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         id: 'user123',
         email: email,
         balance: 1234.56,
-        level: 1, // Let's assume this user made a deposit
+        level: 0, // Start at level 0
         userReferralCode: 'REF123',
         referredBy: 'ADMINREF',
-        directReferrals: 5,
+        directReferrals: 8, // Dummy data for testing
         lastWithdrawalMonth: null,
         lastWithdrawalAmount: 0,
         transactions: [],
         referredUsers: [],
         lastInterestCreditTime: Date.now(),
         withdrawalCompletionTime: null,
-        primaryWithdrawalAddress: '0x1234...5678',
-        firstDepositTime: Date.now() - (50 * 24 * 60 * 60 * 1000)
+        primaryWithdrawalAddress: '0x1234567890abcdef1234567890abcdef12345678',
+        firstDepositTime: null
     };
-    if(dummyUser.balance >= 100) {
-        // A real app would have more complex level logic
-        dummyUser.level = 2; 
-    } else {
-        dummyUser.level = 0;
+    
+    // Logic to update level based on balance and referrals
+    let newLevel = 0;
+    for (const levelKey in levels) {
+      const levelNum = parseInt(levelKey, 10);
+      const levelData = levels[levelNum];
+      if (dummyUser.balance >= levelData.minBalance && dummyUser.directReferrals >= levelData.directReferrals) {
+        newLevel = Math.max(newLevel, levelNum);
+      }
+    }
+    dummyUser.level = newLevel;
+
+    // Simulate first deposit if balance is present
+    if (dummyUser.balance > 0 && !dummyUser.firstDepositTime) {
+      dummyUser.firstDepositTime = Date.now() - (50 * 24 * 60 * 60 * 1000);
     }
 
 
