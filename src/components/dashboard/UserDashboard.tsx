@@ -119,7 +119,7 @@ const UserDashboard = () => {
 
   // Effect for Daily Interest Countdown
   useEffect(() => {
-    if (currentUser && currentUser.level > 0) {
+    if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
       const timer = setInterval(() => {
         const now = new Date().getTime();
         const nextCredit = (currentUser.lastInterestCreditTime || now) + (24 * 60 * 60 * 1000);
@@ -140,7 +140,7 @@ const UserDashboard = () => {
     } else {
       setInterestCountdown('00h 00m 00s');
     }
-  }, [currentUser, currentUser?.lastInterestCreditTime]);
+  }, [currentUser, currentUser?.lastInterestCreditTime, currentUser?.firstDepositTime, currentUser?.level]);
 
   // Effect for Withdrawal Restriction Countdown
   useEffect(() => {
@@ -170,7 +170,7 @@ const UserDashboard = () => {
       return () => clearInterval(timer);
 
     } else {
-        setIsWithdrawalLocked(true);
+        setIsWithdrawalLocked(currentUser.level === 0);
         setWithdrawalCountdown(currentUser.level === 0 ? 'Awaiting first eligible deposit.' : 'Withdrawals are locked.');
     }
   }, [currentUser?.firstDepositTime, currentUser?.level]);
@@ -230,17 +230,14 @@ const UserDashboard = () => {
 
             <Card className="card-gradient-green-cyan p-6">
               <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Staking Level</h3>
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-2">
                 <p className="text-xl text-gray-200">Current Level:</p>
                 <LevelBadge level={currentUser.level} />
               </div>
-              {levels[currentUser.level] && (
-                <>
-                  <p className="text-xl text-gray-200 mb-2">Interest Rate: <span className="font-bold text-white">{(levels[currentUser.level].interest * 100).toFixed(2)}%</span></p>
-                  <p className="text-xl text-gray-200 mb-2">Min Balance: <span className="font-bold text-white">{levels[currentUser.level].minBalance} USDT</span></p>
-                  <p className="text-xl text-gray-200">Withdrawal Limit: <span className="font-bold text-white">{levels[currentUser.level].withdrawalLimit} USDT</span></p>
-                </>
-              )}
+               <div className="flex items-center justify-between">
+                <p className="text-xl text-gray-200">Direct Referrals:</p>
+                <p className="text-2xl font-bold text-yellow-400">{currentUser.directReferrals}</p>
+              </div>
             </Card>
 
             <Card className="card-gradient-orange-red p-6">
@@ -319,7 +316,7 @@ const UserDashboard = () => {
               <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
                   <span className="font-mono text-sm break-all text-green-300">{currentUser.primaryWithdrawalAddress || 'Not set'}</span>
                   {currentUser.primaryWithdrawalAddress && (
-                      <Button size="icon" variant="ghost" onClick={() => copyToClipboard(currentUser.primaryWithdrawalAddress)}>
+                      <Button size="icon" variant="ghost" onClick={() => copyToClipboard(currentUser.primaryWithdrawalAddress || '')}>
                           <Copy className="size-4" />
                       </Button>
                   )}
@@ -342,10 +339,6 @@ const UserDashboard = () => {
           <div className="lg:col-span-1 space-y-8">
             <Card className="card-gradient-blue-purple p-6">
               <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Referral Network</h3>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xl text-gray-200">Direct Referrals:</p>
-                <p className="text-4xl font-bold text-yellow-400">{currentUser.directReferrals}</p>
-              </div>
               <h4 className="text-lg font-semibold mb-2 text-blue-300 mt-4">Your Referral Code:</h4>
               <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
                 <span className="font-mono text-base break-all text-yellow-300">{currentUser.userReferralCode}</span>

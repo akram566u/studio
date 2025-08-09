@@ -91,7 +91,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     if (isNewUser) {
         signUp(email, pass, 'ADMINREF'); // Go through the sign-up flow to create a fresh user
-        toast({ title: "New user created!", description: "Please sign in again to access the new account." });
     } else {
         setCurrentUser(existingUser);
         setIsAdmin(false);
@@ -117,7 +116,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         directReferrals: 0,
         transactions: [],
         referredUsers: [],
-        lastInterestCreditTime: Date.now(),
+        lastInterestCreditTime: 0,
         primaryWithdrawalAddress: '',
         firstDepositTime: null,
         registrationTime: Date.now(),
@@ -193,6 +192,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     setDepositRequests(prev => prev.filter(r => r.id !== transactionId));
     
+    // This part is tricky in prototype. Let's assume we can find the user.
+    // In a real app, you'd fetch the user from the DB via request.userId
     if (currentUser && currentUser.id === request.userId) {
         setCurrentUser(prevUser => {
             if (!prevUser) return null;
@@ -266,6 +267,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     setWithdrawalRequests(prev => prev.filter(r => r.id !== transactionId));
 
+    // This part is tricky in prototype. Let's assume we can find the user.
+    // In a real app, you'd fetch the user from the DB via request.userId
     if (currentUser && currentUser.id === request.userId) {
       setCurrentUser(prevUser => {
           if (!prevUser) return null;
@@ -282,7 +285,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   // Effect for Daily Interest Credit
   useEffect(() => {
     const interval = setInterval(() => {
-      if (currentUser && currentUser.level > 0) {
+      if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
         const now = Date.now();
         const timeSinceLastCredit = now - (currentUser.lastInterestCreditTime || 0);
         const twentyFourHours = 24 * 60 * 60 * 1000;
