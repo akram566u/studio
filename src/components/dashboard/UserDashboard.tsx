@@ -7,8 +7,16 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
 const UserDashboard = () => {
   const context = useContext(AppContext);
@@ -17,7 +25,7 @@ const UserDashboard = () => {
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;
   }
-  const { currentUser } = context;
+  const { currentUser, levels } = context;
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -25,10 +33,10 @@ const UserDashboard = () => {
   };
 
   return (
-    <GlassPanel className="w-full max-w-6xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+    <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column */}
-        <div className="md:col-span-1 space-y-8">
+        <div className="lg:col-span-1 space-y-8">
           <Card className="card-gradient-blue-purple p-6">
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Staking Overview</h3>
             <p className="text-gray-200 text-base mb-2">User ID: <span className="font-mono text-sm break-all text-blue-200">{currentUser.id}</span></p>
@@ -44,9 +52,13 @@ const UserDashboard = () => {
               <p className="text-xl text-gray-200">Current Level:</p>
               <LevelBadge level={currentUser.level} />
             </div>
-            <p className="text-xl text-gray-200 mb-2">Interest Rate: <span className="font-bold text-white">0.5%</span></p>
-            <p className="text-xl text-gray-200 mb-2">Minimum Balance: <span className="font-bold text-white">100 USDT</span></p>
-            <p className="text-xl text-gray-200">Monthly Withdrawal Limit: <span className="font-bold text-white">150 USDT</span></p>
+            {levels[currentUser.level] && (
+              <>
+                <p className="text-xl text-gray-200 mb-2">Interest Rate: <span className="font-bold text-white">{(levels[currentUser.level].interest * 100).toFixed(2)}%</span></p>
+                <p className="text-xl text-gray-200 mb-2">Min Balance: <span className="font-bold text-white">{levels[currentUser.level].minBalance} USDT</span></p>
+                <p className="text-xl text-gray-200">Withdrawal Limit: <span className="font-bold text-white">{levels[currentUser.level].withdrawalLimit} USDT</span></p>
+              </>
+            )}
           </Card>
 
           <Card className="card-gradient-orange-red p-6">
@@ -54,10 +66,20 @@ const UserDashboard = () => {
             <p className="text-xl text-gray-200 mb-3">Next credit in:</p>
             <p className="text-5xl font-bold text-purple-400 text-center">23h 59m 59s</p>
           </Card>
+
+           <Card className="card-gradient-indigo-fuchsia p-6">
+            <h3 className="text-xl font-semibold mb-3 text-blue-300">Transaction History</h3>
+            <ScrollArea className="h-60 custom-scrollbar">
+              <div className="space-y-2">
+                <p className="text-gray-400">No transactions yet.</p>
+              </div>
+            </ScrollArea>
+          </Card>
+
         </div>
 
         {/* Middle Column */}
-        <div className="md:col-span-1 space-y-8">
+        <div className="lg:col-span-1 space-y-8">
           <Card className="card-gradient-yellow-pink p-6">
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Recharge USDT (BEP-20)</h3>
             <p className="text-xl text-gray-200 mb-3">Copy this address to deposit:</p>
@@ -75,13 +97,31 @@ const UserDashboard = () => {
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
             <p className="text-xl text-gray-200 mb-3">Minimum withdrawal: 100 USDT</p>
             <Input type="number" placeholder="Amount to withdraw" className="mb-4 text-xl" />
-            <Input type="text" placeholder="Your BEP-20 Wallet Address" value={currentUser.primaryWithdrawalAddress} className="mb-4 text-xl" />
+            <Input type="text" placeholder="Your BEP-20 Wallet Address" value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-xl" />
             <Button className="w-full py-3 text-lg">Request Withdrawal</Button>
+          </Card>
+
+          <Card className="card-gradient-orange-red p-6">
+            <h3 className="text-xl font-semibold mb-3 text-blue-300">Manage Withdrawal Address</h3>
+            <p className="text-xl text-gray-200 mb-3">Current Address:</p>
+            <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
+                <span className="font-mono text-sm break-all text-green-300">{currentUser.primaryWithdrawalAddress || 'Not set'}</span>
+                {currentUser.primaryWithdrawalAddress && (
+                    <Button size="icon" variant="ghost" onClick={() => copyToClipboard(currentUser.primaryWithdrawalAddress)}>
+                        <Copy className="size-4" />
+                    </Button>
+                )}
+            </div>
+            <Input type="text" placeholder="Enter new BEP-20 Address" className="mb-4 text-xl" />
+            <div className="flex gap-2">
+                <Button className="w-full py-3 text-lg"><Edit />Change</Button>
+                <Button variant="destructive" className="w-full py-3 text-lg"><Trash2 />Delete</Button>
+            </div>
           </Card>
         </div>
 
         {/* Right Column */}
-        <div className="md:col-span-1 space-y-8">
+        <div className="lg:col-span-1 space-y-8">
           <Card className="card-gradient-blue-purple p-6">
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Referral Network</h3>
             <div className="flex items-center justify-between mb-2">
@@ -105,11 +145,28 @@ const UserDashboard = () => {
           </Card>
           
           <Card className="card-gradient-green-cyan p-6">
-            <h3 className="text-xl font-semibold mb-3 text-blue-300">Transaction History</h3>
-            <ScrollArea className="h-60 custom-scrollbar">
-              <div className="space-y-2">
-                <p className="text-gray-400">No transactions yet.</p>
-              </div>
+            <h3 className="text-xl font-semibold mb-4 text-blue-300">Staking Level Details</h3>
+            <ScrollArea className="h-96 custom-scrollbar">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-white">Level</TableHead>
+                    <TableHead className="text-white">Min Balance</TableHead>
+                    <TableHead className="text-white">Interest</TableHead>
+                    <TableHead className="text-white">Withdrawal</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Object.entries(levels).map(([level, details]) => (
+                    <TableRow key={level}>
+                      <TableCell><LevelBadge level={parseInt(level, 10)} /></TableCell>
+                      <TableCell className="font-mono text-green-300">{details.minBalance} USDT</TableCell>
+                      <TableCell className="font-mono text-purple-300">{(details.interest * 100).toFixed(2)}%</TableCell>
+                      <TableCell className="font-mono text-blue-300">{details.withdrawalLimit} USDT</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </ScrollArea>
           </Card>
         </div>
