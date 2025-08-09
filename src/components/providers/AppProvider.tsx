@@ -27,6 +27,35 @@ export interface AppContextType {
 export const AppContext = createContext<AppContextType | null>(null);
 
 const generateTxnId = () => `txn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+const generateReferralCode = () => `REF${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+// In-memory "database" for the prototype
+let users: { [email: string]: User } = {};
+let allTransactions: { [userId: string]: Transaction[] } = {};
+
+const createInitialUser = (email: string): User => {
+    const userId = `user_${Date.now()}`;
+    const newUser: User = {
+        id: userId,
+        email: email,
+        password: 'password', // In a real app, this would be hashed
+        balance: 0,
+        level: 0,
+        userReferralCode: generateReferralCode(),
+        referredBy: 'ADMIN', // Default referral
+        directReferrals: 0,
+        transactions: [],
+        referredUsers: [],
+        lastInterestCreditTime: 0,
+        primaryWithdrawalAddress: '',
+        firstDepositTime: null,
+        registrationTime: Date.now(),
+    };
+    users[email] = newUser;
+    allTransactions[userId] = [];
+    return newUser;
+};
+
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -40,13 +69,27 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const ADMIN_PASSWORD = "admin123";
 
   const levels: Levels = {
-    0: { interest: 0.00, minBalance: 0, directReferrals: 0, withdrawalLimit: 0 },
+    0: { interest: 0, minBalance: 0, directReferrals: 0, withdrawalLimit: 0 },
     1: { interest: 0.018, minBalance: 100, directReferrals: 0, withdrawalLimit: 150 },
     2: { interest: 0.03, minBalance: 800, directReferrals: 8, withdrawalLimit: 500 },
     3: { interest: 0.05, minBalance: 2000, directReferrals: 20, withdrawalLimit: 2000 },
     4: { interest: 0.07, minBalance: 8000, directReferrals: 36, withdrawalLimit: 5000 },
     5: { interest: 0.09, minBalance: 16000, directReferrals: 55, withdrawalLimit: 10000 },
   };
+  
+    // Initialize a default user for the prototype if it doesn't exist
+    useEffect(() => {
+        if (!users['user@example.com']) {
+            const initialUser = createInitialUser('user@example.com');
+            users[initialUser.email] = addTransaction(initialUser, {
+                type: 'account_created',
+                amount: 0,
+                status: 'completed',
+                description: 'Account created successfully.',
+            });
+        }
+    }, []);
+
 
   const addTransaction = useCallback((user: User, transactionData: Omit<Transaction, 'id' | 'userId' | 'timestamp'>): User => {
       const newTransaction: Transaction = {
@@ -68,33 +111,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
     
-    // Simulating an existing user vs a new one
-    const isNewUser = email === 'new@user.com';
-
-    // This creates a consistent "existing" user for demonstration
-    let existingUser: User = {
-        id: 'user123',
-        email: email,
-        password: pass,
-        balance: 1234.56,
-        level: 2,
-        userReferralCode: 'REFUSER1',
-        referredBy: 'ADMINREF',
-        directReferrals: 8,
-        transactions: [],
-        referredUsers: ['referred1@example.com', 'referred2@example.com'],
-        lastInterestCreditTime: Date.now(),
-        primaryWithdrawalAddress: '0x1234567890abcdef1234567890abcdef12345678',
-        firstDepositTime: Date.now() - (10 * 24 * 60 * 60 * 1000), // 10 days ago
-        registrationTime: Date.now() - (50 * 24 * 60 * 60 * 1000), // 50 days ago
-    };
-    
-    if (isNewUser) {
-        signUp(email, pass, 'REFUSER1'); // Use the existing user's referral code
-    } else {
-        setCurrentUser(existingUser);
+    const user = users[email];
+    if (user) {
+        // In a real app, compare hashed passwords
+        setCurrentUser(user);
         setIsAdmin(false);
         toast({ title: "Signed in successfully!" });
+    } else {
+        toast({ title: "Error", description: "User not found. Please sign up.", variant: "destructive" });
     }
   };
   
@@ -103,55 +127,41 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: "Error", description: "Please fill all fields.", variant: "destructive"});
         return;
     }
+    if(users[email]) {
+        toast({ title: "Error", description: "User with this email already exists.", variant: "destructive"});
+        return;
+    }
     
-    const userId = 'newUser' + Date.now();
-    let newUser: User = {
-        id: userId,
-        email: 'new@user.com', // For prototype, use a consistent email
-        password: 'password',
-        balance: 0,
-        level: 0,
-        userReferralCode: 'REF' + userId.substring(7,13).toUpperCase(),
-        referredBy: referral,
-        directReferrals: 0,
-        transactions: [],
-        referredUsers: [],
-        lastInterestCreditTime: 0,
-        primaryWithdrawalAddress: '',
-        firstDepositTime: null,
-        registrationTime: Date.now(),
-    };
-    
+    let newUser = createInitialUser(email);
+    newUser.referredBy = referral;
+
     newUser = addTransaction(newUser, {
         type: 'account_created',
         amount: 0,
         status: 'completed',
         description: `Account created successfully. Referred by ${referral}.`,
     });
+    
+    users[email] = newUser;
 
-    // In this prototype, if the current user is the referrer, update their state
-    if (currentUser && currentUser.userReferralCode === referral) {
-        setCurrentUser(prevUser => {
-            if (!prevUser) return null;
-            const updatedUser = {
-                ...prevUser,
-                directReferrals: prevUser.directReferrals + 1,
-                referredUsers: [...prevUser.referredUsers, newUser.email],
-            };
-            return addTransaction(updatedUser, {
-                type: 'new_referral',
-                amount: 1,
-                status: 'info',
-                description: `New user registered with your code: ${newUser.email}`
-            });
+    // In this prototype, find the referrer in our "users" DB and update them
+    const referrer = Object.values(users).find(u => u.userReferralCode === referral);
+    if(referrer) {
+        referrer.directReferrals += 1;
+        referrer.referredUsers.push(newUser.email);
+        users[referrer.email] = addTransaction(referrer, {
+             type: 'new_referral',
+             amount: 1,
+             status: 'info',
+             description: `New user registered with your code: ${newUser.email}`
         });
+        // If the referrer is the currently logged-in user, update their state
+        if(currentUser && currentUser.id === referrer.id) {
+            setCurrentUser(users[referrer.email]);
+        }
     }
 
-
-    // In a real app, you would save this user to a database.
-    // For this prototype, we'll just log it and ask them to sign in.
-    console.log("New user created (not saved):", newUser);
-    toast({ title: "Account created successfully!", description: "Please sign in with 'new@user.com' to see the new user flow." });
+    toast({ title: "Account created successfully!", description: "You can now sign in." });
   };
   
   const signOut = () => {
@@ -170,6 +180,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           description: `Withdrawal address updated to ${address.substring(0, 10)}...`
       });
       setCurrentUser(updatedUser);
+      users[updatedUser.email] = updatedUser;
       toast({ title: "Success", description: "Withdrawal address updated." });
     }
   };
@@ -184,6 +195,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           description: `Withdrawal address deleted.`
       });
       setCurrentUser(updatedUser);
+      users[updatedUser.email] = updatedUser;
       toast({ title: "Success", description: "Withdrawal address deleted." });
     }
   };
@@ -201,56 +213,55 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       description: `User requested a deposit of ${amount} USDT.`
     };
     setDepositRequests(prev => [...prev, newRequest]);
-    setCurrentUser(user => user ? addTransaction(user, newRequest) : null);
+    const updatedUser = addTransaction(currentUser, newRequest);
+    setCurrentUser(updatedUser);
+    users[updatedUser.email] = updatedUser;
     toast({ title: "Success", description: "Deposit request submitted." });
   };
 
   const approveDeposit = (transactionId: string) => {
     const request = depositRequests.find(r => r.id === transactionId);
-    if (!request) return;
+    if (!request || !request.email) return;
 
     setDepositRequests(prev => prev.filter(r => r.id !== transactionId));
     
-    // This part is tricky in prototype. Let's assume we can find the user.
-    // In a real app, you'd fetch the user from the DB via request.userId
-    if (currentUser && currentUser.id === request.userId) {
-        setCurrentUser(prevUser => {
-            if (!prevUser) return null;
-            let updatedUser = { ...prevUser };
-            
-            updatedUser.transactions = updatedUser.transactions.map(tx => 
-                tx.id === transactionId ? { ...tx, status: 'approved' as const, description: `Deposit of ${request.amount} USDT approved.` } : tx
-            );
-            
-            const isFirstEligibleDeposit = updatedUser.level === 0 && (updatedUser.balance + request.amount) >= levels[1].minBalance;
-            
-            updatedUser.balance += request.amount;
+    let userToUpdate = users[request.email];
+    if (userToUpdate) {
+        
+        userToUpdate.transactions = userToUpdate.transactions.map(tx => 
+            tx.id === transactionId ? { ...tx, status: 'approved' as const, description: `Deposit of ${request.amount} USDT approved.` } : tx
+        );
+        
+        const isFirstEligibleDeposit = userToUpdate.level === 0 && (userToUpdate.balance + request.amount) >= levels[1].minBalance;
+        
+        userToUpdate.balance += request.amount;
 
-            if (isFirstEligibleDeposit && !updatedUser.firstDepositTime) {
-                updatedUser.firstDepositTime = Date.now();
-                updatedUser = addTransaction(updatedUser, { 
-                    type: 'info', amount: 0, status: 'info', description: '45-day withdrawal hold has started.' 
-                });
-            }
+        if (isFirstEligibleDeposit) {
+            userToUpdate.firstDepositTime = Date.now();
+            userToUpdate = addTransaction(userToUpdate, { 
+                type: 'info', amount: 0, status: 'info', description: '45-day withdrawal hold has started.' 
+            });
+        }
 
-            const oldLevel = updatedUser.level;
-            let newLevel = oldLevel;
-            // Use reverse keys to check from highest level down
-            const sortedLevels = Object.keys(levels).map(Number).sort((a,b) => b-a);
-            for (const levelKey of sortedLevels) {
-                if (updatedUser.balance >= levels[levelKey].minBalance && updatedUser.directReferrals >= levels[levelKey].directReferrals) {
-                    newLevel = levelKey;
-                    break; // Found the highest eligible level
-                }
+        const oldLevel = userToUpdate.level;
+        let newLevel = oldLevel;
+        const sortedLevels = Object.keys(levels).map(Number).sort((a,b) => b-a);
+        for (const levelKey of sortedLevels) {
+            if (userToUpdate.balance >= levels[levelKey].minBalance && userToUpdate.directReferrals >= levels[levelKey].directReferrals) {
+                newLevel = levelKey;
+                break;
             }
-            
-            if (newLevel > oldLevel) {
-                 updatedUser.level = newLevel;
-                 updatedUser = addTransaction(updatedUser, { type: 'level_up', amount: newLevel, status: 'info', description: `Promoted to Level ${newLevel}` });
-            }
-            
-            return updatedUser;
-        });
+        }
+        
+        if (newLevel > oldLevel) {
+             userToUpdate.level = newLevel;
+             userToUpdate = addTransaction(userToUpdate, { type: 'level_up', amount: newLevel, status: 'info', description: `Promoted to Level ${newLevel}` });
+        }
+        
+        users[userToUpdate.email] = userToUpdate;
+        if (currentUser && currentUser.id === userToUpdate.id) {
+            setCurrentUser(userToUpdate);
+        }
     }
     toast({ title: "Success", description: `Deposit for ${request.email} approved.` });
   };
@@ -276,27 +287,28 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         description: `User requested a withdrawal of ${amount} USDT.`
     };
     setWithdrawalRequests(prev => [...prev, newRequest]);
-    setCurrentUser(user => user ? addTransaction(user, newRequest) : null);
+    const updatedUser = addTransaction(currentUser, newRequest);
+    setCurrentUser(updatedUser);
+    users[updatedUser.email] = updatedUser;
     toast({ title: "Success", description: "Withdrawal request submitted." });
   };
   
   const approveWithdrawal = (transactionId: string) => {
     const request = withdrawalRequests.find(r => r.id === transactionId);
-    if (!request) return;
+    if (!request || !request.email) return;
 
     setWithdrawalRequests(prev => prev.filter(r => r.id !== transactionId));
 
-    // This part is tricky in prototype. Let's assume we can find the user.
-    // In a real app, you'd fetch the user from the DB via request.userId
-    if (currentUser && currentUser.id === request.userId) {
-      setCurrentUser(prevUser => {
-          if (!prevUser) return null;
-          let updatedUser = { ...prevUser, balance: prevUser.balance - request.amount };
-          updatedUser.transactions = updatedUser.transactions.map(tx => 
-              tx.id === transactionId ? { ...tx, status: 'approved' as const, description: `Withdrawal of ${request.amount} USDT approved.` } : tx
-          );
-          return updatedUser;
-      });
+    let userToUpdate = users[request.email];
+    if (userToUpdate) {
+        userToUpdate.balance -= request.amount;
+        userToUpdate.transactions = userToUpdate.transactions.map(tx => 
+            tx.id === transactionId ? { ...tx, status: 'approved' as const, description: `Withdrawal of ${request.amount} USDT approved.` } : tx
+        );
+        users[userToUpdate.email] = userToUpdate;
+        if (currentUser && currentUser.id === userToUpdate.id) {
+            setCurrentUser(userToUpdate);
+        }
     }
     toast({ title: "Success", description: `Withdrawal for ${request.email} approved.` });
   };
@@ -306,7 +318,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const interval = setInterval(() => {
       if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
         const now = Date.now();
-        const timeSinceLastCredit = now - (currentUser.lastInterestCreditTime || 0);
+        const timeSinceLastCredit = now - (currentUser.lastInterestCreditTime || currentUser.firstDepositTime);
         const twentyFourHours = 24 * 60 * 60 * 1000;
 
         if (timeSinceLastCredit >= twentyFourHours) {
@@ -326,6 +338,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 status: 'credited',
                 description: `Daily interest of ${interestAmount.toFixed(4)} USDT credited.`
             });
+            users[updatedUser.email] = updatedUser;
             toast({ title: "Interest Credited!", description: `You earned ${interestAmount.toFixed(4)} USDT.`});
             return updatedUser;
           });
