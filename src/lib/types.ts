@@ -20,16 +20,17 @@ export interface User {
   email: string;
   password?: string; // Should be hashed in a real app
   userReferralCode: string;
-  referredBy: string;
+  referredBy: string | null; // Can be null if no referrer
   balance: number;
   level: number;
   directReferrals: number;
   transactions: Transaction[];
-  referredUsers: string[];
+  referredUsers: { email: string, isActivated: boolean }[];
   lastInterestCreditTime: number;
   primaryWithdrawalAddress: string;
   firstDepositTime: number | null;
   registrationTime: number;
+  lastWithdrawalTime: number | null; // To track monthly withdrawal limit
 }
 
 export interface Level {

@@ -8,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Clock, Send, Briefcase, TrendingUp, CheckCircle, AlertTriangle, Info } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Clock, Send, Briefcase, TrendingUp, CheckCircle, AlertTriangle, Info, UserX } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -94,7 +94,6 @@ const UserDashboard = () => {
   };
   
   const handleSubmitWithdrawal = () => {
-    const amount = parseFloat(withdrawalAmount);
     if (isWithdrawalLocked && currentUser.level > 0) {
         toast({ 
             title: "Withdrawal Locked", 
@@ -103,6 +102,15 @@ const UserDashboard = () => {
         });
         return;
     }
+     if (currentUser.level === 0) {
+        toast({ 
+            title: "Withdrawal Locked", 
+            description: `You must reach level 1 to withdraw.`, 
+            variant: "destructive" 
+        });
+        return;
+    }
+    const amount = parseFloat(withdrawalAmount);
     if (isNaN(amount) || amount <= 0) {
         toast({ title: "Error", description: "Please enter a valid withdrawal amount.", variant: "destructive" });
         return;
@@ -122,12 +130,14 @@ const UserDashboard = () => {
     if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
       const timer = setInterval(() => {
         const now = new Date().getTime();
-        const nextCredit = (currentUser.lastInterestCreditTime || now) + (24 * 60 * 60 * 1000);
+        const lastCreditTime = currentUser.lastInterestCreditTime || currentUser.firstDepositTime;
+        const nextCredit = lastCreditTime + (24 * 60 * 60 * 1000);
         const distance = nextCredit - now;
 
         if (distance < 0) {
+          // Logic to credit interest is now handled globally in AppProvider
+          // This countdown just displays the time remaining
           setInterestCountdown('Crediting...');
-          // Logic to credit interest is now in AppProvider
           return;
         }
 
@@ -140,7 +150,7 @@ const UserDashboard = () => {
     } else {
       setInterestCountdown('00h 00m 00s');
     }
-  }, [currentUser, currentUser?.lastInterestCreditTime, currentUser?.firstDepositTime, currentUser?.level]);
+  }, [currentUser?.lastInterestCreditTime, currentUser?.firstDepositTime, currentUser?.level]);
 
   // Effect for Withdrawal Restriction Countdown
   useEffect(() => {
@@ -203,6 +213,8 @@ const UserDashboard = () => {
     }
   }
 
+  const currentLevelDetails = levels[currentUser.level];
+
 
   return (
     <>
@@ -235,7 +247,7 @@ const UserDashboard = () => {
                 <LevelBadge level={currentUser.level} />
               </div>
                <div className="flex items-center justify-between">
-                <p className="text-xl text-gray-200">Direct Referrals:</p>
+                <p className="text-xl text-gray-200">Active Referrals:</p>
                 <p className="text-2xl font-bold text-yellow-400">{currentUser.directReferrals}</p>
               </div>
             </Card>
@@ -259,7 +271,7 @@ const UserDashboard = () => {
                               <p className="font-semibold text-white">{tx.description}</p>
                               {getStatusBadge(tx.status)}
                           </div>
-                          <p className="text-xs text-gray-400">{format(tx.timestamp, 'PPpp')}</p>
+                          <p className="text-xs text-gray-400">{format(new Date(tx.timestamp), 'PPpp')}</p>
                         </div>
                       </div>
                     ))}
@@ -295,7 +307,12 @@ const UserDashboard = () => {
 
             <Card className="card-gradient-indigo-fuchsia p-6">
               <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
-              <p className="text-xl text-gray-200 mb-3">Minimum withdrawal: 100 USDT</p>
+              <p className="text-lg text-gray-300 mb-1">
+                Your withdrawal limit: <span className="font-bold text-yellow-300">{currentLevelDetails.withdrawalLimit} USDT</span>
+              </p>
+               <p className="text-xs text-gray-400 mb-3">
+                Withdrawals are processed once a month and take 3 days to complete after approval.
+              </p>
               <Input
                   type="number"
                   placeholder="Amount to withdraw"
@@ -349,9 +366,12 @@ const UserDashboard = () => {
               <ScrollArea className="h-40">
                   <ul className="list-none space-y-2">
                     {currentUser.referredUsers.length > 0 ? (
-                      currentUser.referredUsers.map((email, index) => (
+                      currentUser.referredUsers.map((user, index) => (
                         <li key={index} className="flex items-center gap-2 text-gray-300">
-                          <UserCheck className="text-green-400 size-4" /> {email}
+                          {user.isActivated 
+                            ? <UserCheck className="text-green-400 size-4" /> 
+                            : <UserX className="text-red-400 size-4" />}
+                          {user.email} {user.isActivated ? '(Active)' : '(Inactive)'}
                         </li>
                       ))
                     ) : (
@@ -370,6 +390,7 @@ const UserDashboard = () => {
                       <TableHead className="text-white">Level</TableHead>
                       <TableHead className="text-white">Min Balance</TableHead>
                       <TableHead className="text-white">Referrals</TableHead>
+                      <TableHead className="text-white">Withdraw Limit</TableHead>
                       <TableHead className="text-white">Interest</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -379,6 +400,7 @@ const UserDashboard = () => {
                         <TableCell><LevelBadge level={parseInt(level, 10)} /></TableCell>
                         <TableCell className="font-mono text-green-300">{details.minBalance} USDT</TableCell>
                         <TableCell className="font-mono text-blue-300">{details.directReferrals}</TableCell>
+                        <TableCell className="font-mono text-yellow-300">{details.withdrawalLimit} USDT</TableCell>
                         <TableCell className="font-mono text-purple-300">{(details.interest * 100).toFixed(2)}%</TableCell>
                       </TableRow>
                     ))}
