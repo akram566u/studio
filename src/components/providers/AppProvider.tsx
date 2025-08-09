@@ -68,6 +68,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const ADMIN_EMAIL = "admin@stakinghub.com";
   const ADMIN_PASSWORD = "admin123";
+  const ADMIN_REFERRAL_CODE = "ADMINREF";
 
   const levels: Levels = {
     0: { interest: 0, minBalance: 0, directReferrals: 0, withdrawalLimit: 0 },
@@ -81,7 +82,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     // Initialize a default user for the prototype if it doesn't exist
     useEffect(() => {
         if (!users['user@example.com']) {
-            const initialUser = createInitialUser('user@example.com', 'ADMIN');
+            const initialUser = createInitialUser('user@example.com', ADMIN_REFERRAL_CODE);
             users[initialUser.email] = addTransaction(initialUser, {
                 type: 'account_created',
                 amount: 0,
@@ -135,12 +136,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     // Find the referrer to see if the code is valid
     const referrer = Object.values(users).find(u => u.userReferralCode === referral);
-    if (!referrer) {
+    
+    if (!referrer && referral !== ADMIN_REFERRAL_CODE) {
         toast({ title: "Error", description: "Invalid referral code.", variant: "destructive"});
         return;
     }
     
-    let newUser = createInitialUser(email, referrer.userReferralCode);
+    const referrerCode = referrer ? referrer.userReferralCode : ADMIN_REFERRAL_CODE;
+    let newUser = createInitialUser(email, referrerCode);
 
     newUser = addTransaction(newUser, {
         type: 'account_created',
@@ -151,19 +154,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     users[email] = newUser;
 
-    // Add the new user to the referrer's list, but as 'inactive'
-    referrer.referredUsers.push({ email: newUser.email, isActivated: false });
-    const updatedReferrer = addTransaction(referrer, {
-         type: 'new_referral',
-         amount: 0,
-         status: 'info',
-         description: `New user registered with your code: ${newUser.email} (Pending activation)`
-    });
-    users[referrer.email] = updatedReferrer;
+    // Add the new user to the referrer's list if it's not the admin
+    if (referrer) {
+        referrer.referredUsers.push({ email: newUser.email, isActivated: false });
+        const updatedReferrer = addTransaction(referrer, {
+            type: 'new_referral',
+            amount: 0,
+            status: 'info',
+            description: `New user registered with your code: ${newUser.email} (Pending activation)`
+        });
+        users[referrer.email] = updatedReferrer;
 
-    // If the referrer is the currently logged-in user, update their state
-    if(currentUser && currentUser.id === referrer.id) {
-        setCurrentUser(updatedReferrer);
+        // If the referrer is the currently logged-in user, update their state
+        if(currentUser && currentUser.id === referrer.id) {
+            setCurrentUser(updatedReferrer);
+        }
     }
 
     toast({ title: "Account created successfully!", description: "You can now sign in." });
@@ -248,7 +253,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             });
 
             // Activate referral if applicable
-            if (userToUpdate.referredBy) {
+            if (userToUpdate.referredBy && userToUpdate.referredBy !== ADMIN_REFERRAL_CODE) {
                 const referrer = Object.values(users).find(u => u.userReferralCode === userToUpdate.referredBy);
                 if (referrer) {
                     referrer.directReferrals += 1;
