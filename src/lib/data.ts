@@ -1,4 +1,4 @@
-import { RestrictionMessage, Levels } from '@/lib/types';
+import { RestrictionMessage, Levels, StartScreenSettings } from '@/lib/types';
 
 export const initialLevels: Levels = {
     0: { interest: 0, minBalance: 0, directReferrals: 0, withdrawalLimit: 0 },
@@ -33,3 +33,10 @@ export const initialRestrictionMessages: RestrictionMessage[] = [
         isActive: true,
     }
 ];
+
+export const initialStartScreen: StartScreenSettings = {
+    title: 'Staking Hub',
+    subtitle: 'Unlock Your Financial Potential. Securely stake USDT and earn daily rewards.',
+};
+
+    

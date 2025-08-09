@@ -1,20 +1,23 @@
 "use client";
-import React from 'react';
+import React, { useContext } from 'react';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { Button } from '@/components/ui/button';
 import type { View } from '@/components/StakingApp';
+import { AppContext } from '../providers/AppProvider';
 
 interface StartScreenProps {
   setView: React.Dispatch<React.SetStateAction<View>>;
 }
 
 const StartScreen: React.FC<StartScreenProps> = ({ setView }) => {
+  const context = useContext(AppContext);
+
   return (
     <section className="relative text-center flex flex-col items-center justify-center overflow-hidden w-full h-full">
       <div className="relative z-10 p-8 glass-panel rounded-lg shadow-xl max-w-3xl">
-        <h2 className="text-5xl font-extrabold text-white mb-6 animate-pulse">Staking Hub</h2>
+        <h2 className="text-5xl font-extrabold text-white mb-6 animate-pulse">{context?.startScreenContent.title}</h2>
         <p className="text-xl text-gray-300 mb-8">
-          Unlock Your Financial Potential. Securely stake USDT and earn daily rewards.
+          {context?.startScreenContent.subtitle}
         </p>
         <div className="mb-8 space-y-4"></div>
         <Button
@@ -29,3 +32,5 @@ const StartScreen: React.FC<StartScreenProps> = ({ setView }) => {
 };
 
 export default StartScreen;
+
+    

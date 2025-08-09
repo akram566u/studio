@@ -75,17 +75,6 @@ export interface RestrictionMessage {
 export interface StartScreenSettings {
   title: string;
   subtitle: string;
-  titleFontSize: string;
-  subtitleFontSize: string;
-
-  panelPadding: string;
-  showGetStartedButton: boolean;
-  customContent: {
-    id:string;
-    title?: string;
-    body: string;
-    isActive: boolean;
-  }[];
 }
 
 export interface DashboardPanelVisibility {
@@ -112,3 +101,5 @@ export interface AdminTransaction {
     referredUserId?: string;
     walletAddress?: string;
 }
+
+    

@@ -1,8 +1,8 @@
 "use client";
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage } from '@/lib/types';
-import { initialLevels, initialRestrictionMessages } from '@/lib/data';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings } from '@/lib/types';
+import { initialLevels, initialRestrictionMessages, initialStartScreen } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 
 // A version of the User type that is safe to expose to the admin panel
@@ -17,6 +17,7 @@ export interface AppContextType {
   updateWithdrawalAddress: (address: string) => void;
   deleteWithdrawalAddress: () => void;
   websiteTitle: string;
+  updateWebsiteTitle: (newTitle: string) => void;
   levels: Levels;
   depositRequests: AugmentedTransaction[];
   withdrawalRequests: AugmentedTransaction[];
@@ -33,6 +34,9 @@ export interface AppContextType {
   adminUpdateUserWithdrawalAddress: (userId: string, newAddress: string) => UserForAdmin | null;
   restrictionMessages: RestrictionMessage[];
   updateRestrictionMessages: (messages: RestrictionMessage[]) => void;
+  startScreenContent: StartScreenSettings;
+  updateStartScreenContent: (content: Omit<StartScreenSettings, 'customContent'>) => void;
+  adminReferrals: UserForAdmin[];
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -82,6 +86,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [depositRequests, setDepositRequests] = useState<AugmentedTransaction[]>([]);
   const [withdrawalRequests, setWithdrawalRequests] = useState<AugmentedTransaction[]>([]);
   const [restrictionMessages, setRestrictionMessages] = useState<RestrictionMessage[]>(initialRestrictionMessages);
+  const [startScreenContent, setStartScreenContent] = useState<StartScreenSettings>(initialStartScreen);
+  const [adminReferrals, setAdminReferrals] = useState<UserForAdmin[]>([]);
   const { toast } = useToast();
 
   const ADMIN_EMAIL = "admin@stakinghub.com";
@@ -537,6 +543,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: 'Success', description: 'Restriction messages have been updated.' });
     };
 
+    const updateStartScreenContent = (content: Omit<StartScreenSettings, 'customContent'>) => {
+        setStartScreenContent(prev => ({ ...prev, ...content }));
+        toast({ title: "Success", description: "Start screen content updated." });
+    };
+
+    const updateWebsiteTitle = (newTitle: string) => {
+        setWebsiteTitle(newTitle);
+        toast({ title: "Success", description: "Website title updated." });
+    };
+
     // Effect to load all pending requests for the admin panel on mount
     useEffect(() => {
         if(isAdmin) {
@@ -552,8 +568,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     .map(tx => augmentTransaction(tx))
             ).sort((a,b) => b.timestamp - a.timestamp);
 
+            const adminReferredUsers = Object.values(users)
+                .filter(u => u.referredBy === ADMIN_REFERRAL_CODE)
+                .map(u => ({
+                    id: u.id,
+                    email: u.email,
+                    balance: u.balance,
+                    level: u.level,
+                    primaryWithdrawalAddress: u.primaryWithdrawalAddress
+                }));
+
             setDepositRequests(allDeposits);
             setWithdrawalRequests(allWithdrawals);
+            setAdminReferrals(adminReferredUsers);
         }
     }, [isAdmin]);
 
@@ -606,6 +633,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateWithdrawalAddress,
     deleteWithdrawalAddress,
     websiteTitle,
+    updateWebsiteTitle,
     levels,
     depositRequests,
     withdrawalRequests,
@@ -621,7 +649,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     adminUpdateUserEmail,
     adminUpdateUserWithdrawalAddress,
     restrictionMessages,
-    updateRestrictionMessages
+    updateRestrictionMessages,
+    startScreenContent,
+    updateStartScreenContent,
+    adminReferrals
   };
 
   return (
@@ -630,3 +661,5 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
+
+    
