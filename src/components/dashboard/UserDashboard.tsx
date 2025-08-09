@@ -52,6 +52,7 @@ const UserDashboard = () => {
   const { currentUser, levels, updateWithdrawalAddress, deleteWithdrawalAddress, submitDepositRequest, submitWithdrawalRequest } = context;
   
   const hasPendingRequests = currentUser.transactions.some(tx => tx.status === 'pending');
+  const currentLevelDetails = levels[currentUser.level];
 
   const handleUpdateAddress = () => {
     if (newWithdrawalAddress.trim()) {
@@ -213,9 +214,6 @@ const UserDashboard = () => {
     }
   }
 
-  const currentLevelDetails = levels[currentUser.level];
-
-
   return (
     <>
       <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
@@ -246,9 +244,13 @@ const UserDashboard = () => {
                 <p className="text-xl text-gray-200">Current Level:</p>
                 <LevelBadge level={currentUser.level} />
               </div>
-               <div className="flex items-center justify-between">
+               <div className="flex items-center justify-between mb-2">
                 <p className="text-xl text-gray-200">Active Referrals:</p>
                 <p className="text-2xl font-bold text-yellow-400">{currentUser.directReferrals}</p>
+              </div>
+              <div className="flex items-center justify-between">
+                <p className="text-xl text-gray-200">Withdrawal Limit:</p>
+                <p className="text-2xl font-bold text-yellow-400">{currentLevelDetails.withdrawalLimit} USDT</p>
               </div>
             </Card>
 
