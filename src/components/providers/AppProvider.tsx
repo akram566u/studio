@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
@@ -37,6 +38,8 @@ export interface AppContextType {
   adminUpdateUserWithdrawalAddress: (userId: string, newAddress: string) => UserForAdmin | null;
   restrictionMessages: RestrictionMessage[];
   updateRestrictionMessages: (messages: RestrictionMessage[]) => void;
+  addRestrictionMessage: () => void;
+  deleteRestrictionMessage: (id: string) => void;
   startScreenContent: StartScreenSettings;
   updateStartScreenContent: (content: Omit<StartScreenSettings, 'customContent'>) => void;
   adminReferrals: UserForAdmin[];
@@ -482,6 +485,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const adjustUserLevel = (userId: string, level: number): UserForAdmin | null => {
       const user = Object.values(users).find(u => u.id === userId);
       if (!user) return null;
+      if (!levels[level]) {
+        toast({ title: "Error", description: `Level ${level} does not exist.`, variant: "destructive"});
+        return null;
+      }
 
       user.level = level;
       const updatedUser = addTransaction(user, {
@@ -505,7 +512,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             toast({ title: "Error", description: "User not found.", variant: "destructive" });
             return null;
         }
-        if (users[newEmail]) {
+        if (users[newEmail] && user.email !== newEmail) {
             toast({ title: "Error", description: "New email is already in use.", variant: "destructive" });
             return null;
         }
@@ -552,6 +559,25 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const updateRestrictionMessages = (messages: RestrictionMessage[]) => {
         setRestrictionMessages(messages);
         toast({ title: 'Success', description: 'Restriction messages have been updated.' });
+    };
+
+    const addRestrictionMessage = () => {
+        const newId = `restriction_${Date.now()}`;
+        const newRestriction: RestrictionMessage = {
+            id: newId,
+            title: 'New Restriction',
+            type: 'deposit_no_address',
+            message: '',
+            isActive: true,
+            durationDays: 0,
+        };
+        setRestrictionMessages(prev => [...prev, newRestriction]);
+        toast({ title: 'New restriction added', description: 'Please edit and save the details.'});
+    };
+
+    const deleteRestrictionMessage = (id: string) => {
+        setRestrictionMessages(prev => prev.filter(r => r.id !== id));
+        toast({ title: 'Success', description: 'Restriction message deleted.'});
     };
 
     const updateStartScreenContent = (content: Omit<StartScreenSettings, 'customContent'>) => {
@@ -694,6 +720,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     adminUpdateUserWithdrawalAddress,
     restrictionMessages,
     updateRestrictionMessages,
+    addRestrictionMessage,
+    deleteRestrictionMessage,
     startScreenContent,
     updateStartScreenContent,
     adminReferrals,

@@ -26,6 +26,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 const AdminDashboard = () => {
   const context = useContext(AppContext);
@@ -38,6 +39,13 @@ const AdminDashboard = () => {
   const [localLevels, setLocalLevels] = useState<{[key: number]: Level}>({});
   const [localRestrictions, setLocalRestrictions] = useState<RestrictionMessage[]>([]);
   const [themeColors, setThemeColors] = useState({ primary: '#80b3ff', accent: '#a66eff' });
+  
+  // State for editing a user
+  const [editingEmail, setEditingEmail] = useState('');
+  const [editingAddress, setEditingAddress] = useState('');
+  const [editingBalance, setEditingBalance] = useState(0);
+  const [editingLevel, setEditingLevel] = useState(0);
+
 
   useEffect(() => {
     if(context?.websiteTitle) setLocalWebsiteTitle(context.websiteTitle);
@@ -50,6 +58,15 @@ const AdminDashboard = () => {
 
   }, [context?.websiteTitle, context?.startScreenContent, context?.levels, context?.restrictionMessages]);
   
+  useEffect(() => {
+      if (searchedUser) {
+          setEditingEmail(searchedUser.email);
+          setEditingAddress(searchedUser.primaryWithdrawalAddress || '');
+          setEditingBalance(searchedUser.balance);
+          setEditingLevel(searchedUser.level);
+      }
+  }, [searchedUser]);
+
   if (!context || !context.isAdmin) {
     return <div>Access Denied.</div>;
   }
@@ -70,6 +87,12 @@ const AdminDashboard = () => {
       deleteLevel,
       updateRestrictionMessages,
       applyTheme,
+      adminUpdateUserEmail,
+      adminUpdateUserWithdrawalAddress,
+      adjustUserBalance,
+      adjustUserLevel,
+      addRestrictionMessage,
+      deleteRestrictionMessage,
   } = context;
 
   const handleUserSearch = (e: React.FormEvent) => {
@@ -119,7 +142,7 @@ const AdminDashboard = () => {
       addLevel(newLevelKey);
   };
   
-  const handleRestrictionChange = (id: string, field: keyof RestrictionMessage, value: string | boolean) => {
+  const handleRestrictionChange = (id: string, field: keyof RestrictionMessage, value: string | boolean | number) => {
     setLocalRestrictions(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
   };
   
@@ -130,6 +153,33 @@ const AdminDashboard = () => {
   const handleApplyTheme = () => {
       applyTheme(themeColors);
   }
+  
+  const handleAddNewRestriction = () => {
+    addRestrictionMessage();
+  }
+
+  const handleUserUpdate = async (field: 'email' | 'address' | 'balance' | 'level') => {
+    if (!searchedUser) return;
+    let updatedUser: UserForAdmin | null = null;
+    switch (field) {
+        case 'email':
+            updatedUser = await adminUpdateUserEmail(searchedUser.id, editingEmail);
+            break;
+        case 'address':
+            updatedUser = await adminUpdateUserWithdrawalAddress(searchedUser.id, editingAddress);
+            break;
+        case 'balance':
+            const balanceDiff = editingBalance - searchedUser.balance;
+            updatedUser = await adjustUserBalance(searchedUser.id, balanceDiff);
+            break;
+        case 'level':
+            updatedUser = await adjustUserLevel(searchedUser.id, editingLevel);
+            break;
+    }
+    if (updatedUser) {
+        setSearchedUser(updatedUser);
+    }
+  };
 
 
   return (
@@ -142,7 +192,7 @@ const AdminDashboard = () => {
                 <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                 <TabsTrigger value="users">User Management</TabsTrigger>
                 <TabsTrigger value="settings">Content & UI</TabsTrigger>
-                <TabsTrigger value="system">System & Levels</TabsTrigger>
+                <TabsTrigger value="system">System Settings</TabsTrigger>
                 <TabsTrigger value="panels">User Panels</TabsTrigger>
             </TabsList>
             
@@ -302,17 +352,42 @@ const AdminDashboard = () => {
                             <Button type="submit">Search</Button>
                         </form>
                         {searchedUser && (
-                           <div className="bg-black/20 p-4 rounded-lg space-y-4">
+                           <div className="bg-black/20 p-6 rounded-lg space-y-4">
                                 <div>
                                     <h4 className="text-lg font-bold">{searchedUser.email}</h4>
                                     <p className="text-xs text-gray-400">ID: {searchedUser.id}</p>
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                     <div><Label>Balance:</Label> <Input value={searchedUser.balance.toFixed(2)} readOnly /></div>
-                                     <div><Label>Level:</Label> <Input value={searchedUser.level} readOnly /></div>
-                                     <div className="col-span-2"><Label>Withdrawal Address:</Label> <Input value={searchedUser.primaryWithdrawalAddress || 'Not Set'} readOnly /></div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="edit-email">Email</Label>
+                                        <div className="flex gap-2">
+                                            <Input id="edit-email" value={editingEmail} onChange={e => setEditingEmail(e.target.value)} />
+                                            <Button onClick={() => handleUserUpdate('email')}>Save</Button>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="edit-level">Level</Label>
+                                         <div className="flex gap-2">
+                                            <Input id="edit-level" type="number" value={editingLevel} onChange={e => setEditingLevel(Number(e.target.value))} />
+                                            <Button onClick={() => handleUserUpdate('level')}>Save</Button>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2 col-span-1 md:col-span-2">
+                                        <Label htmlFor="edit-address">Withdrawal Address</Label>
+                                         <div className="flex gap-2">
+                                            <Input id="edit-address" value={editingAddress} onChange={e => setEditingAddress(e.target.value)} />
+                                            <Button onClick={() => handleUserUpdate('address')}>Save</Button>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2 col-span-1 md:col-span-2">
+                                        <Label htmlFor="edit-balance">Balance (Adjustment)</Label>
+                                        <div className="flex gap-2">
+                                            <Input id="edit-balance" type="number" value={editingBalance} onChange={e => setEditingBalance(Number(e.target.value))} />
+                                            <Button onClick={() => handleUserUpdate('balance')}>Update Balance</Button>
+                                        </div>
+                                        <p className="text-xs text-gray-400">Enter the final desired balance. The difference will be applied as an adjustment.</p>
+                                    </div>
                                 </div>
-                                {/* Add management controls here in the future */}
                            </div>
                         )}
                     </CardContent>
@@ -406,30 +481,45 @@ const AdminDashboard = () => {
                         <ScrollArea className="h-96 custom-scrollbar">
                            <div className="space-y-4">
                                 {localRestrictions.map(r => (
-                                    <div key={r.id} className="bg-black/20 p-4 rounded-lg">
-                                        <h4 className="font-bold text-lg text-yellow-300">{r.title}</h4>
-                                        <div className="space-y-2 mt-2">
-                                            <div>
-                                                <Label htmlFor={`restriction-${r.id}-title`}>Title</Label>
-                                                <Input id={`restriction-${r.id}-title`} value={r.title} onChange={e => handleRestrictionChange(r.id, 'title', e.target.value)} />
-                                            </div>
-                                            <div>
-                                                <Label htmlFor={`restriction-${r.id}-message`}>Message</Label>
-                                                <Textarea id={`restriction-${r.id}-message`} value={r.message} onChange={e => handleRestrictionChange(r.id, 'message', e.target.value)} />
-                                            </div>
-                                            {r.durationDays !== undefined && (
-                                                <div>
-                                                    <Label htmlFor={`restriction-${r.id}-duration`}>Duration (Days)</Label>
-                                                    <Input id={`restriction-${r.id}-duration`} type="number" value={r.durationDays} onChange={e => handleRestrictionChange(r.id, 'durationDays', e.target.value)} />
-                                                </div>
-                                            )}
+                                    <div key={r.id} className="bg-black/20 p-4 rounded-lg space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <h4 className="font-bold text-lg text-yellow-300">{r.title}</h4>
+                                            <Button variant="destructive" size="sm" onClick={() => deleteRestrictionMessage(r.id)}>Delete</Button>
                                         </div>
+                                        <div>
+                                            <Label htmlFor={`restriction-${r.id}-title`}>Title</Label>
+                                            <Input id={`restriction-${r.id}-title`} value={r.title} onChange={e => handleRestrictionChange(r.id, 'title', e.target.value)} />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor={`restriction-${r.id}-type`}>Type</Label>
+                                            <Select value={r.type} onValueChange={(value: RestrictionMessage['type']) => handleRestrictionChange(r.id, 'type', value)}>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select type" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="deposit_no_address">Deposit - No Address</SelectItem>
+                                                    <SelectItem value="deposit_confirm">Deposit - Confirmation</SelectItem>
+                                                    <SelectItem value="withdrawal_hold">Withdrawal - Hold</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div>
+                                            <Label htmlFor={`restriction-${r.id}-message`}>Message</Label>
+                                            <Textarea id={`restriction-${r.id}-message`} value={r.message} onChange={e => handleRestrictionChange(r.id, 'message', e.target.value)} />
+                                        </div>
+                                        {r.type === 'withdrawal_hold' && (
+                                            <div>
+                                                <Label htmlFor={`restriction-${r.id}-duration`}>Duration (Days)</Label>
+                                                <Input id={`restriction-${r.id}-duration`} type="number" value={r.durationDays || 0} onChange={e => handleRestrictionChange(r.id, 'durationDays', Number(e.target.value))} />
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                            </div>
                         </ScrollArea>
-                        <div className="mt-4">
+                        <div className="mt-4 flex gap-4">
                             <Button onClick={handleSaveRestrictions}>Save Restriction Changes</Button>
+                             <Button onClick={handleAddNewRestriction} variant="secondary">Add New Restriction</Button>
                         </div>
                     </CardContent>
                 </Card>
