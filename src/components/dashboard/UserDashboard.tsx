@@ -1,4 +1,5 @@
 
+
 "use client";
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '@/components/providers/AppProvider';
@@ -8,7 +9,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Clock } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Clock, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -27,12 +28,12 @@ const UserDashboard = () => {
   const [isWithdrawalLocked, setIsWithdrawalLocked] = useState(true);
   const [newWithdrawalAddress, setNewWithdrawalAddress] = useState('');
   const [depositAmount, setDepositAmount] = useState('');
-
+  const [withdrawalAmount, setWithdrawalAmount] = useState('');
 
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;
   }
-  const { currentUser, levels, updateWithdrawalAddress, deleteWithdrawalAddress, submitDepositRequest } = context;
+  const { currentUser, levels, updateWithdrawalAddress, deleteWithdrawalAddress, submitDepositRequest, submitWithdrawalRequest } = context;
 
   const handleUpdateAddress = () => {
     if (newWithdrawalAddress.trim()) {
@@ -62,6 +63,16 @@ const UserDashboard = () => {
     setDepositAmount('');
   };
   
+  const handleSubmitWithdrawal = () => {
+    const amount = parseFloat(withdrawalAmount);
+    if (isNaN(amount) || amount <= 0) {
+        toast({ title: "Error", description: "Please enter a valid withdrawal amount.", variant: "destructive" });
+        return;
+    }
+    submitWithdrawalRequest(amount);
+    setWithdrawalAmount('');
+  };
+
   const depositAddress = "0x4D26340f3B52DCf82dd537cBF3c7e4C1D9b53BDc";
 
   // Effect for Daily Interest Countdown
@@ -74,7 +85,6 @@ const UserDashboard = () => {
 
         if (distance < 0) {
           setInterestCountdown('Crediting...');
-          // Here you would trigger the interest credit logic
           return;
         }
 
@@ -91,9 +101,9 @@ const UserDashboard = () => {
 
   // Effect for Withdrawal Restriction Countdown
   useEffect(() => {
-    if (currentUser && currentUser.registrationTime) {
+    if (currentUser && currentUser.firstDepositTime && currentUser.level > 0) {
       const RESTRICTION_DAYS = 45;
-      const restrictionEndTime = currentUser.registrationTime + (RESTRICTION_DAYS * 24 * 60 * 60 * 1000);
+      const restrictionEndTime = currentUser.firstDepositTime + (RESTRICTION_DAYS * 24 * 60 * 60 * 1000);
       
       const timer = setInterval(() => {
         const now = new Date().getTime();
@@ -117,11 +127,10 @@ const UserDashboard = () => {
       return () => clearInterval(timer);
 
     } else {
-        // Fallback for any case where registrationTime is not set
         setIsWithdrawalLocked(true);
-        setWithdrawalCountdown('Withdrawal status is being determined.');
+        setWithdrawalCountdown('Awaiting first deposit to start timer.');
     }
-  }, [currentUser?.registrationTime]);
+  }, [currentUser?.firstDepositTime, currentUser?.level]);
 
 
   return (
@@ -195,18 +204,31 @@ const UserDashboard = () => {
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
              {isWithdrawalLocked ? (
                 <div className="text-center p-4 bg-red-900/50 rounded-lg">
-                    <p className="text-yellow-300 font-semibold mb-2">Please wait for 45 days after registration to submit a withdrawal request.</p>
-                    <div className="flex items-center justify-center gap-2 text-lg text-white">
-                        <Clock className="size-5"/>
-                        <span>{withdrawalCountdown}</span>
-                    </div>
+                    <p className="text-yellow-300 font-semibold mb-2">
+                        {currentUser.level === 0 
+                            ? "Please make a minimum deposit of 100 USDT to start the 45-day withdrawal countdown."
+                            : "Withdrawal is locked for 45 days after your first eligible deposit."
+                        }
+                    </p>
+                    {currentUser.level > 0 && (
+                        <div className="flex items-center justify-center gap-2 text-lg text-white">
+                            <Clock className="size-5"/>
+                            <span>{withdrawalCountdown}</span>
+                        </div>
+                    )}
                 </div>
             ) : (
               <>
                 <p className="text-xl text-gray-200 mb-3">Minimum withdrawal: 100 USDT</p>
-                <Input type="number" placeholder="Amount to withdraw" className="mb-4 text-xl" />
+                <Input 
+                  type="number" 
+                  placeholder="Amount to withdraw" 
+                  className="mb-4 text-xl" 
+                  value={withdrawalAmount}
+                  onChange={e => setWithdrawalAmount(e.target.value)}
+                />
                 <Input type="text" placeholder="Your BEP-20 Wallet Address" value={currentUser.primaryWithdrawalAddress || 'Not set'} readOnly className="mb-4 text-xl" />
-                <Button className="w-full py-3 text-lg">Request Withdrawal</Button>
+                <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal}><Send/>Request Withdrawal</Button>
               </>
             )}
           </Card>

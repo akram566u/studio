@@ -18,7 +18,7 @@ const AdminDashboard = () => {
     return <div>Access Denied.</div>;
   }
 
-  const { depositRequests, approveDeposit } = context;
+  const { depositRequests, approveDeposit, withdrawalRequests, approveWithdrawal } = context;
   
   return (
     <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
@@ -89,7 +89,34 @@ const AdminDashboard = () => {
                      <Card className="card-gradient-orange-red p-6">
                         <h3 className="text-xl font-semibold mb-4 text-purple-300">Withdrawal Requests</h3>
                         <ScrollArea className="h-96 custom-scrollbar">
-                            <p className="text-gray-400">No pending withdrawal requests.</p>
+                             {withdrawalRequests && withdrawalRequests.filter(r => r.status === 'pending').length > 0 ? (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="text-white">User Email</TableHead>
+                                            <TableHead className="text-white">Amount</TableHead>
+                                            <TableHead className="text-white">Address</TableHead>
+                                            <TableHead className="text-white">Date</TableHead>
+                                            <TableHead className="text-white">Action</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {withdrawalRequests.filter(r => r.status === 'pending').map(request => (
+                                            <TableRow key={request.id}>
+                                                <TableCell className="font-mono">{request.email}</TableCell>
+                                                <TableCell className="font-mono text-red-300">{request.amount.toFixed(2)} USDT</TableCell>
+                                                <TableCell className="font-mono text-xs">{request.walletAddress}</TableCell>
+                                                <TableCell className="font-mono">{format(request.timestamp, 'PPpp')}</TableCell>
+                                                <TableCell>
+                                                    <Button onClick={() => approveWithdrawal(request.id)}>Approve</Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            ) : (
+                                <p className="text-gray-400">No pending withdrawal requests.</p>
+                            )}
                         </ScrollArea>
                     </Card>
                  </div>
