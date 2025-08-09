@@ -40,7 +40,7 @@ const AdminDashboard = () => {
   const [localStartScreenSubtitle, setLocalStartScreenSubtitle] = useState('');
   const [localLevels, setLocalLevels] = useState<{[key: number]: Level}>({});
   const [localRestrictions, setLocalRestrictions] = useState<RestrictionMessage[]>([]);
-  const [themeColors, setThemeColors] = useState({ primary: '#80b3ff', accent: '#a66eff' });
+  const [themeColors, setThemeColors] = useState({ primary: '#2563eb', accent: '#7c3aed' });
   const [localPanels, setLocalPanels] = useState<DashboardPanel[]>([]);
   const [localReferralBonusSettings, setLocalReferralBonusSettings] = useState<ReferralBonusSettings>({ isEnabled: true, bonusAmount: 5, minDeposit: 100 });
   
@@ -286,7 +286,7 @@ const AdminDashboard = () => {
                                                 
                                                 <div className="text-xs text-gray-400 space-y-1">
                                                     <p>Lvl: {request.userLevel} | Deposits: {request.userDepositCount} | Withdrawals: {request.userWithdrawalCount}</p>
-                                                    {request.type === 'withdrawal' && <p className="break-all">Address: {request.walletAddress}</p>}
+                                                    <p className="break-all">Address: {request.walletAddress || request.userWithdrawalAddress}</p>
                                                 </div>
 
                                                 <div className="flex gap-2 pt-2">
@@ -422,9 +422,9 @@ const AdminDashboard = () => {
                     <CardContent className="space-y-4">
                         <div className="flex items-center gap-4">
                             <Label htmlFor="primaryColor">Primary Color</Label>
-                            <Input id="primaryColor" type="color" value={themeColors.primary} onChange={(e) => setThemeColors(p => ({...p, primary: e.target.value}))} className="w-24" />
+                            <Input id="primaryColor" type="color" value={themeColors.primary} onChange={(e) => setThemeColors(p => ({...p, primary: e.target.value}))} className="w-24 p-1" />
                             <Label htmlFor="accentColor">Accent Color</Label>
-                            <Input id="accentColor" type="color" value={themeColors.accent} onChange={(e) => setThemeColors(p => ({...p, accent: e.target.value}))} className="w-24" />
+                            <Input id="accentColor" type="color" value={themeColors.accent} onChange={(e) => setThemeColors(p => ({...p, accent: e.target.value}))} className="w-24 p-1" />
                         </div>
                         <Button onClick={handleApplyTheme}>Apply Theme</Button>
                     </CardContent>
@@ -630,3 +630,5 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
+
+    

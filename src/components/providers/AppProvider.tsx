@@ -5,6 +5,7 @@ import React, { createContext, useState, useEffect, ReactNode, useCallback } fro
 import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings } from '@/lib/types';
 import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels, initialReferralBonusSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
+import { hexToHsl } from '@/lib/utils';
 
 // A version of the User type that is safe to expose to the admin panel
 export type UserForAdmin = Pick<User, 'id' | 'email' | 'balance' | 'level' | 'primaryWithdrawalAddress'>;
@@ -33,10 +34,10 @@ export interface AppContextType {
   approveWithdrawal: (transactionId: string) => void;
   declineWithdrawal: (transactionId: string) => void;
   findUser: (email: string) => UserForAdmin | null;
-  adjustUserBalance: (userId: string, amount: number) => UserForAdmin | null;
-  adjustUserLevel: (userId: string, level: number) => UserForAdmin | null;
-  adminUpdateUserEmail: (userId: string, newEmail: string) => UserForAdmin | null;
-  adminUpdateUserWithdrawalAddress: (userId: string, newAddress: string) => UserForAdmin | null;
+  adjustUserBalance: (userId: string, amount: number) => Promise<UserForAdmin | null>;
+  adjustUserLevel: (userId: string, level: number) => Promise<UserForAdmin | null>;
+  adminUpdateUserEmail: (userId: string, newEmail: string) => Promise<UserForAdmin | null>;
+  adminUpdateUserWithdrawalAddress: (userId: string, newAddress: string) => Promise<UserForAdmin | null>;
   restrictionMessages: RestrictionMessage[];
   updateRestrictionMessages: (messages: RestrictionMessage[]) => void;
   addRestrictionMessage: () => void;
@@ -253,6 +254,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         userLevel: user.level,
         userDepositCount: user.transactions.filter(tx => tx.type === 'deposit' && tx.status === 'approved').length,
         userWithdrawalCount: user.transactions.filter(tx => tx.type === 'withdrawal' && tx.status === 'approved').length,
+        userWithdrawalAddress: user.primaryWithdrawalAddress,
     };
   };
 
@@ -476,16 +478,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       };
   };
 
-  const adjustUserBalance = (userId: string, amount: number): UserForAdmin | null => {
+  const adjustUserBalance = async (userId: string, amountDifference: number): Promise<UserForAdmin | null> => {
       const user = Object.values(users).find(u => u.id === userId);
       if (!user) return null;
 
-      user.balance += amount;
+      user.balance += amountDifference;
       const updatedUser = addTransaction(user, {
           type: 'admin_adjusted',
-          amount: amount,
+          amount: amountDifference,
           status: 'completed',
-          description: `Admin adjusted balance by ${amount.toFixed(2)} USDT.`
+          description: `Admin adjusted balance by ${amountDifference.toFixed(2)} USDT.`
       });
       users[user.email] = updatedUser;
       
@@ -496,7 +498,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return findUser(user.email);
   };
 
-  const adjustUserLevel = (userId: string, level: number): UserForAdmin | null => {
+  const adjustUserLevel = async (userId: string, level: number): Promise<UserForAdmin | null> => {
       const user = Object.values(users).find(u => u.id === userId);
       if (!user) return null;
       if (!levels[level]) {
@@ -520,7 +522,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return findUser(user.email);
   };
   
-    const adminUpdateUserEmail = (userId: string, newEmail: string): UserForAdmin | null => {
+    const adminUpdateUserEmail = async (userId: string, newEmail: string): Promise<UserForAdmin | null> => {
         const user = Object.values(users).find(u => u.id === userId);
         if (!user) {
             toast({ title: "Error", description: "User not found.", variant: "destructive" });
@@ -546,7 +548,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return findUser(newEmail);
     };
 
-    const adminUpdateUserWithdrawalAddress = (userId: string, newAddress: string): UserForAdmin | null => {
+    const adminUpdateUserWithdrawalAddress = async (userId: string, newAddress: string): Promise<UserForAdmin | null> => {
         const user = Object.values(users).find(u => u.id === userId);
         if (!user) {
             toast({ title: "Error", description: "User not found.", variant: "destructive" });
@@ -634,9 +636,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const applyTheme = (theme: {primary: string, accent: string}) => {
-        document.documentElement.style.setProperty('--primary', theme.primary);
-        document.documentElement.style.setProperty('--accent', theme.accent);
-        toast({ title: "Success", description: "Theme has been applied." });
+      const root = document.documentElement;
+      const primaryHsl = hexToHsl(theme.primary);
+      const accentHsl = hexToHsl(theme.accent);
+
+      if (primaryHsl) {
+        root.style.setProperty('--primary', `${primaryHsl.h} ${primaryHsl.s}% ${primaryHsl.l}%`);
+        // Assuming primary-foreground is either black or white depending on luminance
+        const primaryFg = primaryHsl.l > 50 ? '222.2 84% 4.9%' : '210 40% 98%';
+        root.style.setProperty('--primary-foreground', primaryFg);
+      }
+      if (accentHsl) {
+        root.style.setProperty('--accent', `${accentHsl.h} ${accentHsl.s}% ${accentHsl.l}%`);
+        const accentFg = accentHsl.l > 50 ? '222.2 84% 4.9%' : '210 40% 98%';
+         root.style.setProperty('--accent-foreground', accentFg);
+      }
+
+      toast({ title: "Success", description: "Theme has been applied." });
     }
     
     // Panel Management
@@ -778,3 +794,5 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
+
+    
