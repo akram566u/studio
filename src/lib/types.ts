@@ -1,3 +1,4 @@
+
 export interface Transaction {
   id: string;
   userId: string;
@@ -29,7 +30,6 @@ export interface User {
   withdrawalCompletionTime: number | null;
   primaryWithdrawalAddress: string;
   firstDepositTime: number | null;
-  withdrawalAddresses?: string[]; // Legacy, but kept for compatibility
 }
 
 export interface Level {

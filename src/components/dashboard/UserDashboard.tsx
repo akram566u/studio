@@ -1,3 +1,4 @@
+
 "use client";
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '@/components/providers/AppProvider';
@@ -7,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -21,7 +22,9 @@ import {
 const UserDashboard = () => {
   const context = useContext(AppContext);
   const { toast } = useToast();
-  const [countdown, setCountdown] = useState('00h 00m 00s');
+  const [interestCountdown, setInterestCountdown] = useState('00h 00m 00s');
+  const [withdrawalCountdown, setWithdrawalCountdown] = useState('');
+  const [isWithdrawalLocked, setIsWithdrawalLocked] = useState(true);
   const [newWithdrawalAddress, setNewWithdrawalAddress] = useState('');
   const [depositAmount, setDepositAmount] = useState('');
 
@@ -61,6 +64,7 @@ const UserDashboard = () => {
   
   const depositAddress = "0x4D26340f3B52DCf82dd537cBF3c7e4C1D9b53BDc";
 
+  // Effect for Daily Interest Countdown
   useEffect(() => {
     if (currentUser && currentUser.level > 0) {
       const timer = setInterval(() => {
@@ -69,7 +73,7 @@ const UserDashboard = () => {
         const distance = nextCredit - now;
 
         if (distance < 0) {
-          setCountdown('Crediting...');
+          setInterestCountdown('Crediting...');
           // Here you would trigger the interest credit logic
           return;
         }
@@ -77,13 +81,47 @@ const UserDashboard = () => {
         const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
         const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-        setCountdown(`${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`);
+        setInterestCountdown(`${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`);
       }, 1000);
       return () => clearInterval(timer);
     } else {
-      setCountdown('00h 00m 00s');
+      setInterestCountdown('00h 00m 00s');
     }
   }, [currentUser]);
+
+  // Effect for Withdrawal Restriction Countdown
+  useEffect(() => {
+    if (currentUser && currentUser.firstDepositTime) {
+      const RESTRICTION_DAYS = 45;
+      const restrictionEndTime = currentUser.firstDepositTime + (RESTRICTION_DAYS * 24 * 60 * 60 * 1000);
+      
+      const timer = setInterval(() => {
+        const now = new Date().getTime();
+        const distance = restrictionEndTime - now;
+
+        if (distance <= 0) {
+          setIsWithdrawalLocked(false);
+          setWithdrawalCountdown('');
+          clearInterval(timer);
+          return;
+        }
+
+        setIsWithdrawalLocked(true);
+        const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+        setWithdrawalCountdown(`${days}d ${hours}h ${minutes}m ${seconds}s remaining`);
+
+      }, 1000);
+      return () => clearInterval(timer);
+
+    } else {
+        // No first deposit yet, so it's locked indefinitely until then.
+        setIsWithdrawalLocked(true);
+        setWithdrawalCountdown('Please make your first deposit to start the timer.');
+    }
+  }, [currentUser?.firstDepositTime]);
 
 
   return (
@@ -118,7 +156,7 @@ const UserDashboard = () => {
           <Card className="card-gradient-orange-red p-6">
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Daily Interest Credit</h3>
             <p className="text-xl text-gray-200 mb-3">Next credit in:</p>
-            <p className="text-5xl font-bold text-purple-400 text-center">{countdown}</p>
+            <p className="text-5xl font-bold text-purple-400 text-center">{interestCountdown}</p>
           </Card>
 
            <Card className="card-gradient-indigo-fuchsia p-6">
@@ -155,10 +193,22 @@ const UserDashboard = () => {
 
           <Card className="card-gradient-indigo-fuchsia p-6">
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
-            <p className="text-xl text-gray-200 mb-3">Minimum withdrawal: 100 USDT</p>
-            <Input type="number" placeholder="Amount to withdraw" className="mb-4 text-xl" />
-            <Input type="text" placeholder="Your BEP-20 Wallet Address" value={currentUser.primaryWithdrawalAddress || 'Not set'} readOnly className="mb-4 text-xl" />
-            <Button className="w-full py-3 text-lg">Request Withdrawal</Button>
+             {isWithdrawalLocked ? (
+                <div className="text-center p-4 bg-red-900/50 rounded-lg">
+                    <p className="text-yellow-300 font-semibold mb-2">Please wait for 45 days after your first deposit to submit a withdrawal request.</p>
+                    <div className="flex items-center justify-center gap-2 text-lg text-white">
+                        <Clock className="size-5"/>
+                        <span>{withdrawalCountdown}</span>
+                    </div>
+                </div>
+            ) : (
+              <>
+                <p className="text-xl text-gray-200 mb-3">Minimum withdrawal: 100 USDT</p>
+                <Input type="number" placeholder="Amount to withdraw" className="mb-4 text-xl" />
+                <Input type="text" placeholder="Your BEP-20 Wallet Address" value={currentUser.primaryWithdrawalAddress || 'Not set'} readOnly className="mb-4 text-xl" />
+                <Button className="w-full py-3 text-lg">Request Withdrawal</Button>
+              </>
+            )}
           </Card>
 
           <Card className="card-gradient-orange-red p-6">

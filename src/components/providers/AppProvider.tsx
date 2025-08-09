@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
@@ -55,23 +56,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
     // Dummy user login for demonstration
-    // A new user starts with 0 balance and level 0
     const dummyUser: User = {
         id: 'user123',
         email: email,
         password: pass,
-        balance: 0, // New users start with 0 balance
-        level: 0, // New users start at level 0
+        balance: 0,
+        level: 0, 
         userReferralCode: 'REF' + Math.random().toString(36).substring(2, 9).toUpperCase(),
         referredBy: 'ADMINREF',
-        directReferrals: 0, // New users start with 0 referrals
+        directReferrals: 0,
         lastWithdrawalMonth: null,
         lastWithdrawalAmount: 0,
         transactions: [],
         referredUsers: [],
         lastInterestCreditTime: Date.now(),
         withdrawalCompletionTime: null,
-        primaryWithdrawalAddress: '', // New users have no address set
+        primaryWithdrawalAddress: '',
         firstDepositTime: null
     };
     
@@ -80,7 +80,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (email !== 'new@user.com') {
       dummyUser.balance = 1234.56;
       dummyUser.directReferrals = 8;
-      dummyUser.primaryWithdrawalAddress = '0x1234567890abcdef1234567890abcdef12345678';
+      // We don't set a default address anymore.
+      // dummyUser.primaryWithdrawalAddress = '0x1234567890abcdef1234567890abcdef12345678';
+      
       // Logic to update level based on balance and referrals
       let newLevel = 0;
       for (const levelKey in levels) {
@@ -91,9 +93,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
       }
       dummyUser.level = newLevel;
-      // Simulate first deposit if balance is present
+
+      // Simulate first deposit if balance is present for an existing user
       if (dummyUser.balance > 0 && !dummyUser.firstDepositTime) {
-        dummyUser.firstDepositTime = Date.now() - (50 * 24 * 60 * 60 * 1000);
+        // Set first deposit to 50 days ago to test withdrawal availability
+        dummyUser.firstDepositTime = Date.now() - (50 * 24 * 60 * 60 * 1000); 
       }
     }
 
@@ -113,9 +117,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: "Error", description: "Please fill all fields.", variant: "destructive"});
         return;
     }
-    // In a real app, you would create a user object with level 0
-    // and save it to the database. For this prototype, the user
-    // will be created with default values upon signing in.
+    // In a real app, you would create a user object and save to DB.
+    // For this prototype, a new user is created with default values upon signing in
+    // with an email like 'new@user.com'
     toast({ title: "Account created successfully! Please sign in." });
   };
 
@@ -157,19 +161,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const approveDeposit = (transactionId: string) => {
     const request = depositRequests.find(r => r.id === transactionId);
-    if (!request || !currentUser) return; // In a real app, you'd find the correct user
+    if (!request) return;
 
-    // In a real app, you would fetch the user associated with the request.
-    // For this prototype, we'll assume it's the currentUser, which is incorrect for multi-user scenarios
-    // but works for a single dummy user.
-    
-    // Update the request status
-    setDepositRequests(prev => prev.map(r => r.id === transactionId ? { ...r, status: 'approved' } : r));
-
-    // For the demo, we'll just update the current user's balance.
-    // A real app would need to find the specific user by request.userId
-    // and update their balance in the database.
-    if(currentUser.id === request.userId) {
+    // This logic is simplified for the prototype. In a real app, you'd fetch and update the specific user.
+    if(currentUser && currentUser.id === request.userId) {
         const updatedUser = { ...currentUser };
         updatedUser.balance += request.amount;
         
@@ -184,12 +179,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
         updatedUser.level = newLevel;
 
+        // Set the first deposit time if it's not already set
         if (!updatedUser.firstDepositTime) {
             updatedUser.firstDepositTime = Date.now();
         }
         
         setCurrentUser(updatedUser);
     }
+    
+    // Update the request status
+    setDepositRequests(prev => prev.map(r => r.id === transactionId ? { ...r, status: 'approved' } : r));
     
     toast({ title: "Success", description: `Deposit of ${request.amount} for ${request.email} approved.` });
   };
