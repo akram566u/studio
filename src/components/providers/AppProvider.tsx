@@ -78,11 +78,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         password: pass,
         balance: 1234.56,
         level: 2,
-        userReferralCode: 'REF' + 'user123'.substring(0,6).toUpperCase(),
+        userReferralCode: 'REFUSER1',
         referredBy: 'ADMINREF',
         directReferrals: 8,
         transactions: [],
-        referredUsers: [],
+        referredUsers: ['referred1@example.com', 'referred2@example.com'],
         lastInterestCreditTime: Date.now(),
         primaryWithdrawalAddress: '0x1234567890abcdef1234567890abcdef12345678',
         firstDepositTime: Date.now() - (10 * 24 * 60 * 60 * 1000), // 10 days ago
@@ -90,7 +90,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
     
     if (isNewUser) {
-        signUp(email, pass, 'ADMINREF'); // Go through the sign-up flow to create a fresh user
+        signUp(email, pass, 'REFUSER1'); // Use the existing user's referral code
     } else {
         setCurrentUser(existingUser);
         setIsAdmin(false);
@@ -128,6 +128,25 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         status: 'completed',
         description: `Account created successfully. Referred by ${referral}.`,
     });
+
+    // In this prototype, if the current user is the referrer, update their state
+    if (currentUser && currentUser.userReferralCode === referral) {
+        setCurrentUser(prevUser => {
+            if (!prevUser) return null;
+            const updatedUser = {
+                ...prevUser,
+                directReferrals: prevUser.directReferrals + 1,
+                referredUsers: [...prevUser.referredUsers, newUser.email],
+            };
+            return addTransaction(updatedUser, {
+                type: 'new_referral',
+                amount: 1,
+                status: 'info',
+                description: `New user registered with your code: ${newUser.email}`
+            });
+        });
+    }
+
 
     // In a real app, you would save this user to a database.
     // For this prototype, we'll just log it and ask them to sign in.
@@ -203,7 +222,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 tx.id === transactionId ? { ...tx, status: 'approved' as const, description: `Deposit of ${request.amount} USDT approved.` } : tx
             );
             
-            const isFirstEligibleDeposit = updatedUser.level === 0 && (updatedUser.balance + request.amount) >= 100;
+            const isFirstEligibleDeposit = updatedUser.level === 0 && (updatedUser.balance + request.amount) >= levels[1].minBalance;
             
             updatedUser.balance += request.amount;
 

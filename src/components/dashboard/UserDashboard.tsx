@@ -348,8 +348,15 @@ const UserDashboard = () => {
               <h4 className="text-lg font-semibold mb-2 text-blue-300">Referred Users:</h4>
               <ScrollArea className="h-40">
                   <ul className="list-none space-y-2">
-                      <li className="flex items-center gap-2 text-gray-300"><UserCheck className="text-green-400 size-4"/> user@example.com</li>
-                      <li className="text-gray-500">No other referrals yet.</li>
+                    {currentUser.referredUsers.length > 0 ? (
+                      currentUser.referredUsers.map((email, index) => (
+                        <li key={index} className="flex items-center gap-2 text-gray-300">
+                          <UserCheck className="text-green-400 size-4" /> {email}
+                        </li>
+                      ))
+                    ) : (
+                      <li className="text-gray-500">No referrals yet.</li>
+                    )}
                   </ul>
               </ScrollArea>
             </Card>
