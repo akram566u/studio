@@ -302,10 +302,9 @@ const UserDashboard = () => {
                   className="mb-4 text-xl"
                   value={withdrawalAmount}
                   onChange={e => setWithdrawalAmount(e.target.value)}
-                  disabled={isWithdrawalLocked && currentUser.level > 0}
               />
               <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-xl bg-gray-800/50" />
-              <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} disabled={isWithdrawalLocked && currentUser.level > 0}>
+              <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal}>
                   <Send/>Request Withdrawal
               </Button>
             </Card>
