@@ -12,7 +12,7 @@ import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { DashboardPanel, Level, RestrictionMessage } from '@/lib/types';
+import { DashboardPanel, Level, ReferralBonusSettings, RestrictionMessage } from '@/lib/types';
 import { Textarea } from '../ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
+import { ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 
 const AdminDashboard = () => {
   const context = useContext(AppContext);
@@ -41,6 +42,7 @@ const AdminDashboard = () => {
   const [localRestrictions, setLocalRestrictions] = useState<RestrictionMessage[]>([]);
   const [themeColors, setThemeColors] = useState({ primary: '#80b3ff', accent: '#a66eff' });
   const [localPanels, setLocalPanels] = useState<DashboardPanel[]>([]);
+  const [localReferralBonusSettings, setLocalReferralBonusSettings] = useState<ReferralBonusSettings>({ isEnabled: true, bonusAmount: 5, minDeposit: 100 });
   
   // State for editing a user
   const [editingEmail, setEditingEmail] = useState('');
@@ -58,8 +60,10 @@ const AdminDashboard = () => {
     if(context?.levels) setLocalLevels(context.levels);
     if(context?.restrictionMessages) setLocalRestrictions(context.restrictionMessages);
     if(context?.dashboardPanels) setLocalPanels(context.dashboardPanels);
+    if(context?.referralBonusSettings) setLocalReferralBonusSettings(context.referralBonusSettings);
 
-  }, [context?.websiteTitle, context?.startScreenContent, context?.levels, context?.restrictionMessages, context?.dashboardPanels]);
+
+  }, [context?.websiteTitle, context?.startScreenContent, context?.levels, context?.restrictionMessages, context?.dashboardPanels, context?.referralBonusSettings]);
   
   useEffect(() => {
       if (searchedUser) {
@@ -100,6 +104,8 @@ const AdminDashboard = () => {
       updateDashboardPanel,
       addDashboardPanel,
       deleteDashboardPanel,
+      updateReferralBonusSettings,
+      allPendingRequests,
   } = context;
 
   const handleUserSearch = (e: React.FormEvent) => {
@@ -163,6 +169,15 @@ const AdminDashboard = () => {
   
   const handleAddNewRestriction = () => {
     addRestrictionMessage();
+  }
+  
+  const handleReferralBonusSettingsChange = (field: keyof ReferralBonusSettings, value: any) => {
+    const newSettings = {...localReferralBonusSettings, [field]: value};
+    setLocalReferralBonusSettings(newSettings);
+  }
+
+  const handleSaveReferralBonusSettings = () => {
+    updateReferralBonusSettings(localReferralBonusSettings);
   }
 
   const handleUserUpdate = async (field: 'email' | 'address' | 'balance' | 'level') => {
@@ -243,87 +258,52 @@ const AdminDashboard = () => {
 
                 <Card className="card-gradient-green-cyan p-6">
                     <CardHeader>
-                        <CardTitle className="text-purple-300">Deposit Requests</CardTitle>
+                        <CardTitle className="text-purple-300">Unified Pending Requests</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <ScrollArea className="h-60 custom-scrollbar">
-                            {depositRequests && depositRequests.filter(r => r.status === 'pending').length > 0 ? (
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className="text-white">User Details</TableHead>
-                                            <TableHead className="text-white">Amount</TableHead>
-                                            <TableHead className="text-white">Date</TableHead>
-                                            <TableHead className="text-white">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {depositRequests.filter(r => r.status === 'pending').map(request => (
-                                            <TableRow key={request.id}>
-                                                <TableCell className="font-mono">
-                                                    <div className="font-bold">{request.email}</div>
-                                                    <div className="text-xs text-gray-400">Lvl: {request.userLevel} | Deposits: {request.userDepositCount}</div>
-                                                </TableCell>
-                                                <TableCell className="font-mono text-green-300">{request.amount.toFixed(2)} USDT</TableCell>
-                                                <TableCell className="font-mono">{format(new Date(request.timestamp), 'PPpp')}</TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-col gap-2">
-                                                        <Button onClick={() => approveDeposit(request.id)} size="sm">Approve</Button>
-                                                        <Button onClick={() => declineDeposit(request.id)} variant="destructive" size="sm">Decline</Button>
+                        <ScrollArea className="h-96 custom-scrollbar">
+                            {allPendingRequests && allPendingRequests.length > 0 ? (
+                                <div className="space-y-4">
+                                    {allPendingRequests.map(request => (
+                                        <div key={request.id} className="bg-black/20 p-4 rounded-lg flex items-start gap-4">
+                                            {request.type === 'deposit' ? 
+                                                <ArrowDownCircle className="text-green-400 mt-1 size-6" /> :
+                                                <ArrowUpCircle className="text-red-400 mt-1 size-6" />
+                                            }
+                                            <div className="flex-1 space-y-2">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <p className="font-bold text-lg">
+                                                            {request.type === 'deposit' ? 'Deposit' : 'Withdrawal'} Request
+                                                            <span className={`ml-2 font-mono text-xl ${request.type === 'deposit' ? 'text-green-300' : 'text-red-300'}`}>
+                                                                {request.amount.toFixed(2)} USDT
+                                                            </span>
+                                                        </p>
+                                                        <p className="text-sm text-gray-300 font-mono">{request.email}</p>
                                                     </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
+                                                    <p className="text-xs text-gray-400">{format(new Date(request.timestamp), 'PPpp')}</p>
+                                                </div>
+                                                
+                                                <div className="text-xs text-gray-400 space-y-1">
+                                                    <p>Lvl: {request.userLevel} | Deposits: {request.userDepositCount} | Withdrawals: {request.userWithdrawalCount}</p>
+                                                    {request.type === 'withdrawal' && <p className="break-all">Address: {request.walletAddress}</p>}
+                                                </div>
+
+                                                <div className="flex gap-2 pt-2">
+                                                    <Button onClick={() => request.type === 'deposit' ? approveDeposit(request.id) : approveWithdrawal(request.id)} size="sm">Approve</Button>
+                                                    <Button onClick={() => request.type === 'deposit' ? declineDeposit(request.id) : declineWithdrawal(request.id)} variant="destructive" size="sm">Decline</Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             ) : (
-                                <p className="text-gray-400">No pending deposit requests.</p>
+                                <p className="text-gray-400 text-center">No pending requests.</p>
                             )}
                         </ScrollArea>
                     </CardContent>
                 </Card>
 
-                 <Card className="card-gradient-orange-red p-6">
-                    <CardHeader>
-                        <CardTitle className="text-purple-300">Withdrawal Requests</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <ScrollArea className="h-60 custom-scrollbar">
-                            {withdrawalRequests && withdrawalRequests.filter(r => r.status === 'pending').length > 0 ? (
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className="text-white">User Details</TableHead>
-                                            <TableHead className="text-white">Amount</TableHead>
-                                            <TableHead className="text-white">Address</TableHead>
-                                            <TableHead className="text-white">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {withdrawalRequests.filter(r => r.status === 'pending').map(request => (
-                                            <TableRow key={request.id}>
-                                                <TableCell className="font-mono">
-                                                    <div className="font-bold">{request.email}</div>
-                                                    <div className="text-xs text-gray-400">Lvl: {request.userLevel} | Withdrawals: {request.userWithdrawalCount}</div>
-                                                </TableCell>
-                                                <TableCell className="font-mono text-red-300">{request.amount.toFixed(2)} USDT</TableCell>
-                                                <TableCell className="font-mono text-xs break-all">{request.walletAddress}</TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-col gap-2">
-                                                        <Button onClick={() => approveWithdrawal(request.id)} size="sm">Approve</Button>
-                                                        <Button onClick={() => declineWithdrawal(request.id)} variant="destructive" size="sm">Decline</Button>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            ) : (
-                                <p className="text-gray-400">No pending withdrawal requests.</p>
-                            )}
-                        </ScrollArea>
-                    </CardContent>
-                </Card>
 
                 <Card className="card-gradient-yellow-pink p-6">
                     <CardHeader>
@@ -539,6 +519,42 @@ const AdminDashboard = () => {
                             <Button onClick={handleSaveRestrictions}>Save Restriction Changes</Button>
                              <Button onClick={handleAddNewRestriction} variant="secondary">Add New Restriction</Button>
                         </div>
+                    </CardContent>
+                </Card>
+                <Card className="card-gradient-indigo-fuchsia p-6">
+                    <CardHeader>
+                        <CardTitle className="text-purple-300">Manage Referral Bonus</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <Label htmlFor="bonus-enabled" className="text-lg">Enable Referral Bonus</Label>
+                            <Switch 
+                                id="bonus-enabled"
+                                checked={localReferralBonusSettings.isEnabled} 
+                                onCheckedChange={checked => handleReferralBonusSettingsChange('isEnabled', checked)}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="bonus-amount">Bonus Amount (USDT)</Label>
+                            <Input 
+                                id="bonus-amount"
+                                type="number"
+                                value={localReferralBonusSettings.bonusAmount}
+                                onChange={e => handleReferralBonusSettingsChange('bonusAmount', Number(e.target.value))}
+                                disabled={!localReferralBonusSettings.isEnabled}
+                            />
+                        </div>
+                         <div className="space-y-2">
+                            <Label htmlFor="min-deposit">Minimum First Deposit (USDT)</Label>
+                            <Input 
+                                id="min-deposit"
+                                type="number"
+                                value={localReferralBonusSettings.minDeposit}
+                                onChange={e => handleReferralBonusSettingsChange('minDeposit', Number(e.target.value))}
+                                disabled={!localReferralBonusSettings.isEnabled}
+                            />
+                        </div>
+                        <Button onClick={handleSaveReferralBonusSettings}>Save Bonus Settings</Button>
                     </CardContent>
                 </Card>
             </TabsContent>

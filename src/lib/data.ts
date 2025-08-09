@@ -1,4 +1,4 @@
-import { RestrictionMessage, Levels, StartScreenSettings, DashboardPanel } from '@/lib/types';
+import { RestrictionMessage, Levels, StartScreenSettings, DashboardPanel, ReferralBonusSettings } from '@/lib/types';
 
 export const initialLevels: Levels = {
     0: { interest: 0, minBalance: 0, directReferrals: 0, withdrawalLimit: 0 },
@@ -33,6 +33,13 @@ export const initialRestrictionMessages: RestrictionMessage[] = [
         isActive: true,
     }
 ];
+
+export const initialReferralBonusSettings: ReferralBonusSettings = {
+    isEnabled: true,
+    bonusAmount: 5,
+    minDeposit: 100,
+};
+
 
 export const initialStartScreen: StartScreenSettings = {
     title: 'Staking Hub',

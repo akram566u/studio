@@ -2,8 +2,8 @@
 "use client";
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel } from '@/lib/types';
-import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels } from '@/lib/data';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings } from '@/lib/types';
+import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels, initialReferralBonusSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 
 // A version of the User type that is safe to expose to the admin panel
@@ -25,6 +25,7 @@ export interface AppContextType {
   deleteLevel: (levelKey: number) => void;
   depositRequests: AugmentedTransaction[];
   withdrawalRequests: AugmentedTransaction[];
+  allPendingRequests: AugmentedTransaction[];
   submitDepositRequest: (amount: number) => void;
   approveDeposit: (transactionId: string) => void;
   declineDeposit: (transactionId: string) => void;
@@ -48,6 +49,8 @@ export interface AppContextType {
   updateDashboardPanel: (id: string, updates: Partial<DashboardPanel>) => void;
   addDashboardPanel: () => void;
   deleteDashboardPanel: (id: string) => void;
+  referralBonusSettings: ReferralBonusSettings;
+  updateReferralBonusSettings: (settings: ReferralBonusSettings) => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -97,10 +100,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [levels, setLevels] = useState<Levels>(initialLevels);
   const [depositRequests, setDepositRequests] = useState<AugmentedTransaction[]>([]);
   const [withdrawalRequests, setWithdrawalRequests] = useState<AugmentedTransaction[]>([]);
+  const [allPendingRequests, setAllPendingRequests] = useState<AugmentedTransaction[]>([]);
   const [restrictionMessages, setRestrictionMessages] = useState<RestrictionMessage[]>(initialRestrictionMessages);
   const [startScreenContent, setStartScreenContent] = useState<StartScreenSettings>(initialStartScreen);
   const [adminReferrals, setAdminReferrals] = useState<UserForAdmin[]>([]);
   const [dashboardPanels, setDashboardPanels] = useState<DashboardPanel[]>(initialDashboardPanels);
+  const [referralBonusSettings, setReferralBonusSettings] = useState<ReferralBonusSettings>(initialReferralBonusSettings);
+
   const { toast } = useToast();
 
   const ADMIN_EMAIL = "admin@stakinghub.com";
@@ -262,11 +268,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       timestamp: Date.now(),
       description: `User requested a deposit of ${amount} USDT.`
     };
-
-    // Update global state for admin panel
-    const allReqs = [...depositRequests, ...Object.values(users).flatMap(u => u.transactions.filter(tx => tx.type === 'deposit' && tx.status === 'pending' && !depositRequests.some(dr => dr.id === tx.id)))];
-    const uniqueReqs = Array.from(new Map(allReqs.map(item => [item.id, item])).values());
-    setDepositRequests([...uniqueReqs, augmentTransaction(newRequest)].sort((a,b) => b.timestamp - a.timestamp));
+    
+    const augmentedReq = augmentTransaction(newRequest);
+    setDepositRequests(prev => [...prev, augmentedReq]);
+    setAllPendingRequests(prev => [...prev, augmentedReq].sort((a,b) => b.timestamp - a.timestamp));
 
     let updatedUser = addTransaction(currentUser, newRequest);
     setCurrentUser(updatedUser);
@@ -275,10 +280,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const approveDeposit = (transactionId: string) => {
-    const request = depositRequests.find(r => r.id === transactionId) || Object.values(users).flatMap(u => u.transactions).find(tx => tx.id === transactionId);
+    const request = allPendingRequests.find(r => r.id === transactionId);
     if (!request || !request.userId) return;
 
     setDepositRequests(prev => prev.filter(r => r.id !== transactionId));
+    setAllPendingRequests(prev => prev.filter(r => r.id !== transactionId));
     
     let userToUpdate = Object.values(users).find(u => u.id === request.userId);
     if (userToUpdate) {
@@ -287,29 +293,29 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             tx.id === transactionId ? { ...tx, status: 'approved' as const, description: `Deposit of ${request.amount} USDT approved.` } : tx
         );
         
-        const isFirstEligibleDeposit = userToUpdate.level === 0 && (userToUpdate.balance + request.amount) >= levels[1].minBalance;
-        
+        const isFirstDeposit = userToUpdate.transactions.filter(tx => tx.type === 'deposit' && tx.status === 'approved').length === 1;
+
         userToUpdate.balance += request.amount;
 
-        if (isFirstEligibleDeposit) {
+        if (isFirstDeposit) {
             userToUpdate.firstDepositTime = Date.now();
             userToUpdate = addTransaction(userToUpdate, { 
-                type: 'info', amount: 0, status: 'info', description: '45-day withdrawal hold has started.' 
+                type: 'info', amount: 0, status: 'info', description: 'Withdrawal hold period has started.' 
             });
 
-            if (userToUpdate.referredBy && userToUpdate.referredBy !== ADMIN_REFERRAL_CODE) {
+            if (referralBonusSettings.isEnabled && request.amount >= referralBonusSettings.minDeposit && userToUpdate.referredBy && userToUpdate.referredBy !== ADMIN_REFERRAL_CODE) {
                 const referrer = Object.values(users).find(u => u.userReferralCode === userToUpdate.referredBy);
                 if (referrer) {
                     referrer.directReferrals += 1;
-                    referrer.balance += 5; // Add $5 bonus
+                    referrer.balance += referralBonusSettings.bonusAmount; // Add bonus
                     referrer.referredUsers = referrer.referredUsers.map(u => 
                         u.email === userToUpdate.email ? { ...u, isActivated: true } : u
                     );
                      let updatedReferrer = addTransaction(referrer, {
                         type: 'referral_bonus',
-                        amount: 5,
+                        amount: referralBonusSettings.bonusAmount,
                         status: 'credited',
-                        description: `You received a $5 bonus for activating ${userToUpdate.email}!`
+                        description: `You received a ${referralBonusSettings.bonusAmount} USDT bonus for activating ${userToUpdate.email}!`
                     });
                      updatedReferrer = addTransaction(updatedReferrer, {
                         type: 'new_referral',
@@ -351,10 +357,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
   
   const declineDeposit = (transactionId: string) => {
-    const request = depositRequests.find(r => r.id === transactionId) || Object.values(users).flatMap(u => u.transactions).find(tx => tx.id === transactionId);
+    const request = allPendingRequests.find(r => r.id === transactionId);
     if (!request || !request.userId) return;
 
     setDepositRequests(prev => prev.filter(r => r.id !== transactionId));
+    setAllPendingRequests(prev => prev.filter(r => r.id !== transactionId));
 
     let userToUpdate = Object.values(users).find(u => u.id === request.userId);
     if (userToUpdate) {
@@ -403,10 +410,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         walletAddress: currentUser.primaryWithdrawalAddress,
         description: `User requested a withdrawal of ${amount} USDT.`
     };
-
-    const allReqs = [...withdrawalRequests, ...Object.values(users).flatMap(u => u.transactions.filter(tx => tx.type === 'withdrawal' && tx.status === 'pending' && !withdrawalRequests.some(dr => dr.id === tx.id)))];
-    const uniqueReqs = Array.from(new Map(allReqs.map(item => [item.id, item])).values());
-    setWithdrawalRequests([...uniqueReqs, augmentTransaction(newRequest)].sort((a,b) => b.timestamp - a.timestamp));
+    
+    const augmentedReq = augmentTransaction(newRequest);
+    setWithdrawalRequests(prev => [...prev, augmentedReq]);
+    setAllPendingRequests(prev => [...prev, augmentedReq].sort((a,b) => b.timestamp - a.timestamp));
 
     const updatedUser = addTransaction(currentUser, newRequest);
     setCurrentUser(updatedUser);
@@ -415,10 +422,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
   
   const approveWithdrawal = (transactionId: string) => {
-    const request = withdrawalRequests.find(r => r.id === transactionId) || Object.values(users).flatMap(u => u.transactions).find(tx => tx.id === transactionId);
+    const request = allPendingRequests.find(r => r.id === transactionId);
     if (!request || !request.userId) return;
 
     setWithdrawalRequests(prev => prev.filter(r => r.id !== transactionId));
+    setAllPendingRequests(prev => prev.filter(r => r.id !== transactionId));
 
     let userToUpdate = Object.values(users).find(u => u.id === request.userId);
     if (userToUpdate) {
@@ -436,10 +444,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const declineWithdrawal = (transactionId: string) => {
-    const request = withdrawalRequests.find(r => r.id === transactionId) || Object.values(users).flatMap(u => u.transactions).find(tx => tx.id === transactionId);
+    const request = allPendingRequests.find(r => r.id === transactionId);
     if (!request || !request.userId) return;
 
     setWithdrawalRequests(prev => prev.filter(r => r.id !== transactionId));
+    setAllPendingRequests(prev => prev.filter(r => r.id !== transactionId));
 
     let userToUpdate = Object.values(users).find(u => u.id === request.userId);
     if (userToUpdate) {
@@ -618,6 +627,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setLevels(remainingLevels);
         toast({ title: "Success", description: `Level ${levelKey} has been deleted.` });
     };
+    
+    const updateReferralBonusSettings = (settings: ReferralBonusSettings) => {
+        setReferralBonusSettings(settings);
+        toast({title: 'Success', description: 'Referral bonus settings have been updated.'});
+    }
 
     const applyTheme = (theme: {primary: string, accent: string}) => {
         document.documentElement.style.setProperty('--primary', theme.primary);
@@ -653,17 +667,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     // Effect to load all pending requests for the admin panel on mount
     useEffect(() => {
         if(isAdmin) {
-            const allDeposits = Object.values(users).flatMap(user => 
+            const allRequests = Object.values(users).flatMap(user => 
                 user.transactions
-                    .filter(tx => tx.type === 'deposit' && tx.status === 'pending')
+                    .filter(tx => (tx.type === 'deposit' || tx.type === 'withdrawal') && tx.status === 'pending')
                     .map(tx => augmentTransaction(tx))
             ).sort((a,b) => b.timestamp - a.timestamp);
-
-            const allWithdrawals = Object.values(users).flatMap(user => 
-                user.transactions
-                    .filter(tx => tx.type === 'withdrawal' && tx.status === 'pending')
-                    .map(tx => augmentTransaction(tx))
-            ).sort((a,b) => b.timestamp - a.timestamp);
+            setAllPendingRequests(allRequests);
 
             const adminReferredUsers = Object.values(users)
                 .filter(u => u.referredBy === ADMIN_REFERRAL_CODE)
@@ -675,8 +684,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     primaryWithdrawalAddress: u.primaryWithdrawalAddress
                 }));
 
-            setDepositRequests(allDeposits);
-            setWithdrawalRequests(allWithdrawals);
             setAdminReferrals(adminReferredUsers);
         }
     }, [isAdmin]);
@@ -737,6 +744,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     deleteLevel,
     depositRequests,
     withdrawalRequests,
+    allPendingRequests,
     submitDepositRequest,
     approveDeposit,
     declineDeposit,
@@ -760,6 +768,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateDashboardPanel,
     addDashboardPanel,
     deleteDashboardPanel,
+    referralBonusSettings,
+    updateReferralBonusSettings,
   };
 
   return (

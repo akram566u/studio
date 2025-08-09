@@ -1,6 +1,7 @@
 
 
 
+
 export interface Transaction {
   id: string;
   userId: string;
@@ -65,12 +66,18 @@ export interface AdminContent {
 }
 
 export interface RestrictionMessage {
-  id: string;
+  id:string;
   title: string;
   type: 'deposit_no_address' | 'deposit_confirm' | 'withdrawal_hold';
   message: string;
   durationDays?: number; // Optional duration for time-based restrictions
   isActive: boolean;
+}
+
+export interface ReferralBonusSettings {
+    isEnabled: boolean;
+    bonusAmount: number;
+    minDeposit: number;
 }
 
 export interface StartScreenSettings {
