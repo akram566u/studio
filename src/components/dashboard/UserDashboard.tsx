@@ -91,9 +91,9 @@ const UserDashboard = () => {
 
   // Effect for Withdrawal Restriction Countdown
   useEffect(() => {
-    if (currentUser && currentUser.firstDepositTime) {
+    if (currentUser && currentUser.registrationTime) {
       const RESTRICTION_DAYS = 45;
-      const restrictionEndTime = currentUser.firstDepositTime + (RESTRICTION_DAYS * 24 * 60 * 60 * 1000);
+      const restrictionEndTime = currentUser.registrationTime + (RESTRICTION_DAYS * 24 * 60 * 60 * 1000);
       
       const timer = setInterval(() => {
         const now = new Date().getTime();
@@ -117,11 +117,11 @@ const UserDashboard = () => {
       return () => clearInterval(timer);
 
     } else {
-        // No first deposit yet, so it's locked indefinitely until then.
+        // Fallback for any case where registrationTime is not set
         setIsWithdrawalLocked(true);
-        setWithdrawalCountdown('Please make your first deposit to start the timer.');
+        setWithdrawalCountdown('Withdrawal status is being determined.');
     }
-  }, [currentUser?.firstDepositTime]);
+  }, [currentUser?.registrationTime]);
 
 
   return (
@@ -195,7 +195,7 @@ const UserDashboard = () => {
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
              {isWithdrawalLocked ? (
                 <div className="text-center p-4 bg-red-900/50 rounded-lg">
-                    <p className="text-yellow-300 font-semibold mb-2">Please wait for 45 days after your first deposit to submit a withdrawal request.</p>
+                    <p className="text-yellow-300 font-semibold mb-2">Please wait for 45 days after registration to submit a withdrawal request.</p>
                     <div className="flex items-center justify-center gap-2 text-lg text-white">
                         <Clock className="size-5"/>
                         <span>{withdrawalCountdown}</span>

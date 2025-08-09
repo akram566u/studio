@@ -30,6 +30,7 @@ export interface User {
   withdrawalCompletionTime: number | null;
   primaryWithdrawalAddress: string;
   firstDepositTime: number | null;
+  registrationTime: number;
 }
 
 export interface Level {

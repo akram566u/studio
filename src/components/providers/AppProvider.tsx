@@ -72,7 +72,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         lastInterestCreditTime: Date.now(),
         withdrawalCompletionTime: null,
         primaryWithdrawalAddress: '',
-        firstDepositTime: null
+        firstDepositTime: null,
+        registrationTime: Date.now(), // Set registration time
     };
     
     // For demonstration, if a user already "exists" (i.e. not a new signup)
@@ -80,8 +81,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (email !== 'new@user.com') {
       dummyUser.balance = 1234.56;
       dummyUser.directReferrals = 8;
-      // We don't set a default address anymore.
-      // dummyUser.primaryWithdrawalAddress = '0x1234567890abcdef1234567890abcdef12345678';
       
       // Logic to update level based on balance and referrals
       let newLevel = 0;
@@ -96,9 +95,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
       // Simulate first deposit if balance is present for an existing user
       if (dummyUser.balance > 0 && !dummyUser.firstDepositTime) {
-        // Set first deposit to 50 days ago to test withdrawal availability
-        dummyUser.firstDepositTime = Date.now() - (50 * 24 * 60 * 60 * 1000); 
+        dummyUser.firstDepositTime = Date.now() - (10 * 24 * 60 * 60 * 1000); 
       }
+      // Simulate older registration for testing withdrawal availability
+      dummyUser.registrationTime = Date.now() - (50 * 24 * 60 * 60 * 1000);
     }
 
     setCurrentUser(dummyUser);
@@ -160,38 +160,46 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const approveDeposit = (transactionId: string) => {
-    const request = depositRequests.find(r => r.id === transactionId);
-    if (!request) return;
+    setDepositRequests(prev => {
+        const request = prev.find(r => r.id === transactionId);
+        if (!request || request.status !== 'pending') return prev;
 
-    // This logic is simplified for the prototype. In a real app, you'd fetch and update the specific user.
-    if(currentUser && currentUser.id === request.userId) {
-        const updatedUser = { ...currentUser };
-        updatedUser.balance += request.amount;
-        
-        // Update level if necessary
-        let newLevel = updatedUser.level;
-        for (const levelKey in levels) {
-            const levelNum = parseInt(levelKey, 10);
-            const levelData = levels[levelNum];
-            if (updatedUser.balance >= levelData.minBalance && updatedUser.directReferrals >= levelData.directReferrals) {
-                newLevel = Math.max(newLevel, levelNum);
+        // In a real app, you'd find the user by request.userId and update their data in the DB.
+        // For this prototype, we'll assume the currently logged-in user is the one being approved
+        // if their ID matches. This is a simplification.
+        if (currentUser && currentUser.id === request.userId) {
+            const updatedUser = { ...currentUser };
+            const isFirstDeposit = updatedUser.balance === 0;
+            updatedUser.balance += request.amount;
+
+            // Set first deposit time if this is the first deposit that brings balance > 0
+            if (isFirstDeposit && updatedUser.balance > 0 && !updatedUser.firstDepositTime) {
+                updatedUser.firstDepositTime = Date.now();
             }
-        }
-        updatedUser.level = newLevel;
 
-        // Set the first deposit time if it's not already set
-        if (!updatedUser.firstDepositTime) {
-            updatedUser.firstDepositTime = Date.now();
+            // Update level
+            let newLevel = 0;
+            for (const levelKey in levels) {
+                const levelNum = parseInt(levelKey, 10);
+                const levelData = levels[levelNum];
+                if (updatedUser.balance >= levelData.minBalance && updatedUser.directReferrals >= levelData.directReferrals) {
+                    newLevel = Math.max(newLevel, levelNum);
+                }
+            }
+            updatedUser.level = newLevel;
+
+            setCurrentUser(updatedUser);
+        } else {
+             console.warn("User to approve deposit for is not currently logged in. Balance will not be updated in UI immediately.");
+             // In a real app, you would still update the user in the database here.
         }
-        
-        setCurrentUser(updatedUser);
-    }
-    
-    // Update the request status
-    setDepositRequests(prev => prev.map(r => r.id === transactionId ? { ...r, status: 'approved' } : r));
-    
-    toast({ title: "Success", description: `Deposit of ${request.amount} for ${request.email} approved.` });
-  };
+
+        toast({ title: "Success", description: `Deposit of ${request.amount} for ${request.email} approved.` });
+
+        // Update request status to 'approved'
+        return prev.map(r => r.id === transactionId ? { ...r, status: 'approved' } : r);
+    });
+};
 
 
   const value = {
