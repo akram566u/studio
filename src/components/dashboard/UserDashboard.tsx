@@ -65,12 +65,12 @@ const UserDashboard = () => {
   
   const handleSubmitWithdrawal = () => {
     const amount = parseFloat(withdrawalAmount);
-    if (isNaN(amount) || amount <= 0) {
-        toast({ title: "Error", description: "Please enter a valid withdrawal amount.", variant: "destructive" });
+    if (isWithdrawalLocked) {
+        toast({ title: "Withdrawal Locked", description: "Withdrawal is currently locked for 45 days after your first eligible deposit.", variant: "destructive" });
         return;
     }
-     if (isWithdrawalLocked) {
-        toast({ title: "Error", description: "Withdrawal is currently locked.", variant: "destructive" });
+    if (isNaN(amount) || amount <= 0) {
+        toast({ title: "Error", description: "Please enter a valid withdrawal amount.", variant: "destructive" });
         return;
     }
     submitWithdrawalRequest(amount);
@@ -206,10 +206,10 @@ const UserDashboard = () => {
 
           <Card className="card-gradient-indigo-fuchsia p-6">
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
-             {isWithdrawalLocked ? (
-                <div className="text-center p-4 bg-red-900/50 rounded-lg">
+            {isWithdrawalLocked && (
+                <div className="text-center p-4 bg-red-900/50 rounded-lg mb-4">
                     <p className="text-yellow-300 font-semibold mb-2">
-                        {currentUser.level === 0 
+                        {currentUser.level === 0
                             ? "Please make a minimum deposit of 100 USDT to start the 45-day withdrawal countdown."
                             : "Withdrawal is locked for 45 days after your first eligible deposit."
                         }
@@ -221,22 +221,20 @@ const UserDashboard = () => {
                         </div>
                     )}
                 </div>
-            ) : (
-              <>
-                <p className="text-xl text-gray-200 mb-3">Minimum withdrawal: 100 USDT</p>
-                <Input 
-                  type="number" 
-                  placeholder="Amount to withdraw" 
-                  className="mb-4 text-xl" 
-                  value={withdrawalAmount}
-                  onChange={e => setWithdrawalAmount(e.target.value)}
-                />
-                <Input type="text" placeholder="Your BEP-20 Wallet Address" value={currentUser.primaryWithdrawalAddress || 'Not set'} readOnly className="mb-4 text-xl" />
-                <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} disabled={isWithdrawalLocked}>
-                    <Send/>Request Withdrawal
-                </Button>
-              </>
             )}
+            <p className="text-xl text-gray-200 mb-3">Minimum withdrawal: 100 USDT</p>
+            <Input
+                type="number"
+                placeholder="Amount to withdraw"
+                className="mb-4 text-xl"
+                value={withdrawalAmount}
+                onChange={e => setWithdrawalAmount(e.target.value)}
+                disabled={isWithdrawalLocked}
+            />
+            <Input type="text" placeholder="Your BEP-20 Wallet Address" value={currentUser.primaryWithdrawalAddress || 'Not set'} readOnly className="mb-4 text-xl" />
+            <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} disabled={isWithdrawalLocked}>
+                <Send/>Request Withdrawal
+            </Button>
           </Card>
 
           <Card className="card-gradient-orange-red p-6">
