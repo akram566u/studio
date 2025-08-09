@@ -13,7 +13,8 @@ export interface AppContextType {
   signIn: (email: string, pass: string) => void;
   signOut: () => void;
   signUp: (email: string, pass: string, referral: string) => void;
-  // Many more functions and state variables would go here...
+  updateWithdrawalAddress: (address: string) => void;
+  deleteWithdrawalAddress: () => void;
   websiteTitle: string;
   levels: Levels;
 }
@@ -30,17 +31,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const ADMIN_PASSWORD = "admin123";
 
   const levels: Levels = {
-    0: { interest: 0.00, minBalance: 100, directReferrals: 0, withdrawalLimit: 0 },
+    0: { interest: 0.00, minBalance: 0, directReferrals: 0, withdrawalLimit: 0 },
     1: { interest: 0.018, minBalance: 100, directReferrals: 0, withdrawalLimit: 150 },
     2: { interest: 0.03, minBalance: 800, directReferrals: 8, withdrawalLimit: 500 },
     3: { interest: 0.05, minBalance: 2000, directReferrals: 20, withdrawalLimit: 2000 },
     4: { interest: 0.07, minBalance: 8000, directReferrals: 36, withdrawalLimit: 5000 },
     5: { interest: 0.09, minBalance: 16000, directReferrals: 55, withdrawalLimit: 10000 },
   };
-
-  // In a real implementation, all the logic from the user's <script> tag would be
-  // ported here, using useState for state and useEffect for side-effects like
-  // reading/writing to localStorage.
 
   useEffect(() => {
     // On initial load, you would check localStorage for a logged-in user session
@@ -54,25 +51,31 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
     // Dummy user login for demonstration
-    // Let's check if the user has a balance to determine their level
+    // A new user starts with 0 balance and level 0
     const dummyUser: User = {
         id: 'user123',
         email: email,
-        balance: 1234.56,
-        level: 0, // Start at level 0
+        balance: 0, // New users start with 0 balance
+        level: 0, // New users start at level 0
         userReferralCode: 'REF123',
         referredBy: 'ADMINREF',
-        directReferrals: 8, // Dummy data for testing
+        directReferrals: 0, // New users start with 0 referrals
         lastWithdrawalMonth: null,
         lastWithdrawalAmount: 0,
         transactions: [],
         referredUsers: [],
         lastInterestCreditTime: Date.now(),
         withdrawalCompletionTime: null,
-        primaryWithdrawalAddress: '0x1234567890abcdef1234567890abcdef12345678',
+        primaryWithdrawalAddress: '', // New users have no address set
         firstDepositTime: null
     };
     
+    // Simulate that this user has been around and has some stats
+    dummyUser.balance = 1234.56;
+    dummyUser.directReferrals = 8;
+    dummyUser.primaryWithdrawalAddress = '0x1234567890abcdef1234567890abcdef12345678';
+
+
     // Logic to update level based on balance and referrals
     let newLevel = 0;
     for (const levelKey in levels) {
@@ -107,11 +110,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
     // In a real app, you would create a user object with level 0
-    // and save it to the database.
+    // and save it to the database. For this prototype, the user
+    // will be created with default values upon signing in.
     toast({ title: "Account created successfully! Please sign in." });
-    // This would typically redirect or change view to sign-in
   };
 
+  const updateWithdrawalAddress = (address: string) => {
+    if (currentUser) {
+      setCurrentUser({ ...currentUser, primaryWithdrawalAddress: address });
+      toast({ title: "Success", description: "Withdrawal address updated." });
+    }
+  };
+
+  const deleteWithdrawalAddress = () => {
+    if (currentUser) {
+      setCurrentUser({ ...currentUser, primaryWithdrawalAddress: '' });
+      toast({ title: "Success", description: "Withdrawal address deleted." });
+    }
+  };
 
   const value = {
     currentUser,
@@ -119,6 +135,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     signIn,
     signOut,
     signUp,
+    updateWithdrawalAddress,
+    deleteWithdrawalAddress,
     websiteTitle,
     levels,
   };

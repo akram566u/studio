@@ -22,11 +22,26 @@ const UserDashboard = () => {
   const context = useContext(AppContext);
   const { toast } = useToast();
   const [countdown, setCountdown] = useState('00h 00m 00s');
+  const [newWithdrawalAddress, setNewWithdrawalAddress] = useState('');
+
 
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;
   }
-  const { currentUser, levels } = context;
+  const { currentUser, levels, updateWithdrawalAddress, deleteWithdrawalAddress } = context;
+
+  const handleUpdateAddress = () => {
+    if (newWithdrawalAddress.trim()) {
+      updateWithdrawalAddress(newWithdrawalAddress.trim());
+      setNewWithdrawalAddress('');
+    } else {
+      toast({ title: "Error", description: "Please enter a valid address.", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteAddress = () => {
+    deleteWithdrawalAddress();
+  };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -140,10 +155,16 @@ const UserDashboard = () => {
                     </Button>
                 )}
             </div>
-            <Input type="text" placeholder="Enter new BEP-20 Address" className="mb-4 text-xl" />
+            <Input 
+              type="text" 
+              placeholder="Enter new BEP-20 Address" 
+              className="mb-4 text-xl" 
+              value={newWithdrawalAddress}
+              onChange={(e) => setNewWithdrawalAddress(e.target.value)}
+            />
             <div className="flex gap-2">
-                <Button className="w-full py-3 text-lg"><Edit />Change</Button>
-                <Button variant="destructive" className="w-full py-3 text-lg"><Trash2 />Delete</Button>
+                <Button className="w-full py-3 text-lg" onClick={handleUpdateAddress}><Edit />Change</Button>
+                <Button variant="destructive" className="w-full py-3 text-lg" onClick={handleDeleteAddress}><Trash2 />Delete</Button>
             </div>
           </Card>
         </div>
