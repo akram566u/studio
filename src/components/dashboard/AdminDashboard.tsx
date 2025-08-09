@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { AppContext, UserForAdmin } from '@/components/providers/AppProvider';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -23,6 +23,10 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Textarea } from '../ui/textarea';
+import { RestrictionMessage } from '@/lib/types';
+import { Switch } from '../ui/switch';
+import { Trash2 } from 'lucide-react';
 
 
 const AdminDashboard = () => {
@@ -34,6 +38,13 @@ const AdminDashboard = () => {
   const [adjustmentLevel, setAdjustmentLevel] = useState<number>(0);
   const [newEmail, setNewEmail] = useState('');
   const [newAddress, setNewAddress] = useState('');
+  const [localMessages, setLocalMessages] = useState<RestrictionMessage[]>([]);
+
+  useEffect(() => {
+    if (context?.restrictionMessages) {
+        setLocalMessages(JSON.parse(JSON.stringify(context.restrictionMessages)));
+    }
+  }, [context?.restrictionMessages]);
   
   if (!context || !context.isAdmin) {
     return <div>Access Denied.</div>;
@@ -51,6 +62,7 @@ const AdminDashboard = () => {
       adjustUserLevel,
       adminUpdateUserEmail,
       adminUpdateUserWithdrawalAddress,
+      updateRestrictionMessages
   } = context;
 
   const handleUserSearch = () => {
@@ -109,6 +121,29 @@ const AdminDashboard = () => {
       const updatedUser = adminUpdateUserWithdrawalAddress(searchedUser.id, newAddress);
       setSearchedUser(updatedUser);
   }
+
+  const handleMessageChange = (id: string, field: keyof RestrictionMessage, value: string | number | boolean) => {
+    setLocalMessages(prev => prev.map(msg => msg.id === id ? { ...msg, [field]: value } : msg));
+  };
+  
+  const handleSaveChanges = () => {
+      updateRestrictionMessages(localMessages);
+  };
+
+  const handleAddNewMessage = () => {
+    const newMessage: RestrictionMessage = {
+      id: `msg_${Date.now()}`,
+      title: 'New Restriction Message',
+      type: 'deposit_confirm', // default type
+      message: '',
+      isActive: false,
+    };
+    setLocalMessages(prev => [...prev, newMessage]);
+  };
+  
+  const handleDeleteMessage = (id: string) => {
+      setLocalMessages(prev => prev.filter(msg => msg.id !== id));
+  };
   
   return (
     <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
@@ -324,10 +359,63 @@ const AdminDashboard = () => {
             </TabsContent>
              <TabsContent value="restrictions" className="mt-6">
                 <Card className="card-gradient-yellow-pink p-6">
-                    <h3 className="text-xl font-semibold mb-4 text-purple-300">Manage Restriction Messages</h3>
-                    <CardDescription>
-                        Feature coming soon. Here you will be able to add, edit, and delete restriction messages shown to users across the application.
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xl font-semibold text-purple-300">Manage Restriction Messages</h3>
+                        <Button onClick={handleSaveChanges}>Save All Changes</Button>
+                    </div>
+                    <CardDescription className="mb-4">
+                        Modify the messages shown to users for various restrictions. Use {'{durationDays}'} and {'{countdown}'} placeholders for the withdrawal hold message.
                     </CardDescription>
+                    <ScrollArea className="h-[600px] custom-scrollbar">
+                        <div className="space-y-6">
+                            {localMessages.map(msg => (
+                                <Card key={msg.id}>
+                                    <CardHeader>
+                                        <div className="flex justify-between items-center">
+                                            <Input 
+                                                className="text-lg font-bold"
+                                                value={msg.title}
+                                                onChange={(e) => handleMessageChange(msg.id, 'title', e.target.value)}
+                                            />
+                                            <div className="flex items-center gap-4">
+                                                <div className="flex items-center gap-2">
+                                                    <Label>Active</Label>
+                                                    <Switch
+                                                        checked={msg.isActive}
+                                                        onCheckedChange={(checked) => handleMessageChange(msg.id, 'isActive', checked)}
+                                                    />
+                                                </div>
+                                                 <Button variant="destructive" size="icon" onClick={() => handleDeleteMessage(msg.id)}>
+                                                    <Trash2 className="size-4"/>
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        <div>
+                                            <Label>Message Content</Label>
+                                            <Textarea
+                                                value={msg.message}
+                                                onChange={(e) => handleMessageChange(msg.id, 'message', e.target.value)}
+                                                rows={3}
+                                            />
+                                        </div>
+                                        {msg.type === 'withdrawal_hold' && (
+                                            <div>
+                                                <Label>Hold Duration (Days)</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={msg.durationDays || 0}
+                                                    onChange={(e) => handleMessageChange(msg.id, 'durationDays', parseInt(e.target.value, 10))}
+                                                />
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    </ScrollArea>
+                     <Button onClick={handleAddNewMessage} className="mt-4 w-full">Add New Message</Button>
                 </Card>
             </TabsContent>
             <TabsContent value="settings" className="mt-6">
@@ -352,5 +440,3 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
-
-    

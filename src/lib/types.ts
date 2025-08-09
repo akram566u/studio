@@ -65,10 +65,11 @@ export interface AdminContent {
 
 export interface RestrictionMessage {
   id: string;
-  type: 'deposit' | 'withdrawal';
+  title: string;
+  type: 'deposit_no_address' | 'deposit_confirm' | 'withdrawal_hold';
   message: string;
+  durationDays?: number; // Optional duration for time-based restrictions
   isActive: boolean;
-  timestamp: number;
 }
 
 export interface StartScreenSettings {

@@ -49,7 +49,7 @@ const UserDashboard = () => {
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;
   }
-  const { currentUser, levels, updateWithdrawalAddress, deleteWithdrawalAddress, submitDepositRequest, submitWithdrawalRequest } = context;
+  const { currentUser, levels, updateWithdrawalAddress, deleteWithdrawalAddress, submitDepositRequest, submitWithdrawalRequest, restrictionMessages } = context;
   
   const hasPendingRequests = currentUser.transactions.some(tx => tx.status === 'pending');
   const currentLevelDetails = levels[currentUser.level];
@@ -73,8 +73,11 @@ const UserDashboard = () => {
   };
   
   const handleDepositRequest = () => {
-    if (!currentUser.primaryWithdrawalAddress) {
-        setDepositAlertMessage("Please update your Bep20 withdrawal address first.");
+    const noAddressMsg = restrictionMessages.find(m => m.type === 'deposit_no_address' && m.isActive);
+    const confirmMsg = restrictionMessages.find(m => m.type === 'deposit_confirm' && m.isActive);
+
+    if (!currentUser.primaryWithdrawalAddress && noAddressMsg) {
+        setDepositAlertMessage(noAddressMsg.message);
         setDepositAlertConfirmAction(null); // No confirm action, just an info dialog
         setIsDepositAlertOpen(true);
         return;
@@ -86,21 +89,33 @@ const UserDashboard = () => {
         return;
     }
     
-    setDepositAlertMessage("Please make sure you set the same withdrawal address from which you deposit Usdt on the above recharge address. A different address may cause a permanent loss of funds.");
-    setDepositAlertConfirmAction(() => () => { // Set the confirm action
+    if (confirmMsg) {
+        setDepositAlertMessage(confirmMsg.message);
+        setDepositAlertConfirmAction(() => () => { // Set the confirm action
+            submitDepositRequest(amount);
+            setDepositAmount('');
+        });
+        setIsDepositAlertOpen(true);
+    } else {
+        // If no confirm message is active, proceed directly
         submitDepositRequest(amount);
         setDepositAmount('');
-    });
-    setIsDepositAlertOpen(true);
+    }
   };
   
   const handleSubmitWithdrawal = () => {
     if (isWithdrawalLocked && currentUser.level > 0) {
-        toast({ 
-            title: "Withdrawal Locked", 
-            description: `Please wait for the 45-day holding period to end. ${withdrawalCountdown}`, 
-            variant: "destructive" 
-        });
+        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
+        if(holdMsg) {
+            const message = holdMsg.message
+                .replace('{durationDays}', holdMsg.durationDays?.toString() || '45')
+                .replace('{countdown}', withdrawalCountdown);
+            toast({ 
+                title: "Withdrawal Locked", 
+                description: message,
+                variant: "destructive" 
+            });
+        }
         return;
     }
      if (currentUser.level === 0) {
@@ -155,8 +170,9 @@ const UserDashboard = () => {
 
   // Effect for Withdrawal Restriction Countdown
   useEffect(() => {
-    if (currentUser && currentUser.firstDepositTime && currentUser.level > 0) {
-      const RESTRICTION_DAYS = 45;
+    const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
+    if (currentUser && currentUser.firstDepositTime && currentUser.level > 0 && holdMsg) {
+      const RESTRICTION_DAYS = holdMsg.durationDays || 45;
       const restrictionEndTime = currentUser.firstDepositTime + (RESTRICTION_DAYS * 24 * 60 * 60 * 1000);
       
       const timer = setInterval(() => {
@@ -175,16 +191,16 @@ const UserDashboard = () => {
         const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
         const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-        setWithdrawalCountdown(`${days}d ${hours}h ${minutes}m ${seconds}s remaining`);
+        setWithdrawalCountdown(`${days}d ${hours}h ${minutes}m ${seconds}s`);
 
       }, 1000);
       return () => clearInterval(timer);
 
     } else {
         setIsWithdrawalLocked(currentUser.level === 0);
-        setWithdrawalCountdown(currentUser.level === 0 ? 'Awaiting first eligible deposit.' : 'Withdrawals are locked.');
+        setWithdrawalCountdown('');
     }
-  }, [currentUser?.firstDepositTime, currentUser?.level]);
+  }, [currentUser?.firstDepositTime, currentUser?.level, restrictionMessages]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -417,7 +433,7 @@ const UserDashboard = () => {
       <AlertDialog open={isDepositAlertOpen} onOpenChange={setIsDepositAlertOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Deposit Confirmation</AlertDialogTitle>
+            <AlertDialogTitle>Deposit Information</AlertDialogTitle>
             <AlertDialogDescription>
               {depositAlertMessage}
             </AlertDialogDescription>
