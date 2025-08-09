@@ -27,6 +27,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import RequestViewExamples from './RequestViewExamples';
 
 const AdminDashboard = () => {
   const context = useContext(AppContext);
@@ -204,12 +205,13 @@ const AdminDashboard = () => {
         <p className="text-center text-gray-400 mb-6">Manage all user deposit, withdrawal, and referral bonus requests.</p>
         
         <Tabs defaultValue="dashboard" className="w-full">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-6">
                 <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                 <TabsTrigger value="users">User Management</TabsTrigger>
                 <TabsTrigger value="settings">Content & UI</TabsTrigger>
                 <TabsTrigger value="system">System Settings</TabsTrigger>
                 <TabsTrigger value="panels">User Panels</TabsTrigger>
+                <TabsTrigger value="view_examples">View Examples</TabsTrigger>
             </TabsList>
             
             <TabsContent value="dashboard" className="mt-6 space-y-6">
@@ -600,6 +602,10 @@ const AdminDashboard = () => {
                         </div>
                     </CardContent>
                 </Card>
+            </TabsContent>
+
+            <TabsContent value="view_examples" className="mt-6 space-y-6">
+                <RequestViewExamples />
             </TabsContent>
             
         </Tabs>
