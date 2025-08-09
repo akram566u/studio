@@ -79,10 +79,8 @@ const AdminDashboard = () => {
   }
 
   const { 
-      depositRequests, 
       approveDeposit, 
       declineDeposit, 
-      withdrawalRequests, 
       approveWithdrawal, 
       declineWithdrawal,
       findUser,
@@ -100,7 +98,6 @@ const AdminDashboard = () => {
       adjustUserLevel,
       addRestrictionMessage,
       deleteRestrictionMessage,
-      dashboardPanels,
       updateDashboardPanel,
       addDashboardPanel,
       deleteDashboardPanel,
@@ -422,9 +419,9 @@ const AdminDashboard = () => {
                     <CardContent className="space-y-4">
                         <div className="flex items-center gap-4">
                             <Label htmlFor="primaryColor">Primary Color</Label>
-                            <Input id="primaryColor" type="color" value={themeColors.primary} onChange={(e) => setThemeColors(p => ({...p, primary: e.target.value}))} className="w-24 p-1" />
+                            <Input id="primaryColor" type="color" value={themeColors.primary} onChange={(e) => setThemeColors(p => ({...p, primary: e.target.value}))} />
                             <Label htmlFor="accentColor">Accent Color</Label>
-                            <Input id="accentColor" type="color" value={themeColors.accent} onChange={(e) => setThemeColors(p => ({...p, accent: e.target.value}))} className="w-24 p-1" />
+                            <Input id="accentColor" type="color" value={themeColors.accent} onChange={(e) => setThemeColors(p => ({...p, accent: e.target.value}))} />
                         </div>
                         <Button onClick={handleApplyTheme}>Apply Theme</Button>
                     </CardContent>
@@ -630,5 +627,3 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
-
-    
