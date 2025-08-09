@@ -1,5 +1,4 @@
 
-
 "use client";
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '@/components/providers/AppProvider';
@@ -9,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Clock, Send, Briefcase, TrendingUp, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Clock, Send, Briefcase, TrendingUp, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -29,6 +28,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
@@ -50,6 +50,8 @@ const UserDashboard = () => {
     return <div>Loading user data...</div>;
   }
   const { currentUser, levels, updateWithdrawalAddress, deleteWithdrawalAddress, submitDepositRequest, submitWithdrawalRequest } = context;
+  
+  const hasPendingRequests = currentUser.transactions.some(tx => tx.status === 'pending');
 
   const handleUpdateAddress = () => {
     if (newWithdrawalAddress.trim()) {
@@ -93,12 +95,20 @@ const UserDashboard = () => {
   
   const handleSubmitWithdrawal = () => {
     const amount = parseFloat(withdrawalAmount);
-    if (isWithdrawalLocked) {
-        toast({ title: "Withdrawal Locked", description: "Withdrawal is currently locked.", variant: "destructive" });
+    if (isWithdrawalLocked && currentUser.level > 0) {
+        toast({ 
+            title: "Withdrawal Locked", 
+            description: `Please wait for the 45-day holding period to end. ${withdrawalCountdown}`, 
+            variant: "destructive" 
+        });
         return;
     }
     if (isNaN(amount) || amount <= 0) {
         toast({ title: "Error", description: "Please enter a valid withdrawal amount.", variant: "destructive" });
+        return;
+    }
+    if (amount > currentUser.balance) {
+        toast({ title: "Error", description: "Insufficient balance.", variant: "destructive" });
         return;
     }
     submitWithdrawalRequest(amount);
@@ -197,6 +207,15 @@ const UserDashboard = () => {
   return (
     <>
       <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
+        {hasPendingRequests && (
+            <Alert className="mb-6 bg-yellow-900/50 border-yellow-700 text-yellow-200">
+                <Info className="h-4 w-4 !text-yellow-200" />
+                <AlertTitle>Request Pending</AlertTitle>
+                <AlertDescription>
+                Please wait for admin approval to process your request.
+                </AlertDescription>
+            </Alert>
+        )}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column */}
           <div className="lg:col-span-1 space-y-8">
@@ -279,23 +298,6 @@ const UserDashboard = () => {
 
             <Card className="card-gradient-indigo-fuchsia p-6">
               <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
-              {isWithdrawalLocked && (
-                  <div className="text-center p-4 bg-red-900/50 rounded-lg mb-4">
-                      <p className="text-yellow-300 font-semibold mb-2 flex items-center justify-center gap-2">
-                          <AlertTriangle className="size-5" />
-                          {currentUser.level === 0
-                              ? "Deposit 100+ USDT to start withdrawal timer."
-                              : "Withdrawal Locked"
-                          }
-                      </p>
-                      {currentUser.level > 0 && currentUser.firstDepositTime && (
-                          <div className="flex items-center justify-center gap-2 text-lg text-white">
-                              <Clock className="size-5"/>
-                              <span>{withdrawalCountdown}</span>
-                          </div>
-                      )}
-                  </div>
-              )}
               <p className="text-xl text-gray-200 mb-3">Minimum withdrawal: 100 USDT</p>
               <Input
                   type="number"
@@ -303,10 +305,10 @@ const UserDashboard = () => {
                   className="mb-4 text-xl"
                   value={withdrawalAmount}
                   onChange={e => setWithdrawalAmount(e.target.value)}
-                  disabled={isWithdrawalLocked}
+                  disabled={isWithdrawalLocked && currentUser.level > 0}
               />
               <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-xl bg-gray-800/50" />
-              <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} disabled={isWithdrawalLocked}>
+              <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} disabled={isWithdrawalLocked && currentUser.level > 0}>
                   <Send/>Request Withdrawal
               </Button>
             </Card>
@@ -403,7 +405,9 @@ const UserDashboard = () => {
             </AlertDialogCancel>
             {depositAlertConfirmAction && (
                 <AlertDialogAction onClick={() => {
-                    depositAlertConfirmAction();
+                    if(depositAlertConfirmAction) {
+                        depositAlertConfirmAction();
+                    }
                     setIsDepositAlertOpen(false);
                 }}>
                 OK to Proceed

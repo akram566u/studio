@@ -3,7 +3,7 @@
 export interface Transaction {
   id: string;
   userId: string;
-  type: 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created';
+  type: 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created' | 'info';
   amount: number;
   status: 'pending' | 'approved' | 'declined' | 'credited' | 'completed' | 'info';
   timestamp: number;
@@ -24,12 +24,9 @@ export interface User {
   balance: number;
   level: number;
   directReferrals: number;
-  lastWithdrawalMonth: string | null;
-  lastWithdrawalAmount: number;
   transactions: Transaction[];
   referredUsers: string[];
   lastInterestCreditTime: number;
-  withdrawalCompletionTime: number | null;
   primaryWithdrawalAddress: string;
   firstDepositTime: number | null;
   registrationTime: number;
