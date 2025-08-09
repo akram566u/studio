@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { User, Levels, Transaction } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 
 // A version of the User type that is safe to expose to the admin panel
@@ -17,8 +17,8 @@ export interface AppContextType {
   deleteWithdrawalAddress: () => void;
   websiteTitle: string;
   levels: Levels;
-  depositRequests: Transaction[];
-  withdrawalRequests: Transaction[];
+  depositRequests: AugmentedTransaction[];
+  withdrawalRequests: AugmentedTransaction[];
   submitDepositRequest: (amount: number) => void;
   approveDeposit: (transactionId: string) => void;
   declineDeposit: (transactionId: string) => void;
@@ -28,6 +28,8 @@ export interface AppContextType {
   findUser: (email: string) => UserForAdmin | null;
   adjustUserBalance: (userId: string, amount: number) => UserForAdmin | null;
   adjustUserLevel: (userId: string, level: number) => UserForAdmin | null;
+  adminUpdateUserEmail: (userId: string, newEmail: string) => UserForAdmin | null;
+  adminUpdateUserWithdrawalAddress: (userId: string, newAddress: string) => UserForAdmin | null;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -41,13 +43,19 @@ let allTransactions: { [userId: string]: Transaction[] } = {};
 
 const createInitialUser = (email: string, referredBy: string | null): User => {
     const userId = `user_${Date.now()}_${email}`;
+    // Ensure the referral code is unique
+    let referralCode = generateReferralCode();
+    while (Object.values(users).some(u => u.userReferralCode === referralCode)) {
+        referralCode = generateReferralCode();
+    }
+    
     const newUser: User = {
         id: userId,
         email: email,
         password: 'password', // In a real app, this would be hashed
         balance: 0,
         level: 0,
-        userReferralCode: generateReferralCode(),
+        userReferralCode: referralCode,
         referredBy: referredBy,
         directReferrals: 0,
         transactions: [],
@@ -68,8 +76,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [websiteTitle, setWebsiteTitle] = useState("Staking Hub");
-  const [depositRequests, setDepositRequests] = useState<Transaction[]>([]);
-  const [withdrawalRequests, setWithdrawalRequests] = useState<Transaction[]>([]);
+  const [depositRequests, setDepositRequests] = useState<AugmentedTransaction[]>([]);
+  const [withdrawalRequests, setWithdrawalRequests] = useState<AugmentedTransaction[]>([]);
   const { toast } = useToast();
 
   const ADMIN_EMAIL = "admin@stakinghub.com";
@@ -89,6 +97,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     useEffect(() => {
         if (!users['user@example.com']) {
             const initialUser = createInitialUser('user@example.com', ADMIN_REFERRAL_CODE);
+            initialUser.balance = 50; // Give some initial balance for testing
+            initialUser.level = 0;
             users[initialUser.email] = addTransaction(initialUser, {
                 type: 'account_created',
                 amount: 0,
@@ -97,7 +107,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             });
         }
     }, []);
-
 
   const addTransaction = useCallback((user: User, transactionData: Omit<Transaction, 'id' | 'userId' | 'timestamp'>): User => {
       const newTransaction: Transaction = {
@@ -215,6 +224,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const augmentTransaction = (request: Transaction): AugmentedTransaction => {
+    const user = users[request.email!];
+    if (!user) return request as AugmentedTransaction;
+
+    return {
+        ...request,
+        userLevel: user.level,
+        userWithdrawalAddress: user.primaryWithdrawalAddress,
+        userDepositCount: user.transactions.filter(tx => tx.type === 'deposit' && tx.status === 'approved').length,
+        userWithdrawalCount: user.transactions.filter(tx => tx.type === 'withdrawal' && tx.status === 'approved').length,
+    };
+  };
+
   const submitDepositRequest = (amount: number) => {
     if (!currentUser) return;
     const newRequest: Transaction = {
@@ -227,7 +249,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       timestamp: Date.now(),
       description: `User requested a deposit of ${amount} USDT.`
     };
-    setDepositRequests(prev => [...prev, newRequest].sort((a,b) => b.timestamp - a.timestamp));
+    setDepositRequests(prev => [...prev, augmentTransaction(newRequest)].sort((a,b) => b.timestamp - a.timestamp));
     let updatedUser = addTransaction(currentUser, newRequest);
     setCurrentUser(updatedUser);
     users[updatedUser.email] = updatedUser;
@@ -282,6 +304,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         let newLevel = oldLevel;
         const sortedLevels = Object.keys(levels).map(Number).sort((a,b) => b-a);
         for (const levelKey of sortedLevels) {
+            if (levelKey === 0) continue;
             const levelDetails = levels[levelKey];
             if (userToUpdate.balance >= levelDetails.minBalance && userToUpdate.directReferrals >= levelDetails.directReferrals) {
                 newLevel = levelKey;
@@ -356,7 +379,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         walletAddress: currentUser.primaryWithdrawalAddress,
         description: `User requested a withdrawal of ${amount} USDT.`
     };
-    setWithdrawalRequests(prev => [...prev, newRequest].sort((a, b) => b.timestamp - a.timestamp));
+    setWithdrawalRequests(prev => [...prev, augmentTransaction(newRequest)].sort((a, b) => b.timestamp - a.timestamp));
     const updatedUser = addTransaction(currentUser, newRequest);
     setCurrentUser(updatedUser);
     users[updatedUser.email] = updatedUser;
@@ -456,6 +479,56 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return findUser(user.email);
   };
   
+    const adminUpdateUserEmail = (userId: string, newEmail: string): UserForAdmin | null => {
+        const user = Object.values(users).find(u => u.id === userId);
+        if (!user) {
+            toast({ title: "Error", description: "User not found.", variant: "destructive" });
+            return null;
+        }
+        if (users[newEmail]) {
+            toast({ title: "Error", description: "New email is already in use.", variant: "destructive" });
+            return null;
+        }
+
+        const oldEmail = user.email;
+        const updatedUser = { ...user, email: newEmail };
+        
+        delete users[oldEmail];
+        users[newEmail] = updatedUser;
+
+        // Update current user if it's the one being edited
+        if (currentUser && currentUser.id === userId) {
+            setCurrentUser(updatedUser);
+        }
+
+        toast({ title: "Success", description: `User email updated from ${oldEmail} to ${newEmail}.` });
+        return findUser(newEmail);
+    };
+
+    const adminUpdateUserWithdrawalAddress = (userId: string, newAddress: string): UserForAdmin | null => {
+        const user = Object.values(users).find(u => u.id === userId);
+        if (!user) {
+            toast({ title: "Error", description: "User not found.", variant: "destructive" });
+            return null;
+        }
+
+        user.primaryWithdrawalAddress = newAddress;
+        const updatedUser = addTransaction(user, {
+            type: 'admin_adjusted',
+            amount: 0,
+            status: 'info',
+            description: `Admin updated withdrawal address.`
+        });
+        users[user.email] = updatedUser;
+
+        if (currentUser && currentUser.id === userId) {
+            setCurrentUser(updatedUser);
+        }
+
+        toast({ title: "Success", description: "User withdrawal address updated." });
+        return findUser(user.email);
+    };
+
   // Effect for Daily Interest Credit
   useEffect(() => {
     const interval = setInterval(() => {
@@ -517,6 +590,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     findUser,
     adjustUserBalance,
     adjustUserLevel,
+    adminUpdateUserEmail,
+    adminUpdateUserWithdrawalAddress,
   };
 
   return (

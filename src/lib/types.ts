@@ -15,6 +15,15 @@ export interface Transaction {
   description: string;
 }
 
+// This interface will be used for displaying requests in the admin panel, augmented with user data.
+export interface AugmentedTransaction extends Transaction {
+    userLevel?: number;
+    userWithdrawalAddress?: string;
+    userDepositCount?: number;
+    userWithdrawalCount?: number;
+}
+
+
 export interface User {
   id: string;
   email: string;
@@ -71,7 +80,7 @@ export interface StartScreenSettings {
   panelPadding: string;
   showGetStartedButton: boolean;
   customContent: {
-    id: string;
+    id:string;
     title?: string;
     body: string;
     isActive: boolean;

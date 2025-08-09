@@ -2,7 +2,7 @@
 import React, { useContext, useState } from 'react';
 import { AppContext, UserForAdmin } from '@/components/providers/AppProvider';
 import { GlassPanel } from '@/components/ui/GlassPanel';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -31,6 +31,8 @@ const AdminDashboard = () => {
   const [searchedUser, setSearchedUser] = useState<UserForAdmin | null>(null);
   const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0);
   const [adjustmentLevel, setAdjustmentLevel] = useState<number>(0);
+  const [newEmail, setNewEmail] = useState('');
+  const [newAddress, setNewAddress] = useState('');
   
   if (!context || !context.isAdmin) {
     return <div>Access Denied.</div>;
@@ -46,6 +48,8 @@ const AdminDashboard = () => {
       findUser,
       adjustUserBalance,
       adjustUserLevel,
+      adminUpdateUserEmail,
+      adminUpdateUserWithdrawalAddress,
   } = context;
 
   const handleUserSearch = () => {
@@ -57,6 +61,8 @@ const AdminDashboard = () => {
       if (user) {
           setSearchedUser(user);
           setAdjustmentLevel(user.level); // Initialize with current level
+          setNewEmail(user.email);
+          setNewAddress(user.primaryWithdrawalAddress || '');
       } else {
           setSearchedUser(null);
           toast({ title: "Not Found", description: "No user found with that email.", variant: "destructive"});
@@ -81,15 +87,37 @@ const AdminDashboard = () => {
       const updatedUser = adjustUserLevel(searchedUser.id, adjustmentLevel);
       setSearchedUser(updatedUser);
   }
+
+  const handleEmailChange = () => {
+      if (!searchedUser || !newEmail.trim()) {
+          toast({ title: "Error", description: "Please find a user and enter a new email.", variant: "destructive" });
+          return;
+      }
+      const updatedUser = adminUpdateUserEmail(searchedUser.id, newEmail);
+      if (updatedUser) {
+          setSearchedUser(updatedUser);
+          setSearchQuery(updatedUser.email); // Update search query to new email for consistency
+      }
+  }
+
+  const handleAddressChange = () => {
+      if (!searchedUser || !newAddress.trim()) {
+          toast({ title: "Error", description: "Please find a user and enter a new address.", variant: "destructive" });
+          return;
+      }
+      const updatedUser = adminUpdateUserWithdrawalAddress(searchedUser.id, newAddress);
+      setSearchedUser(updatedUser);
+  }
   
   return (
     <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
         <h2 className="text-3xl font-bold text-purple-400 mb-6 text-center">Admin Panel</h2>
         <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="requests">Requests</TabsTrigger>
                 <TabsTrigger value="users">User Management</TabsTrigger>
+                <TabsTrigger value="restrictions">Restrictions</TabsTrigger>
                 <TabsTrigger value="settings">Settings</TabsTrigger>
             </TabsList>
             <TabsContent value="overview" className="mt-6">
@@ -124,7 +152,7 @@ const AdminDashboard = () => {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="text-white">User Email</TableHead>
+                                            <TableHead className="text-white">User</TableHead>
                                             <TableHead className="text-white">Amount</TableHead>
                                             <TableHead className="text-white">Date</TableHead>
                                             <TableHead className="text-white">Action</TableHead>
@@ -133,12 +161,17 @@ const AdminDashboard = () => {
                                     <TableBody>
                                         {depositRequests.filter(r => r.status === 'pending').map(request => (
                                             <TableRow key={request.id}>
-                                                <TableCell className="font-mono">{request.email}</TableCell>
+                                                <TableCell className="font-mono">
+                                                  <div className="font-bold">{request.email}</div>
+                                                  <div className="text-xs text-gray-400">Lvl: {request.userLevel} | Deposits: {request.userDepositCount}</div>
+                                                </TableCell>
                                                 <TableCell className="font-mono text-green-300">{request.amount.toFixed(2)} USDT</TableCell>
                                                 <TableCell className="font-mono">{format(new Date(request.timestamp), 'PPpp')}</TableCell>
-                                                <TableCell className="flex gap-2">
-                                                    <Button onClick={() => approveDeposit(request.id)} size="sm">Approve</Button>
-                                                    <Button onClick={() => declineDeposit(request.id)} variant="destructive" size="sm">Decline</Button>
+                                                <TableCell>
+                                                    <div className="flex gap-2">
+                                                        <Button onClick={() => approveDeposit(request.id)} size="sm">Approve</Button>
+                                                        <Button onClick={() => declineDeposit(request.id)} variant="destructive" size="sm">Decline</Button>
+                                                    </div>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -156,23 +189,26 @@ const AdminDashboard = () => {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="text-white">User Email</TableHead>
+                                            <TableHead className="text-white">User</TableHead>
                                             <TableHead className="text-white">Amount</TableHead>
                                             <TableHead className="text-white">Address</TableHead>
-                                            <TableHead className="text-white">Date</TableHead>
                                             <TableHead className="text-white">Action</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {withdrawalRequests.filter(r => r.status === 'pending').map(request => (
                                             <TableRow key={request.id}>
-                                                <TableCell className="font-mono">{request.email}</TableCell>
+                                                <TableCell className="font-mono">
+                                                    <div className="font-bold">{request.email}</div>
+                                                    <div className="text-xs text-gray-400">Lvl: {request.userLevel} | Withdrawals: {request.userWithdrawalCount}</div>
+                                                </TableCell>
                                                 <TableCell className="font-mono text-red-300">{request.amount.toFixed(2)} USDT</TableCell>
-                                                <TableCell className="font-mono text-xs">{request.walletAddress}</TableCell>
-                                                <TableCell className="font-mono">{format(new Date(request.timestamp), 'PPpp')}</TableCell>
-                                                <TableCell className="flex gap-2">
-                                                    <Button onClick={() => approveWithdrawal(request.id)} size="sm">Approve</Button>
-                                                    <Button onClick={() => declineWithdrawal(request.id)} variant="destructive" size="sm">Decline</Button>
+                                                <TableCell className="font-mono text-xs break-all">{request.walletAddress}</TableCell>
+                                                <TableCell>
+                                                    <div className="flex gap-2">
+                                                        <Button onClick={() => approveWithdrawal(request.id)} size="sm">Approve</Button>
+                                                        <Button onClick={() => declineWithdrawal(request.id)} variant="destructive" size="sm">Decline</Button>
+                                                    </div>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -209,6 +245,26 @@ const AdminDashboard = () => {
                                         <p><strong>Current Balance:</strong> <span className="text-green-400">{searchedUser.balance.toFixed(2)} USDT</span></p>
                                         <p><strong>Current Level:</strong> {searchedUser.level}</p>
                                         <p><strong>Withdrawal Address:</strong> <span className="text-xs">{searchedUser.primaryWithdrawalAddress || 'Not set'}</span></p>
+                                    </CardContent>
+                                </Card>
+
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Change Email</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="flex gap-2">
+                                        <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+                                        <Button onClick={handleEmailChange}>Update Email</Button>
+                                    </CardContent>
+                                </Card>
+
+                                 <Card>
+                                    <CardHeader>
+                                        <CardTitle>Change Withdrawal Address</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="flex gap-2">
+                                        <Input type="text" value={newAddress} onChange={(e) => setNewAddress(e.target.value)} placeholder="New BEP-20 Address" />
+                                        <Button onClick={handleAddressChange}>Update Address</Button>
                                     </CardContent>
                                 </Card>
 
@@ -263,6 +319,14 @@ const AdminDashboard = () => {
                              <p className="text-gray-400 text-center py-10">Search for a user to manage their details.</p>
                         )}
                     </ScrollArea>
+                </Card>
+            </TabsContent>
+             <TabsContent value="restrictions" className="mt-6">
+                <Card className="card-gradient-yellow-pink p-6">
+                    <h3 className="text-xl font-semibold mb-4 text-purple-300">Manage Restriction Messages</h3>
+                    <CardDescription>
+                        Feature coming soon. Here you will be able to add, edit, and delete restriction messages shown to users across the application.
+                    </CardDescription>
                 </Card>
             </TabsContent>
             <TabsContent value="settings" className="mt-6">
