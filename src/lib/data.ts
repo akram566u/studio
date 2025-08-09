@@ -1,4 +1,4 @@
-import { RestrictionMessage, Levels, StartScreenSettings } from '@/lib/types';
+import { RestrictionMessage, Levels, StartScreenSettings, DashboardPanel } from '@/lib/types';
 
 export const initialLevels: Levels = {
     0: { interest: 0, minBalance: 0, directReferrals: 0, withdrawalLimit: 0 },
@@ -39,4 +39,14 @@ export const initialStartScreen: StartScreenSettings = {
     subtitle: 'Unlock Your Financial Potential. Securely stake USDT and earn daily rewards.',
 };
 
-    
+export const initialDashboardPanels: DashboardPanel[] = [
+    { id: 'p1', title: 'Your Staking Overview', componentKey: 'UserOverview', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p2', title: 'Your Staking Level', componentKey: 'StakingLevel', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p3', title: 'Daily Interest Credit', componentKey: 'InterestCredit', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p4', title: 'Transaction History', componentKey: 'TransactionHistory', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p5', title: 'Recharge USDT (BEP-20)', componentKey: 'Recharge', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p6', title: 'Withdraw USDT', componentKey: 'Withdraw', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p7', title: 'Manage Withdrawal Address', componentKey: 'ManageAddress', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p8', title: 'Your Referral Network', componentKey: 'ReferralNetwork', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p9', title: 'Staking Level Details', componentKey: 'LevelDetails', isVisible: true, isDeletable: false, isEditable: true },
+];

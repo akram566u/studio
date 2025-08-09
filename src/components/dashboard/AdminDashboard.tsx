@@ -12,9 +12,9 @@ import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Level, RestrictionMessage } from '@/lib/types';
+import { DashboardPanel, Level, RestrictionMessage } from '@/lib/types';
 import { Textarea } from '../ui/textarea';
-
+import { Switch } from '@/components/ui/switch';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -39,6 +39,7 @@ const AdminDashboard = () => {
   const [localLevels, setLocalLevels] = useState<{[key: number]: Level}>({});
   const [localRestrictions, setLocalRestrictions] = useState<RestrictionMessage[]>([]);
   const [themeColors, setThemeColors] = useState({ primary: '#80b3ff', accent: '#a66eff' });
+  const [localPanels, setLocalPanels] = useState<DashboardPanel[]>([]);
   
   // State for editing a user
   const [editingEmail, setEditingEmail] = useState('');
@@ -55,8 +56,9 @@ const AdminDashboard = () => {
     }
     if(context?.levels) setLocalLevels(context.levels);
     if(context?.restrictionMessages) setLocalRestrictions(context.restrictionMessages);
+    if(context?.dashboardPanels) setLocalPanels(context.dashboardPanels);
 
-  }, [context?.websiteTitle, context?.startScreenContent, context?.levels, context?.restrictionMessages]);
+  }, [context?.websiteTitle, context?.startScreenContent, context?.levels, context?.restrictionMessages, context?.dashboardPanels]);
   
   useEffect(() => {
       if (searchedUser) {
@@ -93,6 +95,10 @@ const AdminDashboard = () => {
       adjustUserLevel,
       addRestrictionMessage,
       deleteRestrictionMessage,
+      dashboardPanels,
+      updateDashboardPanel,
+      addDashboardPanel,
+      deleteDashboardPanel,
   } = context;
 
   const handleUserSearch = (e: React.FormEvent) => {
@@ -181,6 +187,16 @@ const AdminDashboard = () => {
     }
   };
 
+    const handlePanelChange = (id: string, field: keyof DashboardPanel, value: any) => {
+        setLocalPanels(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
+    };
+
+    const handleSavePanelChanges = (id: string) => {
+        const panelToUpdate = localPanels.find(p => p.id === id);
+        if (panelToUpdate) {
+            updateDashboardPanel(id, panelToUpdate);
+        }
+    };
 
   return (
     <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
@@ -526,14 +542,62 @@ const AdminDashboard = () => {
             </TabsContent>
 
             <TabsContent value="panels" className="mt-6 space-y-6">
-                <Card className="card-gradient-indigo-fuchsia p-6">
+                 <Card className="card-gradient-indigo-fuchsia p-6">
                     <CardHeader>
                         <CardTitle className="text-purple-300">Manage User Dashboard Panels</CardTitle>
-                        <CardDescription>Future: Edit, rename, delete, or add panels to the user dashboard.</CardDescription>
+                        <CardDescription>Edit, rename, or hide panels on the user dashboard.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-gray-400">Panel management features coming soon.</p>
-                        {/* Panel management UI will go here */}
+                        <ScrollArea className="h-[70vh] custom-scrollbar">
+                            <div className="space-y-4">
+                                {localPanels.map(panel => (
+                                    <div key={panel.id} className="bg-black/20 p-4 rounded-lg space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <h4 className="font-bold text-lg text-yellow-300">{panel.title}</h4>
+                                            {panel.isDeletable && (
+                                                <Button variant="destructive" size="sm" onClick={() => deleteDashboardPanel(panel.id)}>
+                                                    Delete Panel
+                                                </Button>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                            <Label htmlFor={`visible-${panel.id}`}>Visible</Label>
+                                            <Switch
+                                                id={`visible-${panel.id}`}
+                                                checked={panel.isVisible}
+                                                onCheckedChange={checked => handlePanelChange(panel.id, 'isVisible', checked)}
+                                            />
+                                        </div>
+                                        {panel.isEditable && (
+                                            <div>
+                                                <Label htmlFor={`title-${panel.id}`}>Panel Title</Label>
+                                                <Input
+                                                    id={`title-${panel.id}`}
+                                                    value={panel.title}
+                                                    onChange={e => handlePanelChange(panel.id, 'title', e.target.value)}
+                                                />
+                                            </div>
+                                        )}
+                                        {panel.componentKey === 'Custom' && (
+                                             <div>
+                                                <Label htmlFor={`content-${panel.id}`}>Panel Content (Markdown supported)</Label>
+                                                <Textarea
+                                                    id={`content-${panel.id}`}
+                                                    value={panel.content || ''}
+                                                    onChange={e => handlePanelChange(panel.id, 'content', e.target.value)}
+                                                    rows={5}
+                                                />
+                                            </div>
+                                        )}
+
+                                        <Button size="sm" onClick={() => handleSavePanelChanges(panel.id)}>Save Panel</Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                        <div className="mt-4">
+                            <Button onClick={addDashboardPanel} variant="secondary">Add New Custom Panel</Button>
+                        </div>
                     </CardContent>
                 </Card>
             </TabsContent>

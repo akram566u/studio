@@ -3,7 +3,7 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '@/components/providers/AppProvider';
 import { GlassPanel } from '@/components/ui/GlassPanel';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -31,7 +31,241 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
+import { DashboardPanel } from '@/lib/types';
 
+
+// Individual Panel Components
+const UserOverviewPanel = ({ currentUser }: { currentUser: any }) => (
+    <Card className="card-gradient-blue-purple p-6">
+        <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Staking Overview</h3>
+        <p className="text-gray-200 text-base mb-2">User ID: <span className="font-mono text-sm break-all text-blue-200">{currentUser.id}</span></p>
+        <div className="flex items-center justify-between mb-4">
+        <p className="text-xl text-gray-200">Total USDT Balance:</p>
+        <p className="text-4xl font-bold text-green-400">{currentUser.balance.toFixed(2)}</p>
+        </div>
+    </Card>
+);
+
+const StakingLevelPanel = ({ currentUser, currentLevelDetails }: { currentUser: any, currentLevelDetails: any }) => (
+    <Card className="card-gradient-green-cyan p-6">
+        <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Staking Level</h3>
+        <div className="flex items-center justify-between mb-2">
+        <p className="text-xl text-gray-200">Current Level:</p>
+        <LevelBadge level={currentUser.level} />
+        </div>
+        <div className="flex items-center justify-between mb-2">
+        <p className="text-xl text-gray-200">Active Referrals:</p>
+        <p className="text-2xl font-bold text-yellow-400">{currentUser.directReferrals}</p>
+        </div>
+        <div className="flex items-center justify-between">
+        <p className="text-xl text-gray-200">Withdrawal Limit:</p>
+        <p className="text-2xl font-bold text-yellow-400">{currentLevelDetails.withdrawalLimit} USDT</p>
+        </div>
+    </Card>
+);
+
+const InterestCreditPanel = ({ interestCountdown }: { interestCountdown: string }) => (
+    <Card className="card-gradient-orange-red p-6">
+        <h3 className="text-xl font-semibold mb-3 text-blue-300">Daily Interest Credit</h3>
+        <p className="text-xl text-gray-200 mb-3">Next credit in:</p>
+        <p className="text-5xl font-bold text-purple-400 text-center">{interestCountdown}</p>
+    </Card>
+);
+
+const TransactionHistoryPanel = ({ currentUser }: { currentUser: any }) => {
+    const getStatusBadge = (status: string) => {
+        switch (status) {
+            case 'completed': case 'credited': case 'approved': return <Badge variant="secondary" className="bg-green-700">Completed</Badge>;
+            case 'pending': return <Badge variant="secondary" className="bg-yellow-700">Pending</Badge>;
+            case 'declined': return <Badge variant="destructive">Declined</Badge>;
+            case 'info': return <Badge variant="default">Info</Badge>;
+            default: return <Badge>{status}</Badge>;
+        }
+    };
+    const getIconForType = (type: string) => {
+        switch(type) {
+            case 'deposit': return <Briefcase className="text-green-400" />;
+            case 'withdrawal': return <Send className="text-red-400" />;
+            case 'interest_credit': return <TrendingUp className="text-purple-400" />;
+            case 'level_up': return <TrendingUp className="text-blue-400" />;
+            case 'new_referral': return <UserCheck className="text-yellow-400" />;
+            default: return <CheckCircle className="text-gray-400" />;
+        }
+    }
+    return (
+        <Card className="card-gradient-indigo-fuchsia p-6">
+            <h3 className="text-xl font-semibold mb-3 text-blue-300">Transaction History</h3>
+            <ScrollArea className="h-96 custom-scrollbar">
+                {currentUser.transactions && currentUser.transactions.length > 0 ? (
+                <div className="space-y-4">
+                    {currentUser.transactions.map((tx: any) => (
+                    <div key={tx.id} className="flex items-start gap-3">
+                        <div className="mt-1">{getIconForType(tx.type)}</div>
+                        <div className="flex-1">
+                        <div className="flex justify-between items-center">
+                            <p className="font-semibold text-white">{tx.description}</p>
+                            {getStatusBadge(tx.status)}
+                        </div>
+                        <p className="text-xs text-gray-400">{format(new Date(tx.timestamp), 'PPpp')}</p>
+                        </div>
+                    </div>
+                    ))}
+                </div>
+                ) : (
+                <p className="text-gray-400">No transactions yet.</p>
+                )}
+            </ScrollArea>
+        </Card>
+    );
+};
+
+const RechargePanel = ({ depositAmount, setDepositAmount, handleDepositRequest, copyToClipboard }: { depositAmount: string, setDepositAmount: any, handleDepositRequest: any, copyToClipboard: any }) => {
+    const depositAddress = "0x4D26340f3B52DCf82dd537cBF3c7e4C1D9b53BDc";
+    return (
+         <Card className="card-gradient-yellow-pink p-6">
+            <h3 className="text-xl font-semibold mb-3 text-blue-300">Recharge USDT (BEP-20)</h3>
+            <p className="text-xl text-gray-200 mb-3">Copy this address to deposit:</p>
+            <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
+                <span className="font-mono text-sm break-all text-green-300">{depositAddress}</span>
+                <Button size="icon" variant="ghost" onClick={() => copyToClipboard(depositAddress)}>
+                  <Copy className="size-4" />
+                </Button>
+            </div>
+            <Input 
+                type="number" 
+                placeholder="Amount in USDT" 
+                className="mb-4 text-xl" 
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+            />
+            <Button className="w-full py-3 text-lg" onClick={handleDepositRequest}>Submit Recharge Request</Button>
+        </Card>
+    )
+};
+
+const WithdrawPanel = ({ currentUser, currentLevelDetails, withdrawalAmount, setWithdrawalAmount, handleSubmitWithdrawal }: { currentUser: any, currentLevelDetails: any, withdrawalAmount: string, setWithdrawalAmount: any, handleSubmitWithdrawal: any }) => (
+    <Card className="card-gradient-indigo-fuchsia p-6">
+        <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
+        <p className="text-lg text-gray-300 mb-1">
+            Your withdrawal limit: <span className="font-bold text-yellow-300">{currentLevelDetails.withdrawalLimit} USDT</span>
+        </p>
+        <p className="text-xs text-gray-400 mb-3">
+            Withdrawals are processed once a month and take 3 days to complete after approval.
+        </p>
+        <Input
+            type="number"
+            placeholder="Amount to withdraw"
+            className="mb-4 text-xl"
+            value={withdrawalAmount}
+            onChange={e => setWithdrawalAmount(e.target.value)}
+        />
+        <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-xl bg-gray-800/50" />
+        <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal}>
+            <Send/>Request Withdrawal
+        </Button>
+    </Card>
+);
+
+const ManageAddressPanel = ({ currentUser, newWithdrawalAddress, setNewWithdrawalAddress, handleUpdateAddress, handleDeleteAddress, copyToClipboard }: { currentUser: any, newWithdrawalAddress: string, setNewWithdrawalAddress: any, handleUpdateAddress: any, handleDeleteAddress: any, copyToClipboard: any }) => (
+     <Card className="card-gradient-orange-red p-6">
+        <h3 className="text-xl font-semibold mb-3 text-blue-300">Manage Withdrawal Address</h3>
+        <p className="text-xl text-gray-200 mb-3">Current Address:</p>
+        <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
+            <span className="font-mono text-sm break-all text-green-300">{currentUser.primaryWithdrawalAddress || 'Not set'}</span>
+            {currentUser.primaryWithdrawalAddress && (
+                <Button size="icon" variant="ghost" onClick={() => copyToClipboard(currentUser.primaryWithdrawalAddress || '')}>
+                    <Copy className="size-4" />
+                </Button>
+            )}
+        </div>
+        <Input 
+        type="text" 
+        placeholder="Enter new BEP-20 Address" 
+        className="mb-4 text-xl" 
+        value={newWithdrawalAddress}
+        onChange={(e) => setNewWithdrawalAddress(e.target.value)}
+        />
+        <div className="flex gap-2">
+            <Button className="w-full py-3 text-lg" onClick={handleUpdateAddress}><Edit />Change</Button>
+            <Button variant="destructive" className="w-full py-3 text-lg" onClick={handleDeleteAddress}><Trash2 />Delete</Button>
+        </div>
+    </Card>
+);
+
+const ReferralNetworkPanel = ({ currentUser, copyToClipboard }: { currentUser: any, copyToClipboard: any }) => (
+    <Card className="card-gradient-blue-purple p-6">
+        <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Referral Network</h3>
+        <h4 className="text-lg font-semibold mb-2 text-blue-300 mt-4">Your Referral Code:</h4>
+        <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
+        <span className="font-mono text-base break-all text-yellow-300">{currentUser.userReferralCode}</span>
+        <Button size="icon" variant="ghost" onClick={() => copyToClipboard(currentUser.userReferralCode)}>
+            <Copy className="size-4" />
+        </Button>
+        </div>
+        <h4 className="text-lg font-semibold mb-2 text-blue-300">Referred Users:</h4>
+        <ScrollArea className="h-40">
+            <ul className="list-none space-y-2">
+            {currentUser.referredUsers.length > 0 ? (
+                currentUser.referredUsers.map((user: any, index: number) => (
+                <li key={index} className="flex items-center gap-2 text-gray-300">
+                    {user.isActivated 
+                    ? <UserCheck className="text-green-400 size-4" /> 
+                    : <UserX className="text-red-400 size-4" />}
+                    {user.email} {user.isActivated ? '(Active)' : '(Inactive)'}
+                </li>
+                ))
+            ) : (
+                <li className="text-gray-500">No referrals yet.</li>
+            )}
+            </ul>
+        </ScrollArea>
+    </Card>
+);
+
+const LevelDetailsPanel = ({ levels }: { levels: any }) => (
+    <Card className="card-gradient-green-cyan p-6">
+        <h3 className="text-xl font-semibold mb-4 text-blue-300">Staking Level Details</h3>
+        <ScrollArea className="h-96 custom-scrollbar">
+        <Table>
+            <TableHeader>
+            <TableRow>
+                <TableHead className="text-white">Level</TableHead>
+                <TableHead className="text-white">Min Balance</TableHead>
+                <TableHead className="text-white">Referrals</TableHead>
+                <TableHead className="text-white">Withdraw Limit</TableHead>
+                <TableHead className="text-white">Interest</TableHead>
+            </TableRow>
+            </TableHeader>
+            <TableBody>
+            {Object.entries(levels).map(([level, details]: [string, any]) => (
+                <TableRow key={level}>
+                <TableCell><LevelBadge level={parseInt(level, 10)} /></TableCell>
+                <TableCell className="font-mono text-green-300">{details.minBalance} USDT</TableCell>
+                <TableCell className="font-mono text-blue-300">{details.directReferrals}</TableCell>
+                <TableCell className="font-mono text-yellow-300">{details.withdrawalLimit} USDT</TableCell>
+                <TableCell className="font-mono text-purple-300">{(details.interest * 100).toFixed(2)}%</TableCell>
+                </TableRow>
+            ))}
+            </TableBody>
+        </Table>
+        </ScrollArea>
+    </Card>
+);
+
+const CustomPanel = ({ panel }: { panel: DashboardPanel }) => (
+    <Card className="card-gradient-yellow-pink p-6">
+        <CardHeader>
+            <CardTitle>{panel.title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+            {/* A simple markdown renderer could be added here */}
+            <p>{panel.content}</p>
+        </CardContent>
+    </Card>
+);
+
+
+// Main Dashboard Component
 const UserDashboard = () => {
   const context = useContext(AppContext);
   const { toast } = useToast();
@@ -49,7 +283,7 @@ const UserDashboard = () => {
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;
   }
-  const { currentUser, levels, updateWithdrawalAddress, deleteWithdrawalAddress, submitDepositRequest, submitWithdrawalRequest, restrictionMessages } = context;
+  const { currentUser, levels, updateWithdrawalAddress, deleteWithdrawalAddress, submitDepositRequest, submitWithdrawalRequest, restrictionMessages, dashboardPanels } = context;
   
   const hasPendingRequests = currentUser.transactions.some(tx => tx.status === 'pending');
   const currentLevelDetails = levels[currentUser.level];
@@ -139,8 +373,6 @@ const UserDashboard = () => {
     setWithdrawalAmount('');
   };
 
-  const depositAddress = "0x4D26340f3B52DCf82dd537cBF3c7e4C1D9b53BDc";
-
   // Effect for Daily Interest Countdown
   useEffect(() => {
     if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
@@ -151,8 +383,6 @@ const UserDashboard = () => {
         const distance = nextCredit - now;
 
         if (distance < 0) {
-          // Logic to credit interest is now handled globally in AppProvider
-          // This countdown just displays the time remaining
           setInterestCountdown('Crediting...');
           return;
         }
@@ -202,33 +432,30 @@ const UserDashboard = () => {
     }
   }, [currentUser?.firstDepositTime, currentUser?.level, restrictionMessages]);
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-        case 'completed':
-        case 'credited':
-        case 'approved':
-            return <Badge variant="secondary" className="bg-green-700">Completed</Badge>;
-        case 'pending':
-            return <Badge variant="secondary" className="bg-yellow-700">Pending</Badge>;
-        case 'declined':
-            return <Badge variant="destructive">Declined</Badge>;
-        case 'info':
-            return <Badge variant="default">Info</Badge>;
-        default:
-            return <Badge>{status}</Badge>;
-    }
+  const panelComponentMap: { [key: string]: React.ComponentType<any> } = {
+    UserOverview: () => <UserOverviewPanel currentUser={currentUser} />,
+    StakingLevel: () => <StakingLevelPanel currentUser={currentUser} currentLevelDetails={currentLevelDetails} />,
+    InterestCredit: () => <InterestCreditPanel interestCountdown={interestCountdown} />,
+    TransactionHistory: () => <TransactionHistoryPanel currentUser={currentUser} />,
+    Recharge: () => <RechargePanel depositAmount={depositAmount} setDepositAmount={setDepositAmount} handleDepositRequest={handleDepositRequest} copyToClipboard={copyToClipboard} />,
+    Withdraw: () => <WithdrawPanel currentUser={currentUser} currentLevelDetails={currentLevelDetails} withdrawalAmount={withdrawalAmount} setWithdrawalAmount={setWithdrawalAmount} handleSubmitWithdrawal={handleSubmitWithdrawal} />,
+    ManageAddress: () => <ManageAddressPanel currentUser={currentUser} newWithdrawalAddress={newWithdrawalAddress} setNewWithdrawalAddress={setNewWithdrawalAddress} handleUpdateAddress={handleUpdateAddress} handleDeleteAddress={handleDeleteAddress} copyToClipboard={copyToClipboard} />,
+    ReferralNetwork: () => <ReferralNetworkPanel currentUser={currentUser} copyToClipboard={copyToClipboard} />,
+    LevelDetails: () => <LevelDetailsPanel levels={levels} />,
+    Custom: ({ panel }: { panel: DashboardPanel }) => <CustomPanel panel={panel} />,
   };
+  
+  // This creates three arrays of panels for the three columns
+  const visiblePanels = dashboardPanels.filter(p => p.isVisible);
+  const leftColumnPanels = visiblePanels.slice(0, 4);
+  const middleColumnPanels = visiblePanels.slice(4, 7);
+  const rightColumnPanels = visiblePanels.slice(7);
 
-  const getIconForType = (type: string) => {
-    switch(type) {
-        case 'deposit': return <Briefcase className="text-green-400" />;
-        case 'withdrawal': return <Send className="text-red-400" />;
-        case 'interest_credit': return <TrendingUp className="text-purple-400" />;
-        case 'level_up': return <TrendingUp className="text-blue-400" />;
-        case 'new_referral': return <UserCheck className="text-yellow-400" />;
-        default: return <CheckCircle className="text-gray-400" />;
-    }
-  }
+  const renderPanel = (panel: DashboardPanel) => {
+    const Component = panelComponentMap[panel.componentKey];
+    if (!Component) return null;
+    return <Component key={panel.id} panel={panel} />;
+  };
 
   return (
     <>
@@ -243,190 +470,9 @@ const UserDashboard = () => {
             </Alert>
         )}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column */}
-          <div className="lg:col-span-1 space-y-8">
-            <Card className="card-gradient-blue-purple p-6">
-              <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Staking Overview</h3>
-              <p className="text-gray-200 text-base mb-2">User ID: <span className="font-mono text-sm break-all text-blue-200">{currentUser.id}</span></p>
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-xl text-gray-200">Total USDT Balance:</p>
-                <p className="text-4xl font-bold text-green-400">{currentUser.balance.toFixed(2)}</p>
-              </div>
-            </Card>
-
-            <Card className="card-gradient-green-cyan p-6">
-              <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Staking Level</h3>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xl text-gray-200">Current Level:</p>
-                <LevelBadge level={currentUser.level} />
-              </div>
-               <div className="flex items-center justify-between mb-2">
-                <p className="text-xl text-gray-200">Active Referrals:</p>
-                <p className="text-2xl font-bold text-yellow-400">{currentUser.directReferrals}</p>
-              </div>
-              <div className="flex items-center justify-between">
-                <p className="text-xl text-gray-200">Withdrawal Limit:</p>
-                <p className="text-2xl font-bold text-yellow-400">{currentLevelDetails.withdrawalLimit} USDT</p>
-              </div>
-            </Card>
-
-            <Card className="card-gradient-orange-red p-6">
-              <h3 className="text-xl font-semibold mb-3 text-blue-300">Daily Interest Credit</h3>
-              <p className="text-xl text-gray-200 mb-3">Next credit in:</p>
-              <p className="text-5xl font-bold text-purple-400 text-center">{interestCountdown}</p>
-            </Card>
-
-            <Card className="card-gradient-indigo-fuchsia p-6">
-              <h3 className="text-xl font-semibold mb-3 text-blue-300">Transaction History</h3>
-              <ScrollArea className="h-96 custom-scrollbar">
-                {currentUser.transactions && currentUser.transactions.length > 0 ? (
-                  <div className="space-y-4">
-                    {currentUser.transactions.map(tx => (
-                      <div key={tx.id} className="flex items-start gap-3">
-                        <div className="mt-1">{getIconForType(tx.type)}</div>
-                        <div className="flex-1">
-                          <div className="flex justify-between items-center">
-                              <p className="font-semibold text-white">{tx.description}</p>
-                              {getStatusBadge(tx.status)}
-                          </div>
-                          <p className="text-xs text-gray-400">{format(new Date(tx.timestamp), 'PPpp')}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-gray-400">No transactions yet.</p>
-                )}
-              </ScrollArea>
-            </Card>
-
-          </div>
-
-          {/* Middle Column */}
-          <div className="lg:col-span-1 space-y-8">
-            <Card className="card-gradient-yellow-pink p-6">
-              <h3 className="text-xl font-semibold mb-3 text-blue-300">Recharge USDT (BEP-20)</h3>
-              <p className="text-xl text-gray-200 mb-3">Copy this address to deposit:</p>
-              <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
-                <span className="font-mono text-sm break-all text-green-300">{depositAddress}</span>
-                <Button size="icon" variant="ghost" onClick={() => copyToClipboard(depositAddress)}>
-                  <Copy className="size-4" />
-                </Button>
-              </div>
-              <Input 
-                type="number" 
-                placeholder="Amount in USDT" 
-                className="mb-4 text-xl" 
-                value={depositAmount}
-                onChange={(e) => setDepositAmount(e.target.value)}
-              />
-              <Button className="w-full py-3 text-lg" onClick={handleDepositRequest}>Submit Recharge Request</Button>
-            </Card>
-
-            <Card className="card-gradient-indigo-fuchsia p-6">
-              <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
-              <p className="text-lg text-gray-300 mb-1">
-                Your withdrawal limit: <span className="font-bold text-yellow-300">{currentLevelDetails.withdrawalLimit} USDT</span>
-              </p>
-               <p className="text-xs text-gray-400 mb-3">
-                Withdrawals are processed once a month and take 3 days to complete after approval.
-              </p>
-              <Input
-                  type="number"
-                  placeholder="Amount to withdraw"
-                  className="mb-4 text-xl"
-                  value={withdrawalAmount}
-                  onChange={e => setWithdrawalAmount(e.target.value)}
-              />
-              <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-xl bg-gray-800/50" />
-              <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal}>
-                  <Send/>Request Withdrawal
-              </Button>
-            </Card>
-
-            <Card className="card-gradient-orange-red p-6">
-              <h3 className="text-xl font-semibold mb-3 text-blue-300">Manage Withdrawal Address</h3>
-              <p className="text-xl text-gray-200 mb-3">Current Address:</p>
-              <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
-                  <span className="font-mono text-sm break-all text-green-300">{currentUser.primaryWithdrawalAddress || 'Not set'}</span>
-                  {currentUser.primaryWithdrawalAddress && (
-                      <Button size="icon" variant="ghost" onClick={() => copyToClipboard(currentUser.primaryWithdrawalAddress || '')}>
-                          <Copy className="size-4" />
-                      </Button>
-                  )}
-              </div>
-              <Input 
-                type="text" 
-                placeholder="Enter new BEP-20 Address" 
-                className="mb-4 text-xl" 
-                value={newWithdrawalAddress}
-                onChange={(e) => setNewWithdrawalAddress(e.target.value)}
-              />
-              <div className="flex gap-2">
-                  <Button className="w-full py-3 text-lg" onClick={handleUpdateAddress}><Edit />Change</Button>
-                  <Button variant="destructive" className="w-full py-3 text-lg" onClick={handleDeleteAddress}><Trash2 />Delete</Button>
-              </div>
-            </Card>
-          </div>
-
-          {/* Right Column */}
-          <div className="lg:col-span-1 space-y-8">
-            <Card className="card-gradient-blue-purple p-6">
-              <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Referral Network</h3>
-              <h4 className="text-lg font-semibold mb-2 text-blue-300 mt-4">Your Referral Code:</h4>
-              <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
-                <span className="font-mono text-base break-all text-yellow-300">{currentUser.userReferralCode}</span>
-                <Button size="icon" variant="ghost" onClick={() => copyToClipboard(currentUser.userReferralCode)}>
-                  <Copy className="size-4" />
-                </Button>
-              </div>
-              <h4 className="text-lg font-semibold mb-2 text-blue-300">Referred Users:</h4>
-              <ScrollArea className="h-40">
-                  <ul className="list-none space-y-2">
-                    {currentUser.referredUsers.length > 0 ? (
-                      currentUser.referredUsers.map((user, index) => (
-                        <li key={index} className="flex items-center gap-2 text-gray-300">
-                          {user.isActivated 
-                            ? <UserCheck className="text-green-400 size-4" /> 
-                            : <UserX className="text-red-400 size-4" />}
-                          {user.email} {user.isActivated ? '(Active)' : '(Inactive)'}
-                        </li>
-                      ))
-                    ) : (
-                      <li className="text-gray-500">No referrals yet.</li>
-                    )}
-                  </ul>
-              </ScrollArea>
-            </Card>
-            
-            <Card className="card-gradient-green-cyan p-6">
-              <h3 className="text-xl font-semibold mb-4 text-blue-300">Staking Level Details</h3>
-              <ScrollArea className="h-96 custom-scrollbar">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-white">Level</TableHead>
-                      <TableHead className="text-white">Min Balance</TableHead>
-                      <TableHead className="text-white">Referrals</TableHead>
-                      <TableHead className="text-white">Withdraw Limit</TableHead>
-                      <TableHead className="text-white">Interest</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {Object.entries(levels).map(([level, details]) => (
-                      <TableRow key={level}>
-                        <TableCell><LevelBadge level={parseInt(level, 10)} /></TableCell>
-                        <TableCell className="font-mono text-green-300">{details.minBalance} USDT</TableCell>
-                        <TableCell className="font-mono text-blue-300">{details.directReferrals}</TableCell>
-                        <TableCell className="font-mono text-yellow-300">{details.withdrawalLimit} USDT</TableCell>
-                        <TableCell className="font-mono text-purple-300">{(details.interest * 100).toFixed(2)}%</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-            </Card>
-          </div>
+          <div className="lg:col-span-1 space-y-8">{leftColumnPanels.map(renderPanel)}</div>
+          <div className="lg:col-span-1 space-y-8">{middleColumnPanels.map(renderPanel)}</div>
+          <div className="lg:col-span-1 space-y-8">{rightColumnPanels.map(renderPanel)}</div>
         </div>
       </GlassPanel>
 

@@ -2,8 +2,8 @@
 "use client";
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level } from '@/lib/types';
-import { initialLevels, initialRestrictionMessages, initialStartScreen } from '@/lib/data';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel } from '@/lib/types';
+import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 
 // A version of the User type that is safe to expose to the admin panel
@@ -44,6 +44,10 @@ export interface AppContextType {
   updateStartScreenContent: (content: Omit<StartScreenSettings, 'customContent'>) => void;
   adminReferrals: UserForAdmin[];
   applyTheme: (theme: {primary: string, accent: string}) => void;
+  dashboardPanels: DashboardPanel[];
+  updateDashboardPanel: (id: string, updates: Partial<DashboardPanel>) => void;
+  addDashboardPanel: () => void;
+  deleteDashboardPanel: (id: string) => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -96,6 +100,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [restrictionMessages, setRestrictionMessages] = useState<RestrictionMessage[]>(initialRestrictionMessages);
   const [startScreenContent, setStartScreenContent] = useState<StartScreenSettings>(initialStartScreen);
   const [adminReferrals, setAdminReferrals] = useState<UserForAdmin[]>([]);
+  const [dashboardPanels, setDashboardPanels] = useState<DashboardPanel[]>(initialDashboardPanels);
   const { toast } = useToast();
 
   const ADMIN_EMAIL = "admin@stakinghub.com";
@@ -619,6 +624,31 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         document.documentElement.style.setProperty('--accent', theme.accent);
         toast({ title: "Success", description: "Theme has been applied." });
     }
+    
+    // Panel Management
+    const updateDashboardPanel = (id: string, updates: Partial<DashboardPanel>) => {
+        setDashboardPanels(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+        toast({ title: 'Success', description: 'Panel updated.' });
+    };
+
+    const addDashboardPanel = () => {
+        const newPanel: DashboardPanel = {
+            id: `custom_${Date.now()}`,
+            title: 'New Custom Panel',
+            componentKey: 'Custom',
+            isVisible: true,
+            isDeletable: true,
+            isEditable: true,
+            content: 'Edit this content.',
+        };
+        setDashboardPanels(prev => [...prev, newPanel]);
+        toast({ title: 'Panel Added', description: 'A new custom panel has been added to the user dashboard.' });
+    };
+
+    const deleteDashboardPanel = (id: string) => {
+        setDashboardPanels(prev => prev.filter(p => p.id !== id));
+        toast({ title: 'Panel Deleted', description: 'The panel has been removed from the user dashboard.' });
+    };
 
     // Effect to load all pending requests for the admin panel on mount
     useEffect(() => {
@@ -726,6 +756,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateStartScreenContent,
     adminReferrals,
     applyTheme,
+    dashboardPanels,
+    updateDashboardPanel,
+    addDashboardPanel,
+    deleteDashboardPanel,
   };
 
   return (

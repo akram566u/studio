@@ -1,5 +1,6 @@
 
 
+
 export interface Transaction {
   id: string;
   userId: string;
@@ -77,19 +78,16 @@ export interface StartScreenSettings {
   subtitle: string;
 }
 
-export interface DashboardPanelVisibility {
-  [key: string]: boolean;
-  userOverviewPanel: boolean;
-  userLevelPanel: boolean;
-  dailyInterestPanel: boolean;
-  rechargePanel: boolean;
-  withdrawPanel: boolean;
-  userReferralPanel: boolean;
-  changeWithdrawalAddressPanel: boolean;
-  transactionHistoryPanel: boolean;
-  levelDetailsPanel: boolean;
-  userAdminContentPanel: boolean;
+export interface DashboardPanel {
+  id: string;
+  title: string;
+  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom';
+  isVisible: boolean;
+  isDeletable: boolean;
+  isEditable: boolean;
+  content?: string; // For custom panels
 }
+
 
 export interface AdminTransaction {
     id: string;
