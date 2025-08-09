@@ -1,24 +1,86 @@
 "use client";
-import React, { useContext } from 'react';
-import { AppContext } from '@/components/providers/AppProvider';
+import React, { useContext, useState } from 'react';
+import { AppContext, UserForAdmin } from '@/components/providers/AppProvider';
 import { GlassPanel } from '@/components/ui/GlassPanel';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from 'date-fns';
+import { toast } from '@/hooks/use-toast';
+import { Label } from '../ui/label';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 
 const AdminDashboard = () => {
   const context = useContext(AppContext);
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchedUser, setSearchedUser] = useState<UserForAdmin | null>(null);
+  const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0);
+  const [adjustmentLevel, setAdjustmentLevel] = useState<number>(0);
+  
   if (!context || !context.isAdmin) {
     return <div>Access Denied.</div>;
   }
 
-  const { depositRequests, approveDeposit, withdrawalRequests, approveWithdrawal } = context;
+  const { 
+      depositRequests, 
+      approveDeposit, 
+      declineDeposit, 
+      withdrawalRequests, 
+      approveWithdrawal, 
+      declineWithdrawal,
+      findUser,
+      adjustUserBalance,
+      adjustUserLevel,
+  } = context;
+
+  const handleUserSearch = () => {
+      if (!searchQuery.trim()) {
+          toast({ title: "Error", description: "Please enter a user email to search.", variant: "destructive"});
+          return;
+      }
+      const user = findUser(searchQuery);
+      if (user) {
+          setSearchedUser(user);
+          setAdjustmentLevel(user.level); // Initialize with current level
+      } else {
+          setSearchedUser(null);
+          toast({ title: "Not Found", description: "No user found with that email.", variant: "destructive"});
+      }
+  };
+
+  const handleBalanceAdjust = () => {
+      if (!searchedUser || adjustmentAmount === 0) {
+          toast({ title: "Error", description: "Please find a user and enter a non-zero amount.", variant: "destructive"});
+          return;
+      }
+      const updatedUser = adjustUserBalance(searchedUser.id, adjustmentAmount);
+      setSearchedUser(updatedUser);
+      setAdjustmentAmount(0); // Reset input
+  }
+
+  const handleLevelAdjust = () => {
+      if (!searchedUser) {
+          toast({ title: "Error", description: "Please find a user first.", variant: "destructive"});
+          return;
+      }
+      const updatedUser = adjustUserLevel(searchedUser.id, adjustmentLevel);
+      setSearchedUser(updatedUser);
+  }
   
   return (
     <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
@@ -73,9 +135,10 @@ const AdminDashboard = () => {
                                             <TableRow key={request.id}>
                                                 <TableCell className="font-mono">{request.email}</TableCell>
                                                 <TableCell className="font-mono text-green-300">{request.amount.toFixed(2)} USDT</TableCell>
-                                                <TableCell className="font-mono">{format(request.timestamp, 'PPpp')}</TableCell>
-                                                <TableCell>
-                                                    <Button onClick={() => approveDeposit(request.id)}>Approve</Button>
+                                                <TableCell className="font-mono">{format(new Date(request.timestamp), 'PPpp')}</TableCell>
+                                                <TableCell className="flex gap-2">
+                                                    <Button onClick={() => approveDeposit(request.id)} size="sm">Approve</Button>
+                                                    <Button onClick={() => declineDeposit(request.id)} variant="destructive" size="sm">Decline</Button>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -106,9 +169,10 @@ const AdminDashboard = () => {
                                                 <TableCell className="font-mono">{request.email}</TableCell>
                                                 <TableCell className="font-mono text-red-300">{request.amount.toFixed(2)} USDT</TableCell>
                                                 <TableCell className="font-mono text-xs">{request.walletAddress}</TableCell>
-                                                <TableCell className="font-mono">{format(request.timestamp, 'PPpp')}</TableCell>
-                                                <TableCell>
-                                                    <Button onClick={() => approveWithdrawal(request.id)}>Approve</Button>
+                                                <TableCell className="font-mono">{format(new Date(request.timestamp), 'PPpp')}</TableCell>
+                                                <TableCell className="flex gap-2">
+                                                    <Button onClick={() => approveWithdrawal(request.id)} size="sm">Approve</Button>
+                                                    <Button onClick={() => declineWithdrawal(request.id)} variant="destructive" size="sm">Decline</Button>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -123,13 +187,81 @@ const AdminDashboard = () => {
             </TabsContent>
              <TabsContent value="users" className="mt-6">
                 <Card className="card-gradient-indigo-fuchsia p-6">
-                    <h3 className="text-xl font-semibold mb-4 text-purple-300">Manage User Wallets</h3>
+                    <h3 className="text-xl font-semibold mb-4 text-purple-300">Manage User</h3>
                      <div className="mb-4 flex gap-2">
-                        <Input placeholder="Search User by ID or Email..." />
-                        <Button>Search User</Button>
+                        <Input 
+                            placeholder="Search User by Email..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                         />
+                        <Button onClick={handleUserSearch}>Search User</Button>
                     </div>
-                     <ScrollArea className="h-96 custom-scrollbar">
-                            <p className="text-gray-400">Search for a user to manage their wallet.</p>
+                     <ScrollArea className="h-[500px] custom-scrollbar">
+                        {searchedUser ? (
+                            <div className="space-y-6">
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>User Details</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-2">
+                                        <p><strong>Email:</strong> {searchedUser.email}</p>
+                                        <p><strong>User ID:</strong> <span className="text-xs">{searchedUser.id}</span></p>
+                                        <p><strong>Current Balance:</strong> <span className="text-green-400">{searchedUser.balance.toFixed(2)} USDT</span></p>
+                                        <p><strong>Current Level:</strong> {searchedUser.level}</p>
+                                        <p><strong>Withdrawal Address:</strong> <span className="text-xs">{searchedUser.primaryWithdrawalAddress || 'Not set'}</span></p>
+                                    </CardContent>
+                                </Card>
+
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Adjust Balance</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="flex gap-2">
+                                        <Input 
+                                            type="number" 
+                                            placeholder="Amount (+/-)" 
+                                            value={adjustmentAmount || ''}
+                                            onChange={(e) => setAdjustmentAmount(parseFloat(e.target.value))}
+                                        />
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button>Adjust</Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                    This will permanently change the user's balance by {adjustmentAmount} USDT. This action cannot be undone.
+                                                </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                <AlertDialogAction onClick={handleBalanceAdjust}>Confirm Adjustment</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </CardContent>
+                                </Card>
+                                
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Adjust Level</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="flex gap-2">
+                                         <Input 
+                                            type="number"
+                                            value={adjustmentLevel}
+                                            onChange={(e) => setAdjustmentLevel(parseInt(e.target.value, 10))}
+                                            max={5}
+                                            min={0}
+                                        />
+                                        <Button onClick={handleLevelAdjust}>Set Level</Button>
+                                    </CardContent>
+                                </Card>
+                            </div>
+                        ) : (
+                             <p className="text-gray-400 text-center py-10">Search for a user to manage their details.</p>
+                        )}
                     </ScrollArea>
                 </Card>
             </TabsContent>
@@ -138,11 +270,11 @@ const AdminDashboard = () => {
                     <h3 className="text-xl font-semibold mb-4 text-purple-300">Theme Settings & UI Options</h3>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-bold mb-1">Select Theme:</label>
+                            <Label>Select Theme:</Label>
                             <Input value="Abstract Crystal" readOnly/>
                         </div>
                          <div>
-                            <label className="block text-sm font-bold mb-1">Select Font:</label>
+                            <Label>Select Font:</Label>
                             <Input value="Inter" readOnly/>
                         </div>
                      </div>
