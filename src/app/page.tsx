@@ -1,3 +1,5 @@
+import StakingApp from '@/components/StakingApp';
+
 export default function Home() {
-  return <></>;
+  return <StakingApp />;
 }
