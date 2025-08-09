@@ -69,6 +69,10 @@ const UserDashboard = () => {
         toast({ title: "Error", description: "Please enter a valid withdrawal amount.", variant: "destructive" });
         return;
     }
+     if (isWithdrawalLocked) {
+        toast({ title: "Error", description: "Withdrawal is currently locked.", variant: "destructive" });
+        return;
+    }
     submitWithdrawalRequest(amount);
     setWithdrawalAmount('');
   };
@@ -128,7 +132,7 @@ const UserDashboard = () => {
 
     } else {
         setIsWithdrawalLocked(true);
-        setWithdrawalCountdown('Awaiting first deposit to start timer.');
+        setWithdrawalCountdown('Awaiting first eligible deposit to start timer.');
     }
   }, [currentUser?.firstDepositTime, currentUser?.level]);
 
@@ -228,7 +232,9 @@ const UserDashboard = () => {
                   onChange={e => setWithdrawalAmount(e.target.value)}
                 />
                 <Input type="text" placeholder="Your BEP-20 Wallet Address" value={currentUser.primaryWithdrawalAddress || 'Not set'} readOnly className="mb-4 text-xl" />
-                <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal}><Send/>Request Withdrawal</Button>
+                <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} disabled={isWithdrawalLocked}>
+                    <Send/>Request Withdrawal
+                </Button>
               </>
             )}
           </Card>
