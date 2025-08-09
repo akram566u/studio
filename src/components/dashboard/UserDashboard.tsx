@@ -9,7 +9,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Clock, Send } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Clock, Send, Briefcase, TrendingUp, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -19,6 +19,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { format } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
 
 const UserDashboard = () => {
   const context = useContext(AppContext);
@@ -66,7 +68,7 @@ const UserDashboard = () => {
   const handleSubmitWithdrawal = () => {
     const amount = parseFloat(withdrawalAmount);
     if (isWithdrawalLocked) {
-        toast({ title: "Withdrawal Locked", description: "Withdrawal is currently locked for 45 days after your first eligible deposit.", variant: "destructive" });
+        toast({ title: "Withdrawal Locked", description: "Withdrawal is currently locked.", variant: "destructive" });
         return;
     }
     if (isNaN(amount) || amount <= 0) {
@@ -89,6 +91,7 @@ const UserDashboard = () => {
 
         if (distance < 0) {
           setInterestCountdown('Crediting...');
+          // Logic to credit interest is now in AppProvider
           return;
         }
 
@@ -101,7 +104,7 @@ const UserDashboard = () => {
     } else {
       setInterestCountdown('00h 00m 00s');
     }
-  }, [currentUser]);
+  }, [currentUser, currentUser?.lastInterestCreditTime]);
 
   // Effect for Withdrawal Restriction Countdown
   useEffect(() => {
@@ -115,7 +118,7 @@ const UserDashboard = () => {
 
         if (distance <= 0) {
           setIsWithdrawalLocked(false);
-          setWithdrawalCountdown('');
+          setWithdrawalCountdown('Withdrawals Unlocked');
           clearInterval(timer);
           return;
         }
@@ -132,9 +135,37 @@ const UserDashboard = () => {
 
     } else {
         setIsWithdrawalLocked(true);
-        setWithdrawalCountdown('Awaiting first eligible deposit to start timer.');
+        setWithdrawalCountdown(currentUser.level === 0 ? 'Awaiting first eligible deposit.' : 'Withdrawals are locked.');
     }
   }, [currentUser?.firstDepositTime, currentUser?.level]);
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+        case 'completed':
+        case 'credited':
+        case 'approved':
+            return <Badge variant="secondary" className="bg-green-700">Completed</Badge>;
+        case 'pending':
+            return <Badge variant="secondary" className="bg-yellow-700">Pending</Badge>;
+        case 'declined':
+            return <Badge variant="destructive">Declined</Badge>;
+        case 'info':
+            return <Badge variant="default">Info</Badge>;
+        default:
+            return <Badge>{status}</Badge>;
+    }
+  };
+
+  const getIconForType = (type: string) => {
+    switch(type) {
+        case 'deposit': return <Briefcase className="text-green-400" />;
+        case 'withdrawal': return <Send className="text-red-400" />;
+        case 'interest_credit': return <TrendingUp className="text-purple-400" />;
+        case 'level_up': return <TrendingUp className="text-blue-400" />;
+        case 'new_referral': return <UserCheck className="text-yellow-400" />;
+        default: return <CheckCircle className="text-gray-400" />;
+    }
+  }
 
 
   return (
@@ -174,10 +205,25 @@ const UserDashboard = () => {
 
            <Card className="card-gradient-indigo-fuchsia p-6">
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Transaction History</h3>
-            <ScrollArea className="h-60 custom-scrollbar">
-              <div className="space-y-2">
+            <ScrollArea className="h-96 custom-scrollbar">
+               {currentUser.transactions && currentUser.transactions.length > 0 ? (
+                 <div className="space-y-4">
+                   {currentUser.transactions.map(tx => (
+                     <div key={tx.id} className="flex items-start gap-3">
+                       <div className="mt-1">{getIconForType(tx.type)}</div>
+                       <div className="flex-1">
+                         <div className="flex justify-between items-center">
+                            <p className="font-semibold text-white">{tx.description}</p>
+                            {getStatusBadge(tx.status)}
+                         </div>
+                         <p className="text-xs text-gray-400">{format(tx.timestamp, 'PPpp')}</p>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+               ) : (
                 <p className="text-gray-400">No transactions yet.</p>
-              </div>
+               )}
             </ScrollArea>
           </Card>
 
@@ -208,13 +254,14 @@ const UserDashboard = () => {
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
             {isWithdrawalLocked && (
                 <div className="text-center p-4 bg-red-900/50 rounded-lg mb-4">
-                    <p className="text-yellow-300 font-semibold mb-2">
+                    <p className="text-yellow-300 font-semibold mb-2 flex items-center justify-center gap-2">
+                        <AlertTriangle className="size-5" />
                         {currentUser.level === 0
-                            ? "Please make a minimum deposit of 100 USDT to start the 45-day withdrawal countdown."
-                            : "Withdrawal is locked for 45 days after your first eligible deposit."
+                            ? "Deposit 100+ USDT to start withdrawal timer."
+                            : "Withdrawal Locked"
                         }
                     </p>
-                    {currentUser.level > 0 && (
+                    {currentUser.level > 0 && currentUser.firstDepositTime && (
                         <div className="flex items-center justify-center gap-2 text-lg text-white">
                             <Clock className="size-5"/>
                             <span>{withdrawalCountdown}</span>
@@ -231,7 +278,7 @@ const UserDashboard = () => {
                 onChange={e => setWithdrawalAmount(e.target.value)}
                 disabled={isWithdrawalLocked}
             />
-            <Input type="text" placeholder="Your BEP-20 Wallet Address" value={currentUser.primaryWithdrawalAddress || 'Not set'} readOnly className="mb-4 text-xl" />
+            <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-xl bg-gray-800/50" />
             <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} disabled={isWithdrawalLocked}>
                 <Send/>Request Withdrawal
             </Button>

@@ -3,15 +3,16 @@
 export interface Transaction {
   id: string;
   userId: string;
-  type: 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted';
+  type: 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created';
   amount: number;
-  status: 'pending' | 'approved' | 'declined' | 'credited' | 'completed';
+  status: 'pending' | 'approved' | 'declined' | 'credited' | 'completed' | 'info';
   timestamp: number;
   walletAddress?: string;
   completionTime?: number | null;
   referredUserId?: string;
   note?: string;
   email?: string;
+  description: string;
 }
 
 export interface User {
