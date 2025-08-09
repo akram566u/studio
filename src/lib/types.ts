@@ -101,5 +101,3 @@ export interface AdminTransaction {
     referredUserId?: string;
     walletAddress?: string;
 }
-
-    

@@ -24,9 +24,9 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Textarea } from '../ui/textarea';
-import { RestrictionMessage } from '@/lib/types';
+import { RestrictionMessage, Level } from '@/lib/types';
 import { Switch } from '../ui/switch';
-import { Trash2 } from 'lucide-react';
+import { Trash2, PlusCircle, Save } from 'lucide-react';
 import { LevelBadge } from '../ui/LevelBadge';
 
 
@@ -43,7 +43,9 @@ const AdminDashboard = () => {
   const [localTitle, setLocalTitle] = useState('');
   const [localSubtitle, setLocalSubtitle] = useState('');
   const [localWebsiteTitle, setLocalWebsiteTitle] = useState('');
-
+  const [localLevels, setLocalLevels] = useState<{[key: number]: Level}>({});
+  const [primaryColor, setPrimaryColor] = useState('');
+  const [accentColor, setAccentColor] = useState('');
 
   useEffect(() => {
     if (context?.restrictionMessages) {
@@ -56,7 +58,14 @@ const AdminDashboard = () => {
     if(context?.websiteTitle) {
         setLocalWebsiteTitle(context.websiteTitle);
     }
-  }, [context?.restrictionMessages, context?.startScreenContent, context?.websiteTitle]);
+    if(context?.levels) {
+        setLocalLevels(JSON.parse(JSON.stringify(context.levels)));
+    }
+    // Extract HSL values from CSS variables
+    const rootStyle = getComputedStyle(document.documentElement);
+    setPrimaryColor(rootStyle.getPropertyValue('--primary').trim());
+    setAccentColor(rootStyle.getPropertyValue('--accent').trim());
+  }, [context?.restrictionMessages, context?.startScreenContent, context?.websiteTitle, context?.levels]);
   
   if (!context || !context.isAdmin) {
     return <div>Access Denied.</div>;
@@ -78,7 +87,11 @@ const AdminDashboard = () => {
       levels,
       updateStartScreenContent,
       updateWebsiteTitle,
-      adminReferrals
+      adminReferrals,
+      updateLevel,
+      addLevel,
+      deleteLevel,
+      applyTheme
   } = context;
 
   const handleUserSearch = () => {
@@ -169,6 +182,42 @@ const AdminDashboard = () => {
       setLocalMessages(prev => prev.filter(msg => msg.id !== id));
   };
   
+  const handleLevelDetailChange = (level: number, field: keyof Level, value: string) => {
+    const numericValue = field === 'interest' ? parseFloat(value) : parseInt(value, 10);
+    if(isNaN(numericValue)) return;
+    setLocalLevels(prev => ({
+        ...prev,
+        [level]: {
+            ...prev[level],
+            [field]: numericValue
+        }
+    }));
+  };
+
+  const handleUpdateLevel = (level: number) => {
+      const levelData = localLevels[level];
+      if(levelData) {
+        updateLevel(level, levelData);
+      }
+  };
+
+  const handleAddLevel = () => {
+    const newLevelKey = Math.max(...Object.keys(localLevels).map(Number)) + 1;
+    addLevel(newLevelKey);
+  }
+
+  const handleDeleteLevel = (level: number) => {
+    if (level === 0) {
+        toast({ title: "Error", description: "Cannot delete level 0.", variant: "destructive" });
+        return;
+    }
+    deleteLevel(level);
+  }
+  
+  const handleThemeSave = () => {
+    applyTheme({primary: primaryColor, accent: accentColor});
+  }
+
   return (
     <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
         <h2 className="text-3xl font-bold text-purple-400 mb-6 text-center">Admin Panel</h2>
@@ -446,31 +495,45 @@ const AdminDashboard = () => {
             </TabsContent>
             <TabsContent value="levels" className="mt-6">
                 <Card className="card-gradient-green-cyan p-6">
-                    <h3 className="text-xl font-semibold mb-4 text-purple-300">Staking Level Configuration</h3>
-                    <CardDescription>View the current level settings. Editing functionality will be added soon.</CardDescription>
+                     <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xl font-semibold text-purple-300">Staking Level Configuration</h3>
+                        <Button onClick={handleAddLevel}><PlusCircle /> Add New Level</Button>
+                    </div>
+                    <CardDescription>Edit level requirements and rewards. Click Save on each level to apply changes.</CardDescription>
                     <ScrollArea className="h-96 custom-scrollbar mt-4">
-                        <Table>
-                        <TableHeader>
-                            <TableRow>
-                            <TableHead className="text-white">Level</TableHead>
-                            <TableHead className="text-white">Min Balance</TableHead>
-                            <TableHead className="text-white">Referrals</TableHead>
-                            <TableHead className="text-white">Withdraw Limit</TableHead>
-                            <TableHead className="text-white">Interest</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {Object.entries(levels).map(([level, details]) => (
-                            <TableRow key={level}>
-                                <TableCell><LevelBadge level={parseInt(level, 10)} /></TableCell>
-                                <TableCell className="font-mono text-green-300">{details.minBalance} USDT</TableCell>
-                                <TableCell className="font-mono text-blue-300">{details.directReferrals}</TableCell>
-                                <TableCell className="font-mono text-yellow-300">{details.withdrawalLimit} USDT</TableCell>
-                                <TableCell className="font-mono text-purple-300">{(details.interest * 100).toFixed(2)}%</TableCell>
-                            </TableRow>
-                            ))}
-                        </TableBody>
-                        </Table>
+                        <div className="space-y-4">
+                        {Object.entries(localLevels).sort(([a],[b]) => Number(a) - Number(b)).map(([level, details]) => (
+                            <Card key={level} className="p-4 space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <CardTitle>Level {level}</CardTitle>
+                                    <div>
+                                        <Button size="sm" onClick={() => handleUpdateLevel(Number(level))} className="mr-2"><Save /> Save</Button>
+                                        <Button variant="destructive" size="sm" onClick={() => handleDeleteLevel(Number(level))} disabled={Number(level) === 0}>
+                                            <Trash2/> Delete
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div>
+                                        <Label>Min Balance (USDT)</Label>
+                                        <Input type="number" value={details.minBalance} onChange={e => handleLevelDetailChange(Number(level), 'minBalance', e.target.value)} />
+                                    </div>
+                                     <div>
+                                        <Label>Direct Referrals</Label>
+                                        <Input type="number" value={details.directReferrals} onChange={e => handleLevelDetailChange(Number(level), 'directReferrals', e.target.value)} />
+                                    </div>
+                                     <div>
+                                        <Label>Withdrawal Limit (USDT)</Label>
+                                        <Input type="number" value={details.withdrawalLimit} onChange={e => handleLevelDetailChange(Number(level), 'withdrawalLimit', e.target.value)} />
+                                    </div>
+                                     <div>
+                                        <Label>Daily Interest (e.g., 0.05 for 5%)</Label>
+                                        <Input type="number" step="0.001" value={details.interest} onChange={e => handleLevelDetailChange(Number(level), 'interest', e.target.value)} />
+                                    </div>
+                                </div>
+                            </Card>
+                        ))}
+                        </div>
                     </ScrollArea>
                 </Card>
             </TabsContent>
@@ -528,7 +591,17 @@ const AdminDashboard = () => {
                     </Card>
                     <Card className="card-gradient-blue-purple p-6 lg:col-span-2">
                         <h3 className="text-xl font-semibold mb-4 text-purple-300">Theme & UI Options</h3>
-                        <CardDescription>Theme selection and other UI customizations will be available here soon.</CardDescription>
+                         <div className="space-y-4">
+                            <div>
+                                <Label htmlFor="primaryColor">Primary Color (HSL format: e.g., 216 100% 75%)</Label>
+                                <Input id="primaryColor" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} />
+                            </div>
+                             <div>
+                                <Label htmlFor="accentColor">Accent Color (HSL format: e.g., 265 100% 71%)</Label>
+                                <Input id="accentColor" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} />
+                            </div>
+                            <Button onClick={handleThemeSave}>Apply Theme</Button>
+                        </div>
                     </Card>
                 </div>
             </TabsContent>
@@ -538,5 +611,3 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
-
-    

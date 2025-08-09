@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level } from '@/lib/types';
 import { initialLevels, initialRestrictionMessages, initialStartScreen } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 
@@ -19,6 +19,9 @@ export interface AppContextType {
   websiteTitle: string;
   updateWebsiteTitle: (newTitle: string) => void;
   levels: Levels;
+  updateLevel: (level: number, details: Level) => void;
+  addLevel: (newLevelKey: number) => void;
+  deleteLevel: (levelKey: number) => void;
   depositRequests: AugmentedTransaction[];
   withdrawalRequests: AugmentedTransaction[];
   submitDepositRequest: (amount: number) => void;
@@ -37,6 +40,7 @@ export interface AppContextType {
   startScreenContent: StartScreenSettings;
   updateStartScreenContent: (content: Omit<StartScreenSettings, 'customContent'>) => void;
   adminReferrals: UserForAdmin[];
+  applyTheme: (theme: {primary: string, accent: string}) => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -83,6 +87,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [websiteTitle, setWebsiteTitle] = useState("Staking Hub");
+  const [levels, setLevels] = useState<Levels>(initialLevels);
   const [depositRequests, setDepositRequests] = useState<AugmentedTransaction[]>([]);
   const [withdrawalRequests, setWithdrawalRequests] = useState<AugmentedTransaction[]>([]);
   const [restrictionMessages, setRestrictionMessages] = useState<RestrictionMessage[]>(initialRestrictionMessages);
@@ -94,7 +99,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const ADMIN_PASSWORD = "admin123";
   const ADMIN_REFERRAL_CODE = "ADMINREF";
 
-  const levels: Levels = initialLevels;
   
     // Initialize a default user for the prototype if it doesn't exist
     useEffect(() => {
@@ -289,10 +293,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 const referrer = Object.values(users).find(u => u.userReferralCode === userToUpdate.referredBy);
                 if (referrer) {
                     referrer.directReferrals += 1;
+                    referrer.balance += 5; // Add $5 bonus
                     referrer.referredUsers = referrer.referredUsers.map(u => 
                         u.email === userToUpdate.email ? { ...u, isActivated: true } : u
                     );
-                     const updatedReferrer = addTransaction(referrer, {
+                     let updatedReferrer = addTransaction(referrer, {
+                        type: 'referral_bonus',
+                        amount: 5,
+                        status: 'credited',
+                        description: `You received a $5 bonus for activating ${userToUpdate.email}!`
+                    });
+                     updatedReferrer = addTransaction(updatedReferrer, {
                         type: 'new_referral',
                         amount: 1,
                         status: 'info',
@@ -553,6 +564,36 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: "Success", description: "Website title updated." });
     };
 
+     const updateLevel = (levelKey: number, details: Level) => {
+        const updatedLevels = { ...levels, [levelKey]: details };
+        setLevels(updatedLevels);
+        toast({ title: "Success", description: `Level ${levelKey} has been updated.` });
+    };
+
+    const addLevel = (newLevelKey: number) => {
+        const newLevelData: Level = {
+            interest: 0.1,
+            minBalance: 20000,
+            directReferrals: 60,
+            withdrawalLimit: 1500,
+        };
+        const updatedLevels = { ...levels, [newLevelKey]: newLevelData };
+        setLevels(updatedLevels);
+        toast({ title: "Success", description: `Level ${newLevelKey} has been added.` });
+    };
+
+    const deleteLevel = (levelKey: number) => {
+        const { [levelKey]: _, ...remainingLevels } = levels;
+        setLevels(remainingLevels);
+        toast({ title: "Success", description: `Level ${levelKey} has been deleted.` });
+    };
+
+    const applyTheme = (theme: {primary: string, accent: string}) => {
+        document.documentElement.style.setProperty('--primary', theme.primary);
+        document.documentElement.style.setProperty('--accent', theme.accent);
+        toast({ title: "Success", description: "Theme has been applied." });
+    }
+
     // Effect to load all pending requests for the admin panel on mount
     useEffect(() => {
         if(isAdmin) {
@@ -635,6 +676,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     websiteTitle,
     updateWebsiteTitle,
     levels,
+    updateLevel,
+    addLevel,
+    deleteLevel,
     depositRequests,
     withdrawalRequests,
     submitDepositRequest,
@@ -652,7 +696,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateRestrictionMessages,
     startScreenContent,
     updateStartScreenContent,
-    adminReferrals
+    adminReferrals,
+    applyTheme,
   };
 
   return (
@@ -661,5 +706,3 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
-
-    
