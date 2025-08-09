@@ -23,12 +23,13 @@ const UserDashboard = () => {
   const { toast } = useToast();
   const [countdown, setCountdown] = useState('00h 00m 00s');
   const [newWithdrawalAddress, setNewWithdrawalAddress] = useState('');
+  const [depositAmount, setDepositAmount] = useState('');
 
 
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;
   }
-  const { currentUser, levels, updateWithdrawalAddress, deleteWithdrawalAddress } = context;
+  const { currentUser, levels, updateWithdrawalAddress, deleteWithdrawalAddress, submitDepositRequest } = context;
 
   const handleUpdateAddress = () => {
     if (newWithdrawalAddress.trim()) {
@@ -46,6 +47,16 @@ const UserDashboard = () => {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({ title: 'Copied to clipboard!' });
+  };
+  
+  const handleSubmitDeposit = () => {
+    const amount = parseFloat(depositAmount);
+    if (isNaN(amount) || amount <= 0) {
+        toast({ title: "Error", description: "Please enter a valid deposit amount.", variant: "destructive" });
+        return;
+    }
+    submitDepositRequest(amount);
+    setDepositAmount('');
   };
   
   const depositAddress = "0x4D26340f3B52DCf82dd537cBF3c7e4C1D9b53BDc";
@@ -132,15 +143,21 @@ const UserDashboard = () => {
                 <Copy className="size-4" />
               </Button>
             </div>
-            <Input type="number" placeholder="Amount in USDT" className="mb-4 text-xl" />
-            <Button className="w-full py-3 text-lg">Submit Recharge Request</Button>
+            <Input 
+              type="number" 
+              placeholder="Amount in USDT" 
+              className="mb-4 text-xl" 
+              value={depositAmount}
+              onChange={(e) => setDepositAmount(e.target.value)}
+            />
+            <Button className="w-full py-3 text-lg" onClick={handleSubmitDeposit}>Submit Recharge Request</Button>
           </Card>
 
           <Card className="card-gradient-indigo-fuchsia p-6">
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
             <p className="text-xl text-gray-200 mb-3">Minimum withdrawal: 100 USDT</p>
             <Input type="number" placeholder="Amount to withdraw" className="mb-4 text-xl" />
-            <Input type="text" placeholder="Your BEP-20 Wallet Address" value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-xl" />
+            <Input type="text" placeholder="Your BEP-20 Wallet Address" value={currentUser.primaryWithdrawalAddress || 'Not set'} readOnly className="mb-4 text-xl" />
             <Button className="w-full py-3 text-lg">Request Withdrawal</Button>
           </Card>
 

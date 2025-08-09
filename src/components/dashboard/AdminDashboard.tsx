@@ -6,7 +6,10 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { format } from 'date-fns';
+
 
 const AdminDashboard = () => {
   const context = useContext(AppContext);
@@ -14,6 +17,8 @@ const AdminDashboard = () => {
   if (!context || !context.isAdmin) {
     return <div>Access Denied.</div>;
   }
+
+  const { depositRequests, approveDeposit } = context;
   
   return (
     <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
@@ -53,7 +58,32 @@ const AdminDashboard = () => {
                     <Card className="card-gradient-green-cyan p-6">
                         <h3 className="text-xl font-semibold mb-4 text-purple-300">Deposit Requests</h3>
                         <ScrollArea className="h-96 custom-scrollbar">
-                            <p className="text-gray-400">No pending deposit requests.</p>
+                            {depositRequests && depositRequests.filter(r => r.status === 'pending').length > 0 ? (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="text-white">User Email</TableHead>
+                                            <TableHead className="text-white">Amount</TableHead>
+                                            <TableHead className="text-white">Date</TableHead>
+                                            <TableHead className="text-white">Action</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {depositRequests.filter(r => r.status === 'pending').map(request => (
+                                            <TableRow key={request.id}>
+                                                <TableCell className="font-mono">{request.email}</TableCell>
+                                                <TableCell className="font-mono text-green-300">{request.amount.toFixed(2)} USDT</TableCell>
+                                                <TableCell className="font-mono">{format(request.timestamp, 'PPpp')}</TableCell>
+                                                <TableCell>
+                                                    <Button onClick={() => approveDeposit(request.id)}>Approve</Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            ) : (
+                                <p className="text-gray-400">No pending deposit requests.</p>
+                            )}
                         </ScrollArea>
                     </Card>
                      <Card className="card-gradient-orange-red p-6">

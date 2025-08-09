@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
-import { User, Levels } from '@/lib/types';
+import { User, Levels, Transaction } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 
 // This is a simplified context. The full logic from the user's script is extremely large
@@ -17,6 +17,9 @@ export interface AppContextType {
   deleteWithdrawalAddress: () => void;
   websiteTitle: string;
   levels: Levels;
+  depositRequests: Transaction[];
+  submitDepositRequest: (amount: number) => void;
+  approveDeposit: (transactionId: string) => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -25,6 +28,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [websiteTitle, setWebsiteTitle] = useState("Staking Hub");
+  const [depositRequests, setDepositRequests] = useState<Transaction[]>([]);
   const { toast } = useToast();
 
   const ADMIN_EMAIL = "admin@stakinghub.com";
@@ -55,9 +59,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const dummyUser: User = {
         id: 'user123',
         email: email,
+        password: pass,
         balance: 0, // New users start with 0 balance
         level: 0, // New users start at level 0
-        userReferralCode: 'REF123',
+        userReferralCode: 'REF' + Math.random().toString(36).substring(2, 9).toUpperCase(),
         referredBy: 'ADMINREF',
         directReferrals: 0, // New users start with 0 referrals
         lastWithdrawalMonth: null,
@@ -70,28 +75,27 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         firstDepositTime: null
     };
     
-    // Simulate that this user has been around and has some stats
-    dummyUser.balance = 1234.56;
-    dummyUser.directReferrals = 8;
-    dummyUser.primaryWithdrawalAddress = '0x1234567890abcdef1234567890abcdef12345678';
-
-
-    // Logic to update level based on balance and referrals
-    let newLevel = 0;
-    for (const levelKey in levels) {
-      const levelNum = parseInt(levelKey, 10);
-      const levelData = levels[levelNum];
-      if (dummyUser.balance >= levelData.minBalance && dummyUser.directReferrals >= levelData.directReferrals) {
-        newLevel = Math.max(newLevel, levelNum);
+    // For demonstration, if a user already "exists" (i.e. not a new signup)
+    // we give them some stats. A real app would fetch this from a DB.
+    if (email !== 'new@user.com') {
+      dummyUser.balance = 1234.56;
+      dummyUser.directReferrals = 8;
+      dummyUser.primaryWithdrawalAddress = '0x1234567890abcdef1234567890abcdef12345678';
+      // Logic to update level based on balance and referrals
+      let newLevel = 0;
+      for (const levelKey in levels) {
+        const levelNum = parseInt(levelKey, 10);
+        const levelData = levels[levelNum];
+        if (dummyUser.balance >= levelData.minBalance && dummyUser.directReferrals >= levelData.directReferrals) {
+          newLevel = Math.max(newLevel, levelNum);
+        }
+      }
+      dummyUser.level = newLevel;
+      // Simulate first deposit if balance is present
+      if (dummyUser.balance > 0 && !dummyUser.firstDepositTime) {
+        dummyUser.firstDepositTime = Date.now() - (50 * 24 * 60 * 60 * 1000);
       }
     }
-    dummyUser.level = newLevel;
-
-    // Simulate first deposit if balance is present
-    if (dummyUser.balance > 0 && !dummyUser.firstDepositTime) {
-      dummyUser.firstDepositTime = Date.now() - (50 * 24 * 60 * 60 * 1000);
-    }
-
 
     setCurrentUser(dummyUser);
     setIsAdmin(false);
@@ -129,6 +133,68 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const submitDepositRequest = (amount: number) => {
+    if (!currentUser) {
+      toast({ title: "Error", description: "You must be signed in.", variant: "destructive" });
+      return;
+    }
+    if (amount <= 0) {
+      toast({ title: "Error", description: "Deposit amount must be positive.", variant: "destructive" });
+      return;
+    }
+    const newRequest: Transaction = {
+      id: `txn_${Date.now()}_${Math.random()}`,
+      userId: currentUser.id,
+      email: currentUser.email,
+      type: 'deposit',
+      amount,
+      status: 'pending',
+      timestamp: Date.now(),
+    };
+    setDepositRequests(prev => [...prev, newRequest]);
+    toast({ title: "Success", description: "Deposit request submitted for admin approval." });
+  };
+
+  const approveDeposit = (transactionId: string) => {
+    const request = depositRequests.find(r => r.id === transactionId);
+    if (!request || !currentUser) return; // In a real app, you'd find the correct user
+
+    // In a real app, you would fetch the user associated with the request.
+    // For this prototype, we'll assume it's the currentUser, which is incorrect for multi-user scenarios
+    // but works for a single dummy user.
+    
+    // Update the request status
+    setDepositRequests(prev => prev.map(r => r.id === transactionId ? { ...r, status: 'approved' } : r));
+
+    // For the demo, we'll just update the current user's balance.
+    // A real app would need to find the specific user by request.userId
+    // and update their balance in the database.
+    if(currentUser.id === request.userId) {
+        const updatedUser = { ...currentUser };
+        updatedUser.balance += request.amount;
+        
+        // Update level if necessary
+        let newLevel = updatedUser.level;
+        for (const levelKey in levels) {
+            const levelNum = parseInt(levelKey, 10);
+            const levelData = levels[levelNum];
+            if (updatedUser.balance >= levelData.minBalance && updatedUser.directReferrals >= levelData.directReferrals) {
+                newLevel = Math.max(newLevel, levelNum);
+            }
+        }
+        updatedUser.level = newLevel;
+
+        if (!updatedUser.firstDepositTime) {
+            updatedUser.firstDepositTime = Date.now();
+        }
+        
+        setCurrentUser(updatedUser);
+    }
+    
+    toast({ title: "Success", description: `Deposit of ${request.amount} for ${request.email} approved.` });
+  };
+
+
   const value = {
     currentUser,
     isAdmin,
@@ -139,6 +205,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     deleteWithdrawalAddress,
     websiteTitle,
     levels,
+    depositRequests,
+    submitDepositRequest,
+    approveDeposit,
   };
 
   return (
