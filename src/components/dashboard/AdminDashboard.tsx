@@ -72,12 +72,13 @@ const AdminDashboard = () => {
       applyTheme,
   } = context;
 
-  const handleUserSearch = (email: string) => {
-      if (!email.trim()) {
+  const handleUserSearch = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!searchQuery.trim()) {
           toast({ title: "Error", description: "Please enter a user email to search.", variant: "destructive"});
           return;
       }
-      const user = findUser(email);
+      const user = findUser(searchQuery);
       if (user) {
           setSearchedUser(user);
       } else {
@@ -137,11 +138,12 @@ const AdminDashboard = () => {
         <p className="text-center text-gray-400 mb-6">Manage all user deposit, withdrawal, and referral bonus requests.</p>
         
         <Tabs defaultValue="dashboard" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-                <TabsTrigger value="settings">Settings & UI</TabsTrigger>
+                <TabsTrigger value="users">User Management</TabsTrigger>
+                <TabsTrigger value="settings">Content & UI</TabsTrigger>
                 <TabsTrigger value="system">System & Levels</TabsTrigger>
-                <TabsTrigger value="funds">Funds</TabsTrigger>
+                <TabsTrigger value="panels">User Panels</TabsTrigger>
             </TabsList>
             
             <TabsContent value="dashboard" className="mt-6 space-y-6">
@@ -181,10 +183,10 @@ const AdminDashboard = () => {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="text-white">User</TableHead>
+                                            <TableHead className="text-white">User Details</TableHead>
                                             <TableHead className="text-white">Amount</TableHead>
                                             <TableHead className="text-white">Date</TableHead>
-                                            <TableHead className="text-white">Action</TableHead>
+                                            <TableHead className="text-white">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -197,7 +199,7 @@ const AdminDashboard = () => {
                                                 <TableCell className="font-mono text-green-300">{request.amount.toFixed(2)} USDT</TableCell>
                                                 <TableCell className="font-mono">{format(new Date(request.timestamp), 'PPpp')}</TableCell>
                                                 <TableCell>
-                                                    <div className="flex gap-2">
+                                                    <div className="flex flex-col gap-2">
                                                         <Button onClick={() => approveDeposit(request.id)} size="sm">Approve</Button>
                                                         <Button onClick={() => declineDeposit(request.id)} variant="destructive" size="sm">Decline</Button>
                                                     </div>
@@ -223,10 +225,10 @@ const AdminDashboard = () => {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="text-white">User</TableHead>
+                                            <TableHead className="text-white">User Details</TableHead>
                                             <TableHead className="text-white">Amount</TableHead>
                                             <TableHead className="text-white">Address</TableHead>
-                                            <TableHead className="text-white">Action</TableHead>
+                                            <TableHead className="text-white">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -239,7 +241,7 @@ const AdminDashboard = () => {
                                                 <TableCell className="font-mono text-red-300">{request.amount.toFixed(2)} USDT</TableCell>
                                                 <TableCell className="font-mono text-xs break-all">{request.walletAddress}</TableCell>
                                                 <TableCell>
-                                                    <div className="flex gap-2">
+                                                    <div className="flex flex-col gap-2">
                                                         <Button onClick={() => approveWithdrawal(request.id)} size="sm">Approve</Button>
                                                         <Button onClick={() => declineWithdrawal(request.id)} variant="destructive" size="sm">Decline</Button>
                                                     </div>
@@ -283,6 +285,40 @@ const AdminDashboard = () => {
                 </Card>
             </TabsContent>
 
+            <TabsContent value="users" className="mt-6 space-y-6">
+                <Card className="card-gradient-indigo-fuchsia p-6">
+                    <CardHeader>
+                        <CardTitle className="text-purple-300">User Management</CardTitle>
+                        <CardDescription>Search for a user to view and manage their details.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                         <form onSubmit={handleUserSearch} className="flex gap-2 mb-4">
+                            <Input
+                                type="email"
+                                placeholder="Search by user email..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                            <Button type="submit">Search</Button>
+                        </form>
+                        {searchedUser && (
+                           <div className="bg-black/20 p-4 rounded-lg space-y-4">
+                                <div>
+                                    <h4 className="text-lg font-bold">{searchedUser.email}</h4>
+                                    <p className="text-xs text-gray-400">ID: {searchedUser.id}</p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                     <div><Label>Balance:</Label> <Input value={searchedUser.balance.toFixed(2)} readOnly /></div>
+                                     <div><Label>Level:</Label> <Input value={searchedUser.level} readOnly /></div>
+                                     <div className="col-span-2"><Label>Withdrawal Address:</Label> <Input value={searchedUser.primaryWithdrawalAddress || 'Not Set'} readOnly /></div>
+                                </div>
+                                {/* Add management controls here in the future */}
+                           </div>
+                        )}
+                    </CardContent>
+                </Card>
+            </TabsContent>
+            
             <TabsContent value="settings" className="mt-6 space-y-6">
                 <Card className="card-gradient-indigo-fuchsia p-6">
                     <CardHeader>
@@ -398,54 +434,20 @@ const AdminDashboard = () => {
                     </CardContent>
                 </Card>
             </TabsContent>
-            
-            <TabsContent value="funds" className="mt-6 space-y-6">
+
+            <TabsContent value="panels" className="mt-6 space-y-6">
                 <Card className="card-gradient-indigo-fuchsia p-6">
                     <CardHeader>
-                        <CardTitle className="text-purple-300">Admin Funds Management</CardTitle>
-                    </CardHeader>
-                    <CardContent className="grid md:grid-cols-2 gap-8">
-                        <div>
-                            <h4 className="font-semibold mb-2">Deposit to System Funds</h4>
-                            <div className="space-y-3">
-                                <div>
-                                    <Label htmlFor="depositAmount">Amount to deposit (USDT)</Label>
-                                    <Input id="depositAmount" type="number" placeholder="0.00" />
-                                </div>
-                                <Button className="w-full">Deposit Funds</Button>
-                            </div>
-                        </div>
-                        <div>
-                            <h4 className="font-semibold mb-2">Withdraw from System Funds</h4>
-                            <div className="space-y-3">
-                                <div>
-                                    <Label htmlFor="withdrawAmount">Amount to withdraw (USDT)</Label>
-                                    <Input id="withdrawAmount" type="number" placeholder="0.00" />
-                                </div>
-                                <div>
-                                    <Label htmlFor="withdrawAddress">Custom BEP-20 Address</Label>
-                                    <Input id="withdrawAddress" type="text" placeholder="0x..." />
-                                </div>
-                                <Button className="w-full">Withdraw Funds</Button>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="card-gradient-blue-purple p-6">
-                    <CardHeader>
-                        <CardTitle className="text-purple-300">Manage System Deposit Address</CardTitle>
+                        <CardTitle className="text-purple-300">Manage User Dashboard Panels</CardTitle>
+                        <CardDescription>Future: Edit, rename, delete, or add panels to the user dashboard.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div>
-                            <Label htmlFor="globalDepositAddress">Set New Global Deposit Address:</Label>
-                            <Input id="globalDepositAddress" type="text" placeholder="0x4D26340f3B52DCf82dd537cBF3c7e4C1D9b53BDc" className="mt-1 mb-2"/>
-                            <p className="text-xs text-gray-400 mb-3">This address will be shown to all users for deposits.</p>
-                            <Button className="w-full">Update Global Address</Button>
-                        </div>
+                        <p className="text-gray-400">Panel management features coming soon.</p>
+                        {/* Panel management UI will go here */}
                     </CardContent>
                 </Card>
             </TabsContent>
+            
         </Tabs>
     </GlassPanel>
   );
