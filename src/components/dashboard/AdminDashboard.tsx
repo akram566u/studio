@@ -13,7 +13,7 @@ import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { DashboardPanel, Level, ReferralBonusSettings, RestrictionMessage, Transaction } from '@/lib/types';
+import { BackgroundTheme, DashboardPanel, Level, ReferralBonusSettings, RestrictionMessage, Transaction } from '@/lib/types';
 import { Textarea } from '../ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -104,7 +104,9 @@ const AdminDashboard = () => {
       deleteDashboardPanel,
       updateReferralBonusSettings,
       allPendingRequests,
-      adminHistory
+      adminHistory,
+      active3DTheme,
+      setActive3DTheme,
   } = context;
 
   const handleUserSearch = async (e: React.FormEvent) => {
@@ -466,6 +468,27 @@ const AdminDashboard = () => {
                             <Input id="accentColor" type="color" value={themeColors.accent} onChange={(e) => setThemeColors(p => ({...p, accent: e.target.value}))} />
                         </div>
                         <Button onClick={handleApplyTheme}>Apply Theme</Button>
+                    </CardContent>
+                </Card>
+                <Card className="card-gradient-green-cyan p-6">
+                    <CardHeader>
+                        <CardTitle className="text-purple-300">3D Animated Background</CardTitle>
+                        <CardDescription>Change the animated background for the entire app.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <Label htmlFor="theme-select">Select a theme</Label>
+                        <Select value={active3DTheme} onValueChange={(value: BackgroundTheme) => setActive3DTheme(value)}>
+                            <SelectTrigger id="theme-select">
+                                <SelectValue placeholder="Select a 3D background theme" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="FloatingCrystals">Floating Crystals</SelectItem>
+                                <SelectItem value="CosmicNebula">Cosmic Nebula</SelectItem>
+                                <SelectItem value="DigitalMatrix">Digital Matrix</SelectItem>
+                                <SelectItem value="AbstractParticles">Abstract Particles</SelectItem>
+                                <SelectItem value="SynthwaveSunset">Synthwave Sunset</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </CardContent>
                 </Card>
             </TabsContent>

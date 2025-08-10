@@ -6,7 +6,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme } from '@/lib/types';
 import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels, initialReferralBonusSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
@@ -56,6 +56,8 @@ export interface AppContextType {
   deleteDashboardPanel: (id: string) => void;
   referralBonusSettings: ReferralBonusSettings;
   updateReferralBonusSettings: (settings: ReferralBonusSettings) => void;
+  active3DTheme: BackgroundTheme;
+  setActive3DTheme: (theme: BackgroundTheme) => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -75,6 +77,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [startScreenContent, setStartScreenContent] = useState<StartScreenSettings>(initialStartScreen);
   const [dashboardPanels, setDashboardPanels] = useState<DashboardPanel[]>(initialDashboardPanels);
   const [referralBonusSettings, setReferralBonusSettings] = useState<ReferralBonusSettings>(initialReferralBonusSettings);
+  const [active3DTheme, setActive3DTheme] = useState<BackgroundTheme>('FloatingCrystals');
   
   // Admin-specific state
   const [allPendingRequests, setAllPendingRequests] = useState<AugmentedTransaction[]>([]);
@@ -795,6 +798,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     deleteDashboardPanel,
     referralBonusSettings,
     updateReferralBonusSettings,
+    active3DTheme,
+    setActive3DTheme,
   };
 
   return (
