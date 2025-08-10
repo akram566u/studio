@@ -262,7 +262,7 @@ const AdminDashboard = () => {
                             {allPendingRequests && allPendingRequests.length > 0 ? (
                                 <div className="space-y-4">
                                     {allPendingRequests.map(request => (
-                                        <div key={request.id} className="bg-black/20 p-4 rounded-lg flex items-start gap-4">
+                                        <div key={`${request.id}-${request.timestamp}`} className="bg-black/20 p-4 rounded-lg flex items-start gap-4">
                                             {request.type === 'deposit' ? 
                                                 <ArrowDownCircle className="text-green-400 mt-1 size-6" /> :
                                                 <ArrowUpCircle className="text-red-400 mt-1 size-6" />
