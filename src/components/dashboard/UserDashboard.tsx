@@ -8,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Clock, Send, Briefcase, TrendingUp, CheckCircle, AlertTriangle, Info, UserX } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -64,11 +64,42 @@ const StakingLevelPanel = ({ currentUser, currentLevelDetails }: { currentUser: 
     </Card>
 );
 
-const InterestCreditPanel = ({ interestCountdown }: { interestCountdown: string }) => (
+const InterestCountdown = () => {
+    const context = useContext(AppContext);
+    const [interestCountdown, setInterestCountdown] = useState('00h 00m 00s');
+
+    useEffect(() => {
+        if (context?.currentUser && context.currentUser.level > 0 && context.currentUser.firstDepositTime) {
+          const timer = setInterval(() => {
+            const now = new Date().getTime();
+            const lastCreditTime = context.currentUser.lastInterestCreditTime || context.currentUser.firstDepositTime;
+            const nextCredit = lastCreditTime + (24 * 60 * 60 * 1000);
+            const distance = nextCredit - now;
+    
+            if (distance < 0) {
+              setInterestCountdown('Crediting...');
+              return;
+            }
+    
+            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+            setInterestCountdown(`${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`);
+          }, 1000);
+          return () => clearInterval(timer);
+        } else {
+          setInterestCountdown('00h 00m 00s');
+        }
+    }, [context?.currentUser]);
+    
+    return <p className="text-5xl font-bold text-purple-400 text-center">{interestCountdown}</p>
+}
+
+const InterestCreditPanel = () => (
     <Card className="card-gradient-orange-red p-6">
         <h3 className="text-xl font-semibold mb-3 text-blue-300">Daily Interest Credit</h3>
         <p className="text-xl text-gray-200 mb-3">Next credit in:</p>
-        <p className="text-5xl font-bold text-purple-400 text-center">{interestCountdown}</p>
+        <InterestCountdown />
     </Card>
 );
 
@@ -217,10 +248,55 @@ const RechargePanel = () => {
     )
 };
 
-const WithdrawPanel = ({ withdrawalCountdown, isWithdrawalLocked }: { withdrawalCountdown: string, isWithdrawalLocked: boolean}) => {
+const WithdrawalCountdownInfo = () => {
+    const context = useContext(AppContext);
+    const [withdrawalCountdown, setWithdrawalCountdown] = useState('');
+    const [isWithdrawalLocked, setIsWithdrawalLocked] = useState(true);
+
+    useEffect(() => {
+        if (!context) return;
+        const { currentUser, restrictionMessages } = context;
+        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
+        if (currentUser && currentUser.firstDepositTime && currentUser.level > 0 && holdMsg) {
+          const RESTRICTION_DAYS = holdMsg.durationDays || 45;
+          const restrictionEndTime = currentUser.firstDepositTime + (RESTRICTION_DAYS * 24 * 60 * 60 * 1000);
+          
+          const timer = setInterval(() => {
+            const now = new Date().getTime();
+            const distance = restrictionEndTime - now;
+    
+            if (distance <= 0) {
+              setIsWithdrawalLocked(false);
+              setWithdrawalCountdown('Withdrawals Unlocked');
+              clearInterval(timer);
+              return;
+            }
+    
+            setIsWithdrawalLocked(true);
+            const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+            setWithdrawalCountdown(`${days}d ${hours}h ${minutes}m ${seconds}s`);
+    
+          }, 1000);
+          return () => clearInterval(timer);
+    
+        } else if (currentUser) {
+            setIsWithdrawalLocked(currentUser.level === 0);
+            setWithdrawalCountdown('');
+        }
+    }, [context]);
+
+    return { isWithdrawalLocked, withdrawalCountdown };
+};
+
+const WithdrawPanel = () => {
     const context = useContext(AppContext);
     const { toast } = useToast();
     const [withdrawalAmount, setWithdrawalAmount] = useState('');
+    const { isWithdrawalLocked, withdrawalCountdown } = WithdrawalCountdownInfo();
+
 
     if (!context || !context.currentUser) return null;
     const { currentUser, levels, submitWithdrawalRequest, restrictionMessages } = context;
@@ -423,84 +499,22 @@ const CustomPanel = ({ panel }: { panel: DashboardPanel }) => (
 // Main Dashboard Component
 const UserDashboard = () => {
   const context = useContext(AppContext);
-  const [interestCountdown, setInterestCountdown] = useState('00h 00m 00s');
-  const [withdrawalCountdown, setWithdrawalCountdown] = useState('');
-  const [isWithdrawalLocked, setIsWithdrawalLocked] = useState(true);
 
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;
   }
-  const { currentUser, levels, restrictionMessages, dashboardPanels } = context;
+  const { currentUser, levels, dashboardPanels } = context;
   
   const hasPendingRequests = currentUser.transactions.some(tx => tx.status === 'pending');
   const currentLevelDetails = levels[currentUser.level];
 
-  // Effect for Daily Interest Countdown
-  useEffect(() => {
-    if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
-      const timer = setInterval(() => {
-        const now = new Date().getTime();
-        const lastCreditTime = currentUser.lastInterestCreditTime || currentUser.firstDepositTime;
-        const nextCredit = lastCreditTime + (24 * 60 * 60 * 1000);
-        const distance = nextCredit - now;
-
-        if (distance < 0) {
-          setInterestCountdown('Crediting...');
-          return;
-        }
-
-        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-        setInterestCountdown(`${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`);
-      }, 1000);
-      return () => clearInterval(timer);
-    } else {
-      setInterestCountdown('00h 00m 00s');
-    }
-  }, [currentUser?.lastInterestCreditTime, currentUser?.firstDepositTime, currentUser?.level]);
-
-  // Effect for Withdrawal Restriction Countdown
-  useEffect(() => {
-    const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
-    if (currentUser && currentUser.firstDepositTime && currentUser.level > 0 && holdMsg) {
-      const RESTRICTION_DAYS = holdMsg.durationDays || 45;
-      const restrictionEndTime = currentUser.firstDepositTime + (RESTRICTION_DAYS * 24 * 60 * 60 * 1000);
-      
-      const timer = setInterval(() => {
-        const now = new Date().getTime();
-        const distance = restrictionEndTime - now;
-
-        if (distance <= 0) {
-          setIsWithdrawalLocked(false);
-          setWithdrawalCountdown('Withdrawals Unlocked');
-          clearInterval(timer);
-          return;
-        }
-
-        setIsWithdrawalLocked(true);
-        const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-        setWithdrawalCountdown(`${days}d ${hours}h ${minutes}m ${seconds}s`);
-
-      }, 1000);
-      return () => clearInterval(timer);
-
-    } else {
-        setIsWithdrawalLocked(currentUser.level === 0);
-        setWithdrawalCountdown('');
-    }
-  }, [currentUser?.firstDepositTime, currentUser?.level, restrictionMessages]);
-
   const panelComponentMap: { [key: string]: React.ComponentType<any> } = {
     UserOverview: () => <UserOverviewPanel currentUser={currentUser} />,
     StakingLevel: () => <StakingLevelPanel currentUser={currentUser} currentLevelDetails={currentLevelDetails} />,
-    InterestCredit: () => <InterestCreditPanel interestCountdown={interestCountdown} />,
+    InterestCredit: () => <InterestCreditPanel />,
     TransactionHistory: () => <TransactionHistoryPanel currentUser={currentUser} />,
     Recharge: () => <RechargePanel />,
-    Withdraw: () => <WithdrawPanel withdrawalCountdown={withdrawalCountdown} isWithdrawalLocked={isWithdrawalLocked} />,
+    Withdraw: () => <WithdrawPanel />,
     ManageAddress: () => <ManageAddressPanel />,
     ReferralNetwork: () => <ReferralNetworkPanel currentUser={currentUser} />,
     LevelDetails: () => <LevelDetailsPanel levels={levels} />,
