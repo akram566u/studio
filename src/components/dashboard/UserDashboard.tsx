@@ -98,8 +98,8 @@ const TransactionHistoryPanel = ({ currentUser }: { currentUser: any }) => {
             <ScrollArea className="h-96 custom-scrollbar">
                 {currentUser.transactions && currentUser.transactions.length > 0 ? (
                 <div className="space-y-4">
-                    {currentUser.transactions.map((tx: any) => (
-                    <div key={tx.id} className="flex items-start gap-3">
+                    {currentUser.transactions.map((tx: any, index: number) => (
+                    <div key={`${tx.id}-${tx.timestamp}-${index}`} className="flex items-start gap-3">
                         <div className="mt-1">{getIconForType(tx.type)}</div>
                         <div className="flex-1">
                         <div className="flex justify-between items-center">
