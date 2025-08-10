@@ -119,108 +119,263 @@ const TransactionHistoryPanel = ({ currentUser }: { currentUser: any }) => {
     );
 };
 
-const RechargePanel = ({ depositAmount, setDepositAmount, handleDepositRequest, copyToClipboard }: { depositAmount: string, setDepositAmount: any, handleDepositRequest: any, copyToClipboard: any }) => {
+const RechargePanel = () => {
+    const context = useContext(AppContext);
+    const { toast } = useToast();
+    const [depositAmount, setDepositAmount] = useState('');
+    const [isDepositAlertOpen, setIsDepositAlertOpen] = useState(false);
+    const [depositAlertMessage, setDepositAlertMessage] = useState('');
+    const [depositAlertConfirmAction, setDepositAlertConfirmAction] = useState<(() => void) | null>(null);
+
     const depositAddress = "0x4D26340f3B52DCf82dd537cBF3c7e4C1D9b53BDc";
+
+    if (!context || !context.currentUser) return null;
+    const { currentUser, submitDepositRequest, restrictionMessages } = context;
+
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text);
+        toast({ title: 'Copied to clipboard!' });
+    };
+
+    const handleDepositRequest = () => {
+        const noAddressMsg = restrictionMessages.find(m => m.type === 'deposit_no_address' && m.isActive);
+        const confirmMsg = restrictionMessages.find(m => m.type === 'deposit_confirm' && m.isActive);
+
+        if (!currentUser.primaryWithdrawalAddress && noAddressMsg) {
+            setDepositAlertMessage(noAddressMsg.message);
+            setDepositAlertConfirmAction(null);
+            setIsDepositAlertOpen(true);
+            return;
+        }
+
+        const amount = parseFloat(depositAmount);
+        if (isNaN(amount) || amount <= 0) {
+            toast({ title: "Error", description: "Please enter a valid deposit amount.", variant: "destructive" });
+            return;
+        }
+        
+        if (confirmMsg) {
+            setDepositAlertMessage(confirmMsg.message);
+            setDepositAlertConfirmAction(() => () => {
+                submitDepositRequest(amount);
+                setDepositAmount('');
+            });
+            setIsDepositAlertOpen(true);
+        } else {
+            submitDepositRequest(amount);
+            setDepositAmount('');
+        }
+    };
+    
     return (
-         <Card className="card-gradient-yellow-pink p-6">
-            <h3 className="text-xl font-semibold mb-3 text-blue-300">Recharge USDT (BEP-20)</h3>
-            <p className="text-xl text-gray-200 mb-3">Copy this address to deposit:</p>
-            <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
-                <span className="font-mono text-sm break-all text-green-300">{depositAddress}</span>
-                <Button size="icon" variant="ghost" onClick={() => copyToClipboard(depositAddress)}>
-                  <Copy className="size-4" />
-                </Button>
-            </div>
-            <Input 
-                type="number" 
-                placeholder="Amount in USDT" 
-                className="mb-4 text-xl" 
-                value={depositAmount}
-                onChange={(e) => setDepositAmount(e.target.value)}
+        <>
+            <Card className="card-gradient-yellow-pink p-6">
+                <h3 className="text-xl font-semibold mb-3 text-blue-300">Recharge USDT (BEP-20)</h3>
+                <p className="text-xl text-gray-200 mb-3">Copy this address to deposit:</p>
+                <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
+                    <span className="font-mono text-sm break-all text-green-300">{depositAddress}</span>
+                    <Button size="icon" variant="ghost" onClick={() => copyToClipboard(depositAddress)}>
+                    <Copy className="size-4" />
+                    </Button>
+                </div>
+                <Input 
+                    type="number" 
+                    placeholder="Amount in USDT" 
+                    className="mb-4 text-xl" 
+                    value={depositAmount}
+                    onChange={(e) => setDepositAmount(e.target.value)}
+                />
+                <Button className="w-full py-3 text-lg" onClick={handleDepositRequest}>Submit Recharge Request</Button>
+            </Card>
+
+            <AlertDialog open={isDepositAlertOpen} onOpenChange={setIsDepositAlertOpen}>
+                <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Deposit Information</AlertDialogTitle>
+                    <AlertDialogDescription>
+                    {depositAlertMessage}
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>
+                        {depositAlertConfirmAction ? 'Cancel' : 'Close'}
+                    </AlertDialogCancel>
+                    {depositAlertConfirmAction && (
+                        <AlertDialogAction onClick={() => {
+                            if(depositAlertConfirmAction) {
+                                depositAlertConfirmAction();
+                            }
+                            setIsDepositAlertOpen(false);
+                        }}>
+                        OK to Proceed
+                        </AlertDialogAction>
+                    )}
+                </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
+    )
+};
+
+const WithdrawPanel = ({ withdrawalCountdown, isWithdrawalLocked }: { withdrawalCountdown: string, isWithdrawalLocked: boolean}) => {
+    const context = useContext(AppContext);
+    const { toast } = useToast();
+    const [withdrawalAmount, setWithdrawalAmount] = useState('');
+
+    if (!context || !context.currentUser) return null;
+    const { currentUser, levels, submitWithdrawalRequest, restrictionMessages } = context;
+    const currentLevelDetails = levels[currentUser.level];
+
+    const handleSubmitWithdrawal = () => {
+        if (isWithdrawalLocked && currentUser.level > 0) {
+            const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
+            if(holdMsg) {
+                const message = holdMsg.message
+                    .replace('{durationDays}', holdMsg.durationDays?.toString() || '45')
+                    .replace('{countdown}', withdrawalCountdown);
+                toast({ 
+                    title: "Withdrawal Locked", 
+                    description: message,
+                    variant: "destructive" 
+                });
+            }
+            return;
+        }
+        if (currentUser.level === 0) {
+            toast({ 
+                title: "Withdrawal Locked", 
+                description: `You must reach level 1 to withdraw.`, 
+                variant: "destructive" 
+            });
+            return;
+        }
+        const amount = parseFloat(withdrawalAmount);
+        if (isNaN(amount) || amount <= 0) {
+            toast({ title: "Error", description: "Please enter a valid withdrawal amount.", variant: "destructive" });
+            return;
+        }
+        if (amount > currentUser.balance) {
+            toast({ title: "Error", description: "Insufficient balance.", variant: "destructive" });
+            return;
+        }
+        submitWithdrawalRequest(amount);
+        setWithdrawalAmount('');
+    };
+    
+    return (
+        <Card className="card-gradient-indigo-fuchsia p-6">
+            <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
+            <p className="text-lg text-gray-300 mb-1">
+                Your withdrawal limit: <span className="font-bold text-yellow-300">{currentLevelDetails.withdrawalLimit} USDT</span>
+            </p>
+            <p className="text-xs text-gray-400 mb-3">
+                Withdrawals are processed once a month and take 3 days to complete after approval.
+            </p>
+            <Input
+                type="number"
+                placeholder="Amount to withdraw"
+                className="mb-4 text-xl"
+                value={withdrawalAmount}
+                onChange={e => setWithdrawalAmount(e.target.value)}
             />
-            <Button className="w-full py-3 text-lg" onClick={handleDepositRequest}>Submit Recharge Request</Button>
+            <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-xl bg-gray-800/50" />
+            <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal}>
+                <Send/>Request Withdrawal
+            </Button>
         </Card>
     )
 };
 
-const WithdrawPanel = ({ currentUser, currentLevelDetails, withdrawalAmount, setWithdrawalAmount, handleSubmitWithdrawal }: { currentUser: any, currentLevelDetails: any, withdrawalAmount: string, setWithdrawalAmount: any, handleSubmitWithdrawal: any }) => (
-    <Card className="card-gradient-indigo-fuchsia p-6">
-        <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
-        <p className="text-lg text-gray-300 mb-1">
-            Your withdrawal limit: <span className="font-bold text-yellow-300">{currentLevelDetails.withdrawalLimit} USDT</span>
-        </p>
-        <p className="text-xs text-gray-400 mb-3">
-            Withdrawals are processed once a month and take 3 days to complete after approval.
-        </p>
-        <Input
-            type="number"
-            placeholder="Amount to withdraw"
-            className="mb-4 text-xl"
-            value={withdrawalAmount}
-            onChange={e => setWithdrawalAmount(e.target.value)}
-        />
-        <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-xl bg-gray-800/50" />
-        <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal}>
-            <Send/>Request Withdrawal
-        </Button>
-    </Card>
-);
+const ManageAddressPanel = () => {
+    const context = useContext(AppContext);
+    const { toast } = useToast();
+    const [newWithdrawalAddress, setNewWithdrawalAddress] = useState('');
 
-const ManageAddressPanel = ({ currentUser, newWithdrawalAddress, setNewWithdrawalAddress, handleUpdateAddress, handleDeleteAddress, copyToClipboard }: { currentUser: any, newWithdrawalAddress: string, setNewWithdrawalAddress: any, handleUpdateAddress: any, handleDeleteAddress: any, copyToClipboard: any }) => (
-     <Card className="card-gradient-orange-red p-6">
-        <h3 className="text-xl font-semibold mb-3 text-blue-300">Manage Withdrawal Address</h3>
-        <p className="text-xl text-gray-200 mb-3">Current Address:</p>
-        <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
-            <span className="font-mono text-sm break-all text-green-300">{currentUser.primaryWithdrawalAddress || 'Not set'}</span>
-            {currentUser.primaryWithdrawalAddress && (
-                <Button size="icon" variant="ghost" onClick={() => copyToClipboard(currentUser.primaryWithdrawalAddress || '')}>
-                    <Copy className="size-4" />
-                </Button>
-            )}
-        </div>
-        <Input 
-        type="text" 
-        placeholder="Enter new BEP-20 Address" 
-        className="mb-4 text-xl" 
-        value={newWithdrawalAddress}
-        onChange={(e) => setNewWithdrawalAddress(e.target.value)}
-        />
-        <div className="flex gap-2">
-            <Button className="w-full py-3 text-lg" onClick={handleUpdateAddress}><Edit />Change</Button>
-            <Button variant="destructive" className="w-full py-3 text-lg" onClick={handleDeleteAddress}><Trash2 />Delete</Button>
-        </div>
-    </Card>
-);
+    if (!context || !context.currentUser) return null;
+    const { currentUser, updateWithdrawalAddress, deleteWithdrawalAddress } = context;
+    
+    const handleUpdateAddress = () => {
+        if (newWithdrawalAddress.trim()) {
+          updateWithdrawalAddress(newWithdrawalAddress.trim());
+          setNewWithdrawalAddress('');
+        } else {
+          toast({ title: "Error", description: "Please enter a valid address.", variant: "destructive" });
+        }
+    };
+    
+    const handleDeleteAddress = () => {
+        deleteWithdrawalAddress();
+    };
 
-const ReferralNetworkPanel = ({ currentUser, copyToClipboard }: { currentUser: any, copyToClipboard: any }) => (
-    <Card className="card-gradient-blue-purple p-6">
-        <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Referral Network</h3>
-        <h4 className="text-lg font-semibold mb-2 text-blue-300 mt-4">Your Referral Code:</h4>
-        <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
-        <span className="font-mono text-base break-all text-yellow-300">{currentUser.userReferralCode}</span>
-        <Button size="icon" variant="ghost" onClick={() => copyToClipboard(currentUser.userReferralCode)}>
-            <Copy className="size-4" />
-        </Button>
-        </div>
-        <h4 className="text-lg font-semibold mb-2 text-blue-300">Referred Users:</h4>
-        <ScrollArea className="h-40">
-            <ul className="list-none space-y-2">
-            {currentUser.referredUsers.length > 0 ? (
-                currentUser.referredUsers.map((user: any, index: number) => (
-                <li key={index} className="flex items-center gap-2 text-gray-300">
-                    {user.isActivated 
-                    ? <UserCheck className="text-green-400 size-4" /> 
-                    : <UserX className="text-red-400 size-4" />}
-                    {user.email} {user.isActivated ? '(Active)' : '(Inactive)'}
-                </li>
-                ))
-            ) : (
-                <li className="text-gray-500">No referrals yet.</li>
-            )}
-            </ul>
-        </ScrollArea>
-    </Card>
-);
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text);
+        toast({ title: 'Copied to clipboard!' });
+    };
+
+    return (
+        <Card className="card-gradient-orange-red p-6">
+            <h3 className="text-xl font-semibold mb-3 text-blue-300">Manage Withdrawal Address</h3>
+            <p className="text-xl text-gray-200 mb-3">Current Address:</p>
+            <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
+                <span className="font-mono text-sm break-all text-green-300">{currentUser.primaryWithdrawalAddress || 'Not set'}</span>
+                {currentUser.primaryWithdrawalAddress && (
+                    <Button size="icon" variant="ghost" onClick={() => copyToClipboard(currentUser.primaryWithdrawalAddress || '')}>
+                        <Copy className="size-4" />
+                    </Button>
+                )}
+            </div>
+            <Input 
+            type="text" 
+            placeholder="Enter new BEP-20 Address" 
+            className="mb-4 text-xl" 
+            value={newWithdrawalAddress}
+            onChange={(e) => setNewWithdrawalAddress(e.target.value)}
+            />
+            <div className="flex gap-2">
+                <Button className="w-full py-3 text-lg" onClick={handleUpdateAddress}><Edit />Change</Button>
+                <Button variant="destructive" className="w-full py-3 text-lg" onClick={handleDeleteAddress}><Trash2 />Delete</Button>
+            </div>
+        </Card>
+    );
+}
+
+const ReferralNetworkPanel = ({ currentUser }: { currentUser: any }) => {
+    const { toast } = useToast();
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text);
+        toast({ title: 'Copied to clipboard!' });
+    };
+
+    return (
+        <Card className="card-gradient-blue-purple p-6">
+            <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Referral Network</h3>
+            <h4 className="text-lg font-semibold mb-2 text-blue-300 mt-4">Your Referral Code:</h4>
+            <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
+            <span className="font-mono text-base break-all text-yellow-300">{currentUser.userReferralCode}</span>
+            <Button size="icon" variant="ghost" onClick={() => copyToClipboard(currentUser.userReferralCode)}>
+                <Copy className="size-4" />
+            </Button>
+            </div>
+            <h4 className="text-lg font-semibold mb-2 text-blue-300">Referred Users:</h4>
+            <ScrollArea className="h-40">
+                <ul className="list-none space-y-2">
+                {currentUser.referredUsers.length > 0 ? (
+                    currentUser.referredUsers.map((user: any, index: number) => (
+                    <li key={index} className="flex items-center gap-2 text-gray-300">
+                        {user.isActivated 
+                        ? <UserCheck className="text-green-400 size-4" /> 
+                        : <UserX className="text-red-400 size-4" />}
+                        {user.email} {user.isActivated ? '(Active)' : '(Inactive)'}
+                    </li>
+                    ))
+                ) : (
+                    <li className="text-gray-500">No referrals yet.</li>
+                )}
+                </ul>
+            </ScrollArea>
+        </Card>
+    );
+}
 
 const LevelDetailsPanel = ({ levels }: { levels: any }) => (
     <Card className="card-gradient-green-cyan p-6">
@@ -268,110 +423,17 @@ const CustomPanel = ({ panel }: { panel: DashboardPanel }) => (
 // Main Dashboard Component
 const UserDashboard = () => {
   const context = useContext(AppContext);
-  const { toast } = useToast();
   const [interestCountdown, setInterestCountdown] = useState('00h 00m 00s');
   const [withdrawalCountdown, setWithdrawalCountdown] = useState('');
   const [isWithdrawalLocked, setIsWithdrawalLocked] = useState(true);
-  const [newWithdrawalAddress, setNewWithdrawalAddress] = useState('');
-  const [depositAmount, setDepositAmount] = useState('');
-  const [withdrawalAmount, setWithdrawalAmount] = useState('');
-
-  const [isDepositAlertOpen, setIsDepositAlertOpen] = useState(false);
-  const [depositAlertMessage, setDepositAlertMessage] = useState('');
-  const [depositAlertConfirmAction, setDepositAlertConfirmAction] = useState<(() => void) | null>(null);
 
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;
   }
-  const { currentUser, levels, updateWithdrawalAddress, deleteWithdrawalAddress, submitDepositRequest, submitWithdrawalRequest, restrictionMessages, dashboardPanels } = context;
+  const { currentUser, levels, restrictionMessages, dashboardPanels } = context;
   
   const hasPendingRequests = currentUser.transactions.some(tx => tx.status === 'pending');
   const currentLevelDetails = levels[currentUser.level];
-
-  const handleUpdateAddress = () => {
-    if (newWithdrawalAddress.trim()) {
-      updateWithdrawalAddress(newWithdrawalAddress.trim());
-      setNewWithdrawalAddress('');
-    } else {
-      toast({ title: "Error", description: "Please enter a valid address.", variant: "destructive" });
-    }
-  };
-
-  const handleDeleteAddress = () => {
-    deleteWithdrawalAddress();
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({ title: 'Copied to clipboard!' });
-  };
-  
-  const handleDepositRequest = () => {
-    const noAddressMsg = restrictionMessages.find(m => m.type === 'deposit_no_address' && m.isActive);
-    const confirmMsg = restrictionMessages.find(m => m.type === 'deposit_confirm' && m.isActive);
-
-    if (!currentUser.primaryWithdrawalAddress && noAddressMsg) {
-        setDepositAlertMessage(noAddressMsg.message);
-        setDepositAlertConfirmAction(null); // No confirm action, just an info dialog
-        setIsDepositAlertOpen(true);
-        return;
-    }
-
-    const amount = parseFloat(depositAmount);
-    if (isNaN(amount) || amount <= 0) {
-        toast({ title: "Error", description: "Please enter a valid deposit amount.", variant: "destructive" });
-        return;
-    }
-    
-    if (confirmMsg) {
-        setDepositAlertMessage(confirmMsg.message);
-        setDepositAlertConfirmAction(() => () => { // Set the confirm action
-            submitDepositRequest(amount);
-            setDepositAmount('');
-        });
-        setIsDepositAlertOpen(true);
-    } else {
-        // If no confirm message is active, proceed directly
-        submitDepositRequest(amount);
-        setDepositAmount('');
-    }
-  };
-  
-  const handleSubmitWithdrawal = () => {
-    if (isWithdrawalLocked && currentUser.level > 0) {
-        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
-        if(holdMsg) {
-            const message = holdMsg.message
-                .replace('{durationDays}', holdMsg.durationDays?.toString() || '45')
-                .replace('{countdown}', withdrawalCountdown);
-            toast({ 
-                title: "Withdrawal Locked", 
-                description: message,
-                variant: "destructive" 
-            });
-        }
-        return;
-    }
-     if (currentUser.level === 0) {
-        toast({ 
-            title: "Withdrawal Locked", 
-            description: `You must reach level 1 to withdraw.`, 
-            variant: "destructive" 
-        });
-        return;
-    }
-    const amount = parseFloat(withdrawalAmount);
-    if (isNaN(amount) || amount <= 0) {
-        toast({ title: "Error", description: "Please enter a valid withdrawal amount.", variant: "destructive" });
-        return;
-    }
-    if (amount > currentUser.balance) {
-        toast({ title: "Error", description: "Insufficient balance.", variant: "destructive" });
-        return;
-    }
-    submitWithdrawalRequest(amount);
-    setWithdrawalAmount('');
-  };
 
   // Effect for Daily Interest Countdown
   useEffect(() => {
@@ -437,10 +499,10 @@ const UserDashboard = () => {
     StakingLevel: () => <StakingLevelPanel currentUser={currentUser} currentLevelDetails={currentLevelDetails} />,
     InterestCredit: () => <InterestCreditPanel interestCountdown={interestCountdown} />,
     TransactionHistory: () => <TransactionHistoryPanel currentUser={currentUser} />,
-    Recharge: () => <RechargePanel depositAmount={depositAmount} setDepositAmount={setDepositAmount} handleDepositRequest={handleDepositRequest} copyToClipboard={copyToClipboard} />,
-    Withdraw: () => <WithdrawPanel currentUser={currentUser} currentLevelDetails={currentLevelDetails} withdrawalAmount={withdrawalAmount} setWithdrawalAmount={setWithdrawalAmount} handleSubmitWithdrawal={handleSubmitWithdrawal} />,
-    ManageAddress: () => <ManageAddressPanel currentUser={currentUser} newWithdrawalAddress={newWithdrawalAddress} setNewWithdrawalAddress={setNewWithdrawalAddress} handleUpdateAddress={handleUpdateAddress} handleDeleteAddress={handleDeleteAddress} copyToClipboard={copyToClipboard} />,
-    ReferralNetwork: () => <ReferralNetworkPanel currentUser={currentUser} copyToClipboard={copyToClipboard} />,
+    Recharge: () => <RechargePanel />,
+    Withdraw: () => <WithdrawPanel withdrawalCountdown={withdrawalCountdown} isWithdrawalLocked={isWithdrawalLocked} />,
+    ManageAddress: () => <ManageAddressPanel />,
+    ReferralNetwork: () => <ReferralNetworkPanel currentUser={currentUser} />,
     LevelDetails: () => <LevelDetailsPanel levels={levels} />,
     Custom: ({ panel }: { panel: DashboardPanel }) => <CustomPanel panel={panel} />,
   };
@@ -475,32 +537,6 @@ const UserDashboard = () => {
           <div className="lg:col-span-1 space-y-8">{rightColumnPanels.map(renderPanel)}</div>
         </div>
       </GlassPanel>
-
-      <AlertDialog open={isDepositAlertOpen} onOpenChange={setIsDepositAlertOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Deposit Information</AlertDialogTitle>
-            <AlertDialogDescription>
-              {depositAlertMessage}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>
-                {depositAlertConfirmAction ? 'Cancel' : 'Close'}
-            </AlertDialogCancel>
-            {depositAlertConfirmAction && (
-                <AlertDialogAction onClick={() => {
-                    if(depositAlertConfirmAction) {
-                        depositAlertConfirmAction();
-                    }
-                    setIsDepositAlertOpen(false);
-                }}>
-                OK to Proceed
-                </AlertDialogAction>
-            )}
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 };
