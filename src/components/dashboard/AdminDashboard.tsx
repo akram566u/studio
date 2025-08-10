@@ -1,4 +1,5 @@
 
+
 "use client";
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext, UserForAdmin } from '@/components/providers/AppProvider';
@@ -105,13 +106,13 @@ const AdminDashboard = () => {
       allPendingRequests,
   } = context;
 
-  const handleUserSearch = (e: React.FormEvent) => {
+  const handleUserSearch = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!searchQuery.trim()) {
           toast({ title: "Error", description: "Please enter a user email to search.", variant: "destructive"});
           return;
       }
-      const user = findUser(searchQuery);
+      const user = await findUser(searchQuery);
       if (user) {
           setSearchedUser(user);
       } else {
@@ -188,8 +189,7 @@ const AdminDashboard = () => {
             updatedUser = await adminUpdateUserWithdrawalAddress(searchedUser.id, editingAddress);
             break;
         case 'balance':
-            const balanceDiff = editingBalance - searchedUser.balance;
-            updatedUser = await adjustUserBalance(searchedUser.id, balanceDiff);
+            updatedUser = await adjustUserBalance(searchedUser.id, editingBalance);
             break;
         case 'level':
             updatedUser = await adjustUserLevel(searchedUser.id, editingLevel);
@@ -375,12 +375,12 @@ const AdminDashboard = () => {
                                         </div>
                                     </div>
                                     <div className="space-y-2 col-span-1 md:col-span-2">
-                                        <Label htmlFor="edit-balance">Balance (Adjustment)</Label>
+                                        <Label htmlFor="edit-balance">Balance</Label>
                                         <div className="flex gap-2">
                                             <Input id="edit-balance" type="number" value={editingBalance} onChange={e => setEditingBalance(Number(e.target.value))} />
                                             <Button onClick={() => handleUserUpdate('balance')}>Update Balance</Button>
                                         </div>
-                                        <p className="text-xs text-gray-400">Enter the final desired balance. The difference will be applied as an adjustment.</p>
+                                        <p className="text-xs text-gray-400">Sets the user's balance to this exact amount.</p>
                                     </div>
                                 </div>
                            </div>
@@ -627,3 +627,5 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
+
+    

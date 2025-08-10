@@ -44,9 +44,7 @@ const ThreeBackground = () => {
         roughness: 0.1,
         transparent: true,
         opacity: 0.3,
-        depthWrite: false,
-        clearcoat: 1.0,
-        clearcoatRoughness: 0.1
+        depthWrite: false
       };
 
       const crystalMaterials = [

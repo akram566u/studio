@@ -2,10 +2,15 @@
 "use client";
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { User as FirebaseUser } from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
+import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
 import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings } from '@/lib/types';
 import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels, initialReferralBonusSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
+
 
 // A version of the User type that is safe to expose to the admin panel
 export type UserForAdmin = Pick<User, 'id' | 'email' | 'balance' | 'level' | 'primaryWithdrawalAddress'>;
@@ -24,8 +29,6 @@ export interface AppContextType {
   updateLevel: (level: number, details: Level) => void;
   addLevel: (newLevelKey: number) => void;
   deleteLevel: (levelKey: number) => void;
-  depositRequests: AugmentedTransaction[];
-  withdrawalRequests: AugmentedTransaction[];
   allPendingRequests: AugmentedTransaction[];
   submitDepositRequest: (amount: number) => void;
   approveDeposit: (transactionId: string) => void;
@@ -33,7 +36,7 @@ export interface AppContextType {
   submitWithdrawalRequest: (amount: number) => void;
   approveWithdrawal: (transactionId: string) => void;
   declineWithdrawal: (transactionId: string) => void;
-  findUser: (email: string) => UserForAdmin | null;
+  findUser: (email: string) => Promise<UserForAdmin | null>;
   adjustUserBalance: (userId: string, amount: number) => Promise<UserForAdmin | null>;
   adjustUserLevel: (userId: string, level: number) => Promise<UserForAdmin | null>;
   adminUpdateUserEmail: (userId: string, newEmail: string) => Promise<UserForAdmin | null>;
@@ -59,211 +62,212 @@ export const AppContext = createContext<AppContextType | null>(null);
 const generateTxnId = () => `txn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 const generateReferralCode = () => `REF${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
-// In-memory "database" for the prototype
-let users: { [email: string]: User } = {};
-let allTransactions: { [userId: string]: Transaction[] } = {};
-
-const createInitialUser = (email: string, referredBy: string | null): User => {
-    const userId = `user_${Date.now()}_${email}`;
-    // Ensure the referral code is unique
-    let referralCode = generateReferralCode();
-    while (Object.values(users).some(u => u.userReferralCode === referralCode)) {
-        referralCode = generateReferralCode();
-    }
-    
-    const newUser: User = {
-        id: userId,
-        email: email,
-        password: 'password', // In a real app, this would be hashed
-        balance: 0,
-        level: 0,
-        userReferralCode: referralCode,
-        referredBy: referredBy,
-        directReferrals: 0,
-        transactions: [],
-        referredUsers: [],
-        lastInterestCreditTime: 0,
-        primaryWithdrawalAddress: '',
-        firstDepositTime: null,
-        registrationTime: Date.now(),
-        lastWithdrawalTime: null,
-    };
-    users[email] = newUser;
-    allTransactions[userId] = [];
-    return newUser;
-};
-
-
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // App settings - for a real app, these could be stored in Firestore as well
   const [websiteTitle, setWebsiteTitle] = useState("Staking Hub");
   const [levels, setLevels] = useState<Levels>(initialLevels);
-  const [depositRequests, setDepositRequests] = useState<AugmentedTransaction[]>([]);
-  const [withdrawalRequests, setWithdrawalRequests] = useState<AugmentedTransaction[]>([]);
-  const [allPendingRequests, setAllPendingRequests] = useState<AugmentedTransaction[]>([]);
   const [restrictionMessages, setRestrictionMessages] = useState<RestrictionMessage[]>(initialRestrictionMessages);
   const [startScreenContent, setStartScreenContent] = useState<StartScreenSettings>(initialStartScreen);
-  const [adminReferrals, setAdminReferrals] = useState<UserForAdmin[]>([]);
   const [dashboardPanels, setDashboardPanels] = useState<DashboardPanel[]>(initialDashboardPanels);
   const [referralBonusSettings, setReferralBonusSettings] = useState<ReferralBonusSettings>(initialReferralBonusSettings);
-
+  
+  // Admin-specific state
+  const [allPendingRequests, setAllPendingRequests] = useState<AugmentedTransaction[]>([]);
+  const [adminReferrals, setAdminReferrals] = useState<UserForAdmin[]>([]);
+  
   const { toast } = useToast();
-
+  
   const ADMIN_EMAIL = "admin@stakinghub.com";
   const ADMIN_PASSWORD = "admin123";
   const ADMIN_REFERRAL_CODE = "ADMINREF";
 
-  
-    // Initialize a default user for the prototype if it doesn't exist
-    useEffect(() => {
-        if (!users['user@example.com']) {
-            const initialUser = createInitialUser('user@example.com', ADMIN_REFERRAL_CODE);
-            users[initialUser.email] = addTransaction(initialUser, {
-                type: 'account_created',
-                amount: 0,
-                status: 'completed',
-                description: 'Account created successfully.',
-            });
-        }
-    }, []);
+  const fetchUserData = useCallback(async (firebaseUser: FirebaseUser) => {
+    const userDocRef = doc(db, "users", firebaseUser.uid);
+    const userDocSnap = await getDoc(userDocRef);
+    if (userDocSnap.exists()) {
+      setCurrentUser({ id: userDocSnap.id, ...userDocSnap.data() } as User);
+    } else {
+      console.log("No such user document!");
+      // This case might happen if user is created in Auth but not in Firestore.
+      // We can create it here or handle as an error.
+    }
+    setLoading(false);
+  }, []);
 
-  const addTransaction = useCallback((user: User, transactionData: Omit<Transaction, 'id' | 'userId' | 'timestamp'>): User => {
-      const newTransaction: Transaction = {
-          id: generateTxnId(),
-          userId: user.id,
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        if (user.email === ADMIN_EMAIL) {
+            setIsAdmin(true);
+            setCurrentUser(null);
+            setLoading(false);
+        } else {
+            setIsAdmin(false);
+            fetchUserData(user);
+        }
+      } else {
+        setCurrentUser(null);
+        setIsAdmin(false);
+        setLoading(false);
+      }
+    });
+    return () => unsubscribe();
+  }, [fetchUserData]);
+
+  const addTransaction = useCallback(async (userId: string, transactionData: Omit<Transaction, 'id' | 'userId' | 'timestamp'>) => {
+      const newTransaction: Omit<Transaction, 'id' | 'userId'> = {
           timestamp: Date.now(),
           ...transactionData,
       };
-      // Keep transactions sorted, newest first
-      const sortedTransactions = [newTransaction, ...user.transactions].sort((a, b) => b.timestamp - a.timestamp);
-      return { ...user, transactions: sortedTransactions };
+      const userDocRef = doc(db, "users", userId);
+      await updateDoc(userDocRef, {
+        transactions: arrayUnion(newTransaction)
+      });
+      return newTransaction;
   }, []);
 
-  const signIn = (email: string, pass: string) => {
-    if (email === ADMIN_EMAIL && pass === ADMIN_PASSWORD) {
-        setIsAdmin(true);
-        setCurrentUser(null);
+  const signIn = async (email: string, pass: string) => {
+    try {
+      if (email === ADMIN_EMAIL && pass === ADMIN_PASSWORD) {
+        // Sign in to a dummy admin account or handle admin logic
+        await signInWithEmailAndPassword(auth, email, pass);
         toast({ title: "Admin signed in successfully!" });
         return;
-    }
-    
-    const user = users[email];
-    if (user) {
-        // In a real app, compare hashed passwords
-        setCurrentUser(user);
-        setIsAdmin(false);
-        toast({ title: "Signed in successfully!" });
-    } else {
-        toast({ title: "Error", description: "User not found. Please sign up.", variant: "destructive" });
+      }
+      await signInWithEmailAndPassword(auth, email, pass);
+      toast({ title: "Signed in successfully!" });
+    } catch (error) {
+      console.error("Sign in error:", error);
+      toast({ title: "Error", description: "Invalid credentials.", variant: "destructive" });
     }
   };
   
-  const signUp = (email: string, pass: string, referral: string) => {
+  const signUp = async (email: string, pass: string, referral: string) => {
     if(!email || !pass || !referral) {
         toast({ title: "Error", description: "Please fill all fields.", variant: "destructive"});
         return;
     }
-    if(users[email]) {
-        toast({ title: "Error", description: "User with this email already exists.", variant: "destructive"});
-        return;
-    }
-    
-    const referrer = Object.values(users).find(u => u.userReferralCode === referral);
-    
-    if (!referrer && referral !== ADMIN_REFERRAL_CODE) {
-        toast({ title: "Error", description: "Invalid referral code.", variant: "destructive"});
-        return;
-    }
-    
-    const referrerCode = referrer ? referrer.userReferralCode : ADMIN_REFERRAL_CODE;
-    let newUser = createInitialUser(email, referrerCode);
 
-    newUser = addTransaction(newUser, {
-        type: 'account_created',
-        amount: 0,
-        status: 'completed',
-        description: `Account created successfully. Referred by ${referral}.`,
-    });
-    
-    users[newUser.email] = newUser;
-
-    if (referrer) {
-        const updatedReferredUsers = [...referrer.referredUsers, { email: newUser.email, isActivated: false }];
-        let updatedReferrer = { ...referrer, referredUsers: updatedReferredUsers };
+    try {
+        const usersRef = collection(db, "users");
         
-        updatedReferrer = addTransaction(updatedReferrer, {
-            type: 'new_referral',
-            amount: 0,
-            status: 'info',
-            description: `New user registered with your code: ${newUser.email} (Pending activation)`
-        });
-        users[referrer.email] = updatedReferrer;
-
-        if(currentUser && currentUser.id === referrer.id) {
-            setCurrentUser(updatedReferrer);
+        // Check for existing user with email
+        const emailQuery = query(usersRef, where("email", "==", email));
+        const emailQuerySnapshot = await getDocs(emailQuery);
+        if (!emailQuerySnapshot.empty) {
+            toast({ title: "Error", description: "User with this email already exists.", variant: "destructive"});
+            return;
         }
-    }
 
-    toast({ title: "Account created successfully!", description: "You can now sign in." });
+        // Check for referrer
+        const referralQuery = query(usersRef, where("userReferralCode", "==", referral));
+        const referralQuerySnapshot = await getDocs(referralQuery);
+        
+        const referrerDoc = referralQuerySnapshot.docs[0];
+        
+        if (referralQuerySnapshot.empty && referral !== ADMIN_REFERRAL_CODE) {
+            toast({ title: "Error", description: "Invalid referral code.", variant: "destructive"});
+            return;
+        }
+        
+        // Create user in Firebase Auth
+        const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+        const newUserAuth = userCredential.user;
+
+        const newUser: User = {
+            id: newUserAuth.uid,
+            email: email,
+            balance: 0,
+            level: 0,
+            userReferralCode: generateReferralCode(),
+            referredBy: referrerDoc ? referrerDoc.id : ADMIN_REFERRAL_CODE,
+            directReferrals: 0,
+            transactions: [],
+            referredUsers: [],
+            lastInterestCreditTime: 0,
+            primaryWithdrawalAddress: '',
+            firstDepositTime: null,
+            registrationTime: Date.now(),
+            lastWithdrawalTime: null,
+        };
+
+        // Create user document in Firestore
+        await setDoc(doc(db, "users", newUserAuth.uid), newUser);
+        await addTransaction(newUserAuth.uid, {
+            type: 'account_created',
+            amount: 0,
+            status: 'completed',
+            description: `Account created successfully. Referred by ${referral}.`,
+        });
+
+        // Update referrer if one exists
+        if(referrerDoc) {
+            const referrerRef = doc(db, "users", referrerDoc.id);
+            await updateDoc(referrerRef, {
+                referredUsers: arrayUnion({ email: newUser.email, isActivated: false })
+            });
+            await addTransaction(referrerDoc.id, {
+                type: 'new_referral',
+                amount: 0,
+                status: 'info',
+                description: `New user registered with your code: ${newUser.email} (Pending activation)`
+            });
+        }
+        
+        toast({ title: "Account created successfully!", description: "You can now sign in." });
+
+    } catch (error) {
+        console.error("Sign up error:", error);
+        toast({ title: "Error", description: "Could not create account.", variant: "destructive" });
+    }
   };
   
-  const signOut = () => {
-    setCurrentUser(null);
-    setIsAdmin(false);
-    toast({ title: "Signed out successfully!" });
+  const signOut = async () => {
+    try {
+      await firebaseSignOut(auth);
+      toast({ title: "Signed out successfully!" });
+    } catch (error) {
+      console.error("Sign out error:", error);
+    }
   };
 
-  const updateWithdrawalAddress = (address: string) => {
+  const updateWithdrawalAddress = async (address: string) => {
     if (currentUser) {
-      let updatedUser = { ...currentUser, primaryWithdrawalAddress: address };
-      updatedUser = addTransaction(updatedUser, {
+      const userDocRef = doc(db, "users", currentUser.id);
+      await updateDoc(userDocRef, { primaryWithdrawalAddress: address });
+      await addTransaction(currentUser.id, {
           type: 'admin_adjusted',
           amount: 0,
           status: 'info',
           description: `Withdrawal address updated to ${address.substring(0, 10)}...`
       });
-      setCurrentUser(updatedUser);
-      users[updatedUser.email] = updatedUser;
+      setCurrentUser(prev => prev ? { ...prev, primaryWithdrawalAddress: address } : null);
       toast({ title: "Success", description: "Withdrawal address updated." });
     }
   };
 
-  const deleteWithdrawalAddress = () => {
+  const deleteWithdrawalAddress = async () => {
     if (currentUser && currentUser.primaryWithdrawalAddress) {
-      let updatedUser = { ...currentUser, primaryWithdrawalAddress: '' };
-      updatedUser = addTransaction(updatedUser, {
+      const userDocRef = doc(db, "users", currentUser.id);
+      await updateDoc(userDocRef, { primaryWithdrawalAddress: '' });
+      await addTransaction(currentUser.id, {
           type: 'admin_adjusted',
           amount: 0,
           status: 'info',
           description: `Withdrawal address deleted.`
       });
-      setCurrentUser(updatedUser);
-      users[updatedUser.email] = updatedUser;
+      setCurrentUser(prev => prev ? { ...prev, primaryWithdrawalAddress: '' } : null);
       toast({ title: "Success", description: "Withdrawal address deleted." });
     }
   };
 
-  const augmentTransaction = (request: Transaction): AugmentedTransaction => {
-    const user = Object.values(users).find(u => u.id === request.userId);
-    if (!user) return request as AugmentedTransaction;
-
-    return {
-        ...request,
-        email: user.email,
-        userLevel: user.level,
-        userDepositCount: user.transactions.filter(tx => tx.type === 'deposit' && tx.status === 'approved').length,
-        userWithdrawalCount: user.transactions.filter(tx => tx.type === 'withdrawal' && tx.status === 'approved').length,
-        userWithdrawalAddress: user.primaryWithdrawalAddress,
-    };
-  };
-
-  const submitDepositRequest = (amount: number) => {
+  const submitDepositRequest = async (amount: number) => {
     if (!currentUser) return;
-    const newRequest: Transaction = {
-      id: generateTxnId(),
-      userId: currentUser.id,
-      email: currentUser.email,
+    const newRequest: Omit<Transaction, 'id' | 'userId'> = {
       type: 'deposit',
       amount,
       status: 'pending',
@@ -271,114 +275,126 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       description: `User requested a deposit of ${amount} USDT.`
     };
     
-    const augmentedReq = augmentTransaction(newRequest);
-    setDepositRequests(prev => [...prev, augmentedReq]);
-    setAllPendingRequests(prev => [...prev, augmentedReq].sort((a,b) => b.timestamp - a.timestamp));
-
-    let updatedUser = addTransaction(currentUser, newRequest);
-    setCurrentUser(updatedUser);
-    users[updatedUser.email] = updatedUser;
+    await addTransaction(currentUser.id, newRequest);
+    setCurrentUser(prev => prev ? { ...prev, transactions: [ ...prev.transactions, {...newRequest, id: 'temp', userId: prev.id} ]} : null);
     toast({ title: "Success", description: "Deposit request submitted." });
   };
-
-  const approveDeposit = (transactionId: string) => {
-    const request = allPendingRequests.find(r => r.id === transactionId);
-    if (!request || !request.userId) return;
-
-    setDepositRequests(prev => prev.filter(r => r.id !== transactionId));
-    setAllPendingRequests(prev => prev.filter(r => r.id !== transactionId));
-    
-    let userToUpdate = Object.values(users).find(u => u.id === request.userId);
-    if (userToUpdate) {
+  
+    const processRequest = async (transactionId: string, newStatus: 'approved' | 'declined', type: 'deposit' | 'withdrawal') => {
+        const batch = writeBatch(db);
+        const usersRef = collection(db, "users");
         
-        userToUpdate.transactions = userToUpdate.transactions.map(tx => 
-            tx.id === transactionId ? { ...tx, status: 'approved' as const, description: `Deposit of ${request.amount} USDT approved.` } : tx
+        // Find the user with the pending request
+        const q = query(usersRef, where("transactions", "array-contains", { id: transactionId, status: 'pending' }));
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
+            console.error("Could not find transaction to update");
+            // Attempt to find it with slightly different data for older requests
+             const allUsersSnap = await getDocs(usersRef);
+             for (const userDoc of allUsersSnap.docs) {
+                const userData = userDoc.data() as User;
+                const tx = userData.transactions.find(t => t.id === transactionId && t.status === 'pending');
+                if (tx) {
+                     const userRef = doc(db, "users", userDoc.id);
+                     const newTransactions = userData.transactions.map(t => t.id === transactionId ? { ...t, status: newStatus } : t);
+                     batch.update(userRef, { transactions: newTransactions });
+                     // More logic needed here based on approval/decline
+                     await batch.commit();
+                     toast({ title: "Success", description: `${type} request ${newStatus}.`});
+                     return;
+                }
+             }
+            toast({ title: "Error", description: "Transaction not found or already processed.", variant: "destructive" });
+            return;
+        }
+
+        const userDoc = querySnapshot.docs[0];
+        const userRef = userDoc.ref;
+        const userData = userDoc.data() as User;
+
+        const request = userData.transactions.find(tx => tx.id === transactionId && tx.status === 'pending');
+        if (!request) return;
+
+        const description = `${type.charAt(0).toUpperCase() + type.slice(1)} of ${request.amount} USDT ${newStatus}.`;
+        const updatedTransactions = userData.transactions.map(tx => 
+            tx.id === transactionId ? { ...tx, status: newStatus, description } : tx
         );
+
+        const updates: any = { transactions: updatedTransactions };
+
+        if (newStatus === 'approved') {
+            if (type === 'deposit') {
+                updates.balance = userData.balance + request.amount;
+                const isFirstDeposit = !userData.firstDepositTime;
+                if(isFirstDeposit) {
+                    updates.firstDepositTime = Date.now();
+                }
+            } else { // withdrawal
+                updates.balance = userData.balance - request.amount;
+                updates.lastWithdrawalTime = Date.now();
+            }
+        }
         
-        const isFirstDeposit = userToUpdate.transactions.filter(tx => tx.type === 'deposit' && tx.status === 'approved').length === 1;
+        batch.update(userRef, updates);
+        await batch.commit();
+        
+        // Handle post-approval logic like level up and referral bonus
+        if(newStatus === 'approved' && type === 'deposit') {
+            const postApprovalUserSnap = await getDoc(userRef);
+            const postApprovalUserData = postApprovalUserSnap.data() as User;
 
-        userToUpdate.balance += request.amount;
+            // Check for level up
+            const oldLevel = userData.level;
+            let newLevel = oldLevel;
+            const sortedLevels = Object.keys(levels).map(Number).sort((a,b) => b-a);
+            for (const levelKey of sortedLevels) {
+                if (levelKey === 0) continue;
+                const levelDetails = levels[levelKey];
+                if (postApprovalUserData.balance >= levelDetails.minBalance && postApprovalUserData.directReferrals >= levelDetails.directReferrals) {
+                    newLevel = levelKey;
+                    break;
+                }
+            }
+            if (newLevel > oldLevel) {
+                 await updateDoc(userRef, { level: newLevel });
+                 await addTransaction(userData.id, { type: 'level_up', amount: newLevel, status: 'info', description: `Promoted to Level ${newLevel}` });
+            }
 
-        if (isFirstDeposit) {
-            userToUpdate.firstDepositTime = Date.now();
-            userToUpdate = addTransaction(userToUpdate, { 
-                type: 'info', amount: 0, status: 'info', description: 'Withdrawal hold period has started.' 
-            });
-
-            if (referralBonusSettings.isEnabled && request.amount >= referralBonusSettings.minDeposit && userToUpdate.referredBy && userToUpdate.referredBy !== ADMIN_REFERRAL_CODE) {
-                const referrer = Object.values(users).find(u => u.userReferralCode === userToUpdate.referredBy);
-                if (referrer) {
-                    referrer.directReferrals += 1;
-                    referrer.balance += referralBonusSettings.bonusAmount; // Add bonus
-                    referrer.referredUsers = referrer.referredUsers.map(u => 
-                        u.email === userToUpdate.email ? { ...u, isActivated: true } : u
-                    );
-                     let updatedReferrer = addTransaction(referrer, {
+            // Check for referral bonus on first deposit
+            const isFirstDeposit = !userData.firstDepositTime;
+            if (isFirstDeposit && referralBonusSettings.isEnabled && request.amount >= referralBonusSettings.minDeposit && userData.referredBy && userData.referredBy !== ADMIN_REFERRAL_CODE) {
+                const referrerRef = doc(db, "users", userData.referredBy);
+                const referrerSnap = await getDoc(referrerRef);
+                if(referrerSnap.exists()) {
+                    const referrerData = referrerSnap.data() as User;
+                    const bonusAmount = referralBonusSettings.bonusAmount;
+                    await updateDoc(referrerRef, {
+                        balance: referrerData.balance + bonusAmount,
+                        directReferrals: referrerData.directReferrals + 1,
+                        referredUsers: referrerData.referredUsers.map(u => u.email === userData.email ? { ...u, isActivated: true } : u)
+                    });
+                    await addTransaction(referrerData.id, {
                         type: 'referral_bonus',
-                        amount: referralBonusSettings.bonusAmount,
+                        amount: bonusAmount,
                         status: 'credited',
-                        description: `You received a ${referralBonusSettings.bonusAmount} USDT bonus for activating ${userToUpdate.email}!`
+                        description: `You received a ${bonusAmount} USDT bonus for activating ${userData.email}!`
                     });
-                     updatedReferrer = addTransaction(updatedReferrer, {
-                        type: 'new_referral',
-                        amount: 1,
-                        status: 'info',
-                        description: `Your referred user ${userToUpdate.email} is now active!`
-                    });
-                    users[referrer.email] = updatedReferrer;
-                    if (currentUser && currentUser.id === referrer.id) {
-                        setCurrentUser(updatedReferrer);
-                    }
                 }
             }
         }
 
-        const oldLevel = userToUpdate.level;
-        let newLevel = oldLevel;
-        const sortedLevels = Object.keys(levels).map(Number).sort((a,b) => b-a);
-        for (const levelKey of sortedLevels) {
-            if (levelKey === 0) continue;
-            const levelDetails = levels[levelKey];
-            if (userToUpdate.balance >= levelDetails.minBalance && userToUpdate.directReferrals >= levelDetails.directReferrals) {
-                newLevel = levelKey;
-                break;
-            }
-        }
-        
-        if (newLevel > oldLevel) {
-             userToUpdate.level = newLevel;
-             userToUpdate = addTransaction(userToUpdate, { type: 'level_up', amount: newLevel, status: 'info', description: `Promoted to Level ${newLevel}` });
-        }
-        
-        users[userToUpdate.email] = userToUpdate;
-        if (currentUser && currentUser.id === userToUpdate.id) {
-            setCurrentUser(userToUpdate);
-        }
-    }
-    toast({ title: "Success", description: `Deposit for ${userToUpdate?.email} approved.` });
-  };
-  
-  const declineDeposit = (transactionId: string) => {
-    const request = allPendingRequests.find(r => r.id === transactionId);
-    if (!request || !request.userId) return;
+        toast({ title: "Success", description: `${type} request has been ${newStatus}.` });
+        fetchAllPendingRequests(); // Refresh admin list
+    };
+    
+    const approveDeposit = (transactionId: string) => processRequest(transactionId, 'approved', 'deposit');
+    const declineDeposit = (transactionId: string) => processRequest(transactionId, 'declined', 'deposit');
+    
+    const approveWithdrawal = (transactionId: string) => processRequest(transactionId, 'approved', 'withdrawal');
+    const declineWithdrawal = (transactionId: string) => processRequest(transactionId, 'declined', 'withdrawal');
 
-    setDepositRequests(prev => prev.filter(r => r.id !== transactionId));
-    setAllPendingRequests(prev => prev.filter(r => r.id !== transactionId));
-
-    let userToUpdate = Object.values(users).find(u => u.id === request.userId);
-    if (userToUpdate) {
-        userToUpdate.transactions = userToUpdate.transactions.map(tx =>
-            tx.id === transactionId ? { ...tx, status: 'declined' as const, description: `Deposit of ${request.amount} USDT declined.` } : tx
-        );
-        users[userToUpdate.email] = userToUpdate;
-        if (currentUser && currentUser.id === userToUpdate.id) {
-            setCurrentUser(userToUpdate);
-        }
-    }
-    toast({ title: "Request Declined", description: `Deposit for ${userToUpdate?.email} has been declined.` });
-  };
-
-  const submitWithdrawalRequest = (amount: number) => {
+  const submitWithdrawalRequest = async (amount: number) => {
     if (!currentUser || !currentUser.primaryWithdrawalAddress) {
         toast({ title: "Error", description: "Set a withdrawal address first.", variant: "destructive" });
         return;
@@ -402,9 +418,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
     }
 
-    const newRequest: Transaction = {
-        id: generateTxnId(),
-        userId: currentUser.id,
+    const newRequest: Omit<Transaction, 'id' | 'userId'> = {
         type: 'withdrawal',
         amount,
         status: 'pending',
@@ -413,164 +427,100 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         description: `User requested a withdrawal of ${amount} USDT.`
     };
     
-    const augmentedReq = augmentTransaction(newRequest);
-    setWithdrawalRequests(prev => [...prev, augmentedReq]);
-    setAllPendingRequests(prev => [...prev, augmentedReq].sort((a,b) => b.timestamp - a.timestamp));
-
-    const updatedUser = addTransaction(currentUser, newRequest);
-    setCurrentUser(updatedUser);
-    users[updatedUser.email] = updatedUser;
+    await addTransaction(currentUser.id, newRequest);
+    setCurrentUser(prev => prev ? { ...prev, transactions: [ ...prev.transactions, {...newRequest, id: 'temp', userId: prev.id} ]} : null);
     toast({ title: "Success", description: "Withdrawal request submitted." });
   };
   
-  const approveWithdrawal = (transactionId: string) => {
-    const request = allPendingRequests.find(r => r.id === transactionId);
-    if (!request || !request.userId) return;
-
-    setWithdrawalRequests(prev => prev.filter(r => r.id !== transactionId));
-    setAllPendingRequests(prev => prev.filter(r => r.id !== transactionId));
-
-    let userToUpdate = Object.values(users).find(u => u.id === request.userId);
-    if (userToUpdate) {
-        userToUpdate.balance -= request.amount;
-        userToUpdate.lastWithdrawalTime = Date.now();
-        userToUpdate.transactions = userToUpdate.transactions.map(tx => 
-            tx.id === transactionId ? { ...tx, status: 'approved' as const, description: `Withdrawal of ${request.amount} USDT approved.` } : tx
-        );
-        users[userToUpdate.email] = userToUpdate;
-        if (currentUser && currentUser.id === userToUpdate.id) {
-            setCurrentUser(userToUpdate);
-        }
-    }
-    toast({ title: "Success", description: `Withdrawal for ${userToUpdate?.email} approved.` });
-  };
-
-  const declineWithdrawal = (transactionId: string) => {
-    const request = allPendingRequests.find(r => r.id === transactionId);
-    if (!request || !request.userId) return;
-
-    setWithdrawalRequests(prev => prev.filter(r => r.id !== transactionId));
-    setAllPendingRequests(prev => prev.filter(r => r.id !== transactionId));
-
-    let userToUpdate = Object.values(users).find(u => u.id === request.userId);
-    if (userToUpdate) {
-        userToUpdate.transactions = userToUpdate.transactions.map(tx =>
-            tx.id === transactionId ? { ...tx, status: 'declined' as const, description: `Withdrawal of ${request.amount} USDT declined.` } : tx
-        );
-        users[userToUpdate.email] = userToUpdate;
-        if (currentUser && currentUser.id === userToUpdate.id) {
-            setCurrentUser(userToUpdate);
-        }
-    }
-    toast({ title: "Request Declined", description: `Withdrawal for ${userToUpdate?.email} has been declined.` });
-  };
-
-  const findUser = (email: string): UserForAdmin | null => {
-      const user = users[email];
-      if (!user) return null;
-      // Return a "safe" version of the user object
+  const findUser = async (email: string): Promise<UserForAdmin | null> => {
+      const q = query(collection(db, "users"), where("email", "==", email));
+      const querySnapshot = await getDocs(q);
+      if (querySnapshot.empty) {
+        return null;
+      }
+      const userDoc = querySnapshot.docs[0];
+      const userData = userDoc.data() as User;
       return {
-          id: user.id,
-          email: user.email,
-          balance: user.balance,
-          level: user.level,
-          primaryWithdrawalAddress: user.primaryWithdrawalAddress,
+          id: userDoc.id,
+          email: userData.email,
+          balance: userData.balance,
+          level: userData.level,
+          primaryWithdrawalAddress: userData.primaryWithdrawalAddress,
       };
   };
 
-  const adjustUserBalance = async (userId: string, amountDifference: number): Promise<UserForAdmin | null> => {
-      const user = Object.values(users).find(u => u.id === userId);
-      if (!user) return null;
+  const adjustUserBalance = async (userId: string, newBalance: number): Promise<UserForAdmin | null> => {
+      const userDocRef = doc(db, "users", userId);
+      const userDoc = await getDoc(userDocRef);
+      if(!userDoc.exists()) return null;
+      
+      const oldBalance = userDoc.data().balance;
+      const amountDifference = newBalance - oldBalance;
 
-      user.balance += amountDifference;
-      const updatedUser = addTransaction(user, {
+      await updateDoc(userDocRef, { balance: newBalance });
+      await addTransaction(userId, {
           type: 'admin_adjusted',
           amount: amountDifference,
           status: 'completed',
           description: `Admin adjusted balance by ${amountDifference.toFixed(2)} USDT.`
       });
-      users[user.email] = updatedUser;
       
-      if (currentUser && currentUser.id === userId) {
-          setCurrentUser(updatedUser);
-      }
       toast({ title: "Success", description: "User balance adjusted." });
-      return findUser(user.email);
+      return findUser(userDoc.data().email);
   };
 
   const adjustUserLevel = async (userId: string, level: number): Promise<UserForAdmin | null> => {
-      const user = Object.values(users).find(u => u.id === userId);
-      if (!user) return null;
+      const userDocRef = doc(db, "users", userId);
       if (!levels[level]) {
         toast({ title: "Error", description: `Level ${level} does not exist.`, variant: "destructive"});
         return null;
       }
-
-      user.level = level;
-      const updatedUser = addTransaction(user, {
+      await updateDoc(userDocRef, { level: level });
+      await addTransaction(userId, {
           type: 'level_up',
           amount: level,
           status: 'info',
           description: `Admin set level to ${level}.`
       });
-      users[user.email] = updatedUser;
       
-      if (currentUser && currentUser.id === userId) {
-          setCurrentUser(updatedUser);
-      }
+      const userDoc = await getDoc(userDocRef);
+      if(!userDoc.exists()) return null;
+
       toast({ title: "Success", description: "User level adjusted." });
-      return findUser(user.email);
+      return findUser(userDoc.data().email);
   };
   
-    const adminUpdateUserEmail = async (userId: string, newEmail: string): Promise<UserForAdmin | null> => {
-        const user = Object.values(users).find(u => u.id === userId);
-        if (!user) {
-            toast({ title: "Error", description: "User not found.", variant: "destructive" });
-            return null;
-        }
-        if (users[newEmail] && user.email !== newEmail) {
-            toast({ title: "Error", description: "New email is already in use.", variant: "destructive" });
-            return null;
-        }
+  const adminUpdateUserEmail = async (userId: string, newEmail: string): Promise<UserForAdmin | null> => {
+      // Note: This does NOT update Firebase Auth email. That requires a more secure, server-side (Cloud Function) implementation.
+      const userDocRef = doc(db, "users", userId);
+      const emailQuery = query(collection(db, "users"), where("email", "==", newEmail));
+      const snapshot = await getDocs(emailQuery);
 
-        const oldEmail = user.email;
-        const updatedUser = { ...user, email: newEmail };
-        
-        delete users[oldEmail];
-        users[newEmail] = updatedUser;
+      if (!snapshot.empty) {
+          toast({ title: "Error", description: "Email is already in use.", variant: "destructive" });
+          return null;
+      }
+      
+      await updateDoc(userDocRef, { email: newEmail });
+      toast({ title: "Success", description: `User email updated.` });
+      return findUser(newEmail);
+  };
 
-        // Update current user if it's the one being edited
-        if (currentUser && currentUser.id === userId) {
-            setCurrentUser(updatedUser);
-        }
+  const adminUpdateUserWithdrawalAddress = async (userId: string, newAddress: string): Promise<UserForAdmin | null> => {
+      const userDocRef = doc(db, "users", userId);
+      await updateDoc(userDocRef, { primaryWithdrawalAddress: newAddress });
+      await addTransaction(userId, {
+          type: 'admin_adjusted',
+          amount: 0,
+          status: 'info',
+          description: `Admin updated withdrawal address.`
+      });
+      const userDoc = await getDoc(userDocRef);
+      if(!userDoc.exists()) return null;
 
-        toast({ title: "Success", description: `User email updated from ${oldEmail} to ${newEmail}.` });
-        return findUser(newEmail);
-    };
-
-    const adminUpdateUserWithdrawalAddress = async (userId: string, newAddress: string): Promise<UserForAdmin | null> => {
-        const user = Object.values(users).find(u => u.id === userId);
-        if (!user) {
-            toast({ title: "Error", description: "User not found.", variant: "destructive" });
-            return null;
-        }
-
-        user.primaryWithdrawalAddress = newAddress;
-        const updatedUser = addTransaction(user, {
-            type: 'admin_adjusted',
-            amount: 0,
-            status: 'info',
-            description: `Admin updated withdrawal address.`
-        });
-        users[user.email] = updatedUser;
-
-        if (currentUser && currentUser.id === userId) {
-            setCurrentUser(updatedUser);
-        }
-
-        toast({ title: "Success", description: "User withdrawal address updated." });
-        return findUser(user.email);
-    };
+      toast({ title: "Success", description: "User withdrawal address updated." });
+      return findUser(userDoc.data().email);
+  };
 
     const updateRestrictionMessages = (messages: RestrictionMessage[]) => {
         setRestrictionMessages(messages);
@@ -642,7 +592,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
       if (primaryHsl) {
         root.style.setProperty('--primary', `${primaryHsl.h} ${primaryHsl.s}% ${primaryHsl.l}%`);
-        // Assuming primary-foreground is either black or white depending on luminance
         const primaryFg = primaryHsl.l > 50 ? '222.2 84% 4.9%' : '210 40% 98%';
         root.style.setProperty('--primary-foreground', primaryFg);
       }
@@ -655,7 +604,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       toast({ title: "Success", description: "Theme has been applied." });
     }
     
-    // Panel Management
     const updateDashboardPanel = (id: string, updates: Partial<DashboardPanel>) => {
         setDashboardPanels(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
         toast({ title: 'Success', description: 'Panel updated.' });
@@ -680,69 +628,100 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: 'Panel Deleted', description: 'The panel has been removed from the user dashboard.' });
     };
 
-    // Effect to load all pending requests for the admin panel on mount
+    const fetchAllPendingRequests = useCallback(async () => {
+        const usersRef = collection(db, "users");
+        const allUsersSnap = await getDocs(usersRef);
+        const allRequests: AugmentedTransaction[] = [];
+        
+        allUsersSnap.forEach(userDoc => {
+            const userData = userDoc.data() as User;
+            const pending = userData.transactions.filter(tx => tx.status === 'pending');
+            pending.forEach(p => {
+                allRequests.push({
+                    ...p,
+                    email: userData.email,
+                    userLevel: userData.level,
+                    userDepositCount: userData.transactions.filter(tx => tx.type === 'deposit' && tx.status === 'approved').length,
+                    userWithdrawalCount: userData.transactions.filter(tx => tx.type === 'withdrawal' && tx.status === 'approved').length,
+                    userWithdrawalAddress: userData.primaryWithdrawalAddress,
+                })
+            })
+        });
+        
+        setAllPendingRequests(allRequests.sort((a,b) => b.timestamp - a.timestamp));
+
+    }, []);
+
     useEffect(() => {
         if(isAdmin) {
-            const allRequests = Object.values(users).flatMap(user => 
-                user.transactions
-                    .filter(tx => (tx.type === 'deposit' || tx.type === 'withdrawal') && tx.status === 'pending')
-                    .map(tx => augmentTransaction(tx))
-            ).sort((a,b) => b.timestamp - a.timestamp);
-            setAllPendingRequests(allRequests);
-
-            const adminReferredUsers = Object.values(users)
-                .filter(u => u.referredBy === ADMIN_REFERRAL_CODE)
-                .map(u => ({
-                    id: u.id,
-                    email: u.email,
-                    balance: u.balance,
-                    level: u.level,
-                    primaryWithdrawalAddress: u.primaryWithdrawalAddress
-                }));
-
-            setAdminReferrals(adminReferredUsers);
+            fetchAllPendingRequests();
+            
+            const fetchAdminReferrals = async () => {
+                 const q = query(collection(db, "users"), where("referredBy", "==", ADMIN_REFERRAL_CODE));
+                 const querySnapshot = await getDocs(q);
+                 const referredUsers: UserForAdmin[] = [];
+                 querySnapshot.forEach(doc => {
+                     const u = doc.data() as User;
+                     referredUsers.push({
+                        id: u.id,
+                        email: u.email,
+                        balance: u.balance,
+                        level: u.level,
+                        primaryWithdrawalAddress: u.primaryWithdrawalAddress
+                    })
+                 });
+                 setAdminReferrals(referredUsers);
+            }
+            fetchAdminReferrals();
         }
-    }, [isAdmin]);
+    }, [isAdmin, fetchAllPendingRequests]);
 
-  // Effect for Daily Interest Credit
+
+  // Effect for Daily Interest Credit (would be better as a Cloud Function in a real app)
   useEffect(() => {
-    const interval = setInterval(() => {
-      Object.values(users).forEach(user => {
-        if (user && user.level > 0 && user.firstDepositTime) {
+    const interval = setInterval(async () => {
+      if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
           const now = Date.now();
-          const lastCredit = user.lastInterestCreditTime || user.firstDepositTime;
+          const lastCredit = currentUser.lastInterestCreditTime || currentUser.firstDepositTime;
           const timeSinceLastCredit = now - lastCredit;
           const twentyFourHours = 24 * 60 * 60 * 1000;
 
           if (timeSinceLastCredit >= twentyFourHours) {
-            const interestRate = levels[user.level].interest;
-            const interestAmount = user.balance * interestRate;
+            const interestRate = levels[currentUser.level].interest;
+            const interestAmount = currentUser.balance * interestRate;
             
-            let updatedUser = { 
-              ...user, 
-              balance: user.balance + interestAmount,
-              lastInterestCreditTime: now 
-            };
-            updatedUser = addTransaction(updatedUser, {
+            const userDocRef = doc(db, "users", currentUser.id);
+            await updateDoc(userDocRef, {
+                balance: currentUser.balance + interestAmount,
+                lastInterestCreditTime: now
+            });
+            await addTransaction(currentUser.id, {
                 type: 'interest_credit',
                 amount: interestAmount,
                 status: 'credited',
                 description: `Daily interest of ${interestAmount.toFixed(4)} USDT credited.`
             });
-            users[updatedUser.email] = updatedUser;
+            
+            // Re-fetch user data to update UI
+            const updatedUserDoc = await getDoc(userDocRef);
+            setCurrentUser(updatedUserDoc.data() as User);
 
-            if (currentUser && currentUser.id === updatedUser.id) {
-              setCurrentUser(updatedUser);
-              toast({ title: "Interest Credited!", description: `You earned ${interestAmount.toFixed(4)} USDT.`});
-            }
+            toast({ title: "Interest Credited!", description: `You earned ${interestAmount.toFixed(4)} USDT.`});
           }
         }
-      });
     }, 60000); // Check every minute
 
     return () => clearInterval(interval);
   }, [currentUser, levels, addTransaction, toast]);
 
+
+  if (loading) {
+    return (
+        <div className="flex items-center justify-center min-h-screen">
+            <div className="text-xl">Loading Application...</div>
+        </div>
+    );
+  }
 
   const value = {
     currentUser,
@@ -758,8 +737,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateLevel,
     addLevel,
     deleteLevel,
-    depositRequests,
-    withdrawalRequests,
     allPendingRequests,
     submitDepositRequest,
     approveDeposit,
