@@ -4,14 +4,13 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
-// IMPORTANT: Replace this with your own Firebase project's configuration!
 const firebaseConfig = {
-  apiKey: "AIza...",
-  authDomain: "your-project-id.firebaseapp.com",
-  projectId: "your-project-id",
-  storageBucket: "your-project-id.appspot.com",
-  messagingSenderId: "your-sender-id",
-  appId: "your-app-id"
+  "projectId": "staking-glass-0",
+  "appId": "1:966692134036:web:74c4f2a70e73bfe76ea881",
+  "storageBucket": "staking-glass-0.firebasestorage.app",
+  "apiKey": "AIzaSyCwT5IFEx49sJJ4l5vBsasUTlUUDcgwG_Q",
+  "authDomain": "staking-glass-0.firebaseapp.com",
+  "messagingSenderId": "966692134036"
 };
 
 // Initialize Firebase
