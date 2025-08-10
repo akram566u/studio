@@ -1,5 +1,5 @@
 'use client';
-import { useState, useContext } from 'react';
+import { useState, useContext, useEffect } from 'react';
 import { AppContext } from './providers/AppProvider';
 
 import Header from './layout/Header';
@@ -13,7 +13,12 @@ export type View = 'start' | 'signup' | 'signin' | 'user_dashboard' | 'admin_das
 
 export default function StakingApp() {
   const [view, setView] = useState<View>('start');
+  const [isClient, setIsClient] = useState(false);
   const context = useContext(AppContext);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   if (!context) {
     return <div>Loading...</div>; // Or some other loading state
@@ -42,7 +47,7 @@ export default function StakingApp() {
   
   return (
     <>
-      <ThreeBackground />
+      {isClient && <ThreeBackground />}
       <Header setView={setView} />
       <main className="flex-grow flex items-center justify-center p-4 z-10">
         {renderView()}
