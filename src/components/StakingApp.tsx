@@ -21,11 +21,17 @@ export default function StakingApp() {
   }, []);
 
   if (!context) {
-    return <div>Loading...</div>; // Or some other loading state
+    // This can happen briefly on the very first load.
+    return <div>Loading Context...</div>;
   }
   const { currentUser, isAdmin } = context;
 
   const renderView = () => {
+    // Prevent rendering any view until client is mounted and auth state is known
+    if (!isClient) {
+        return <div>Loading...</div>;
+    }
+    
     if (isAdmin) {
         return <AdminDashboard />;
     }
