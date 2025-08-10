@@ -2,7 +2,15 @@
 
 
 
+
 export type BackgroundTheme = 'FloatingCrystals' | 'CosmicNebula' | 'DigitalMatrix' | 'AbstractParticles' | 'SynthwaveSunset';
+
+export interface RechargeAddress {
+  id: string;
+  address: string;
+  network: string;
+  isActive: boolean;
+}
 
 export interface Transaction {
   id: string;

@@ -1,4 +1,4 @@
-import { RestrictionMessage, Levels, StartScreenSettings, DashboardPanel, ReferralBonusSettings } from '@/lib/types';
+import { RestrictionMessage, Levels, StartScreenSettings, DashboardPanel, ReferralBonusSettings, RechargeAddress } from '@/lib/types';
 
 export const initialLevels: Levels = {
     0: { interest: 0, minBalance: 0, directReferrals: 0, withdrawalLimit: 0 },
@@ -8,6 +8,10 @@ export const initialLevels: Levels = {
     4: { interest: 0.07, minBalance: 8000, directReferrals: 36, withdrawalLimit: 750 },
     5: { interest: 0.09, minBalance: 16000, directReferrals: 55, withdrawalLimit: 1000 },
 };
+
+export const initialRechargeAddresses: RechargeAddress[] = [
+    { id: 'addr_1', address: '0x4D26340f3B52DCf82dd537cBF3c7e4C1D9b53BDc', network: 'BEP-20', isActive: true },
+];
 
 export const initialRestrictionMessages: RestrictionMessage[] = [
     {

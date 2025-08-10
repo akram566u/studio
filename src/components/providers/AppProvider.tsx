@@ -6,8 +6,8 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme } from '@/lib/types';
-import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels, initialReferralBonusSettings } from '@/lib/data';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress } from '@/lib/types';
+import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels, initialReferralBonusSettings, initialRechargeAddresses } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
 
@@ -31,7 +31,7 @@ export interface AppContextType {
   deleteLevel: (levelKey: number) => void;
   allPendingRequests: AugmentedTransaction[];
   adminHistory: AugmentedTransaction[];
-  submitDepositRequest: (amount: number) => void;
+  submitDepositRequest: (amount: number, address: string) => void;
   approveDeposit: (transactionId: string) => void;
   declineDeposit: (transactionId: string) => void;
   submitWithdrawalRequest: (amount: number) => void;
@@ -58,6 +58,10 @@ export interface AppContextType {
   updateReferralBonusSettings: (settings: ReferralBonusSettings) => void;
   active3DTheme: BackgroundTheme;
   setActive3DTheme: (theme: BackgroundTheme) => void;
+  rechargeAddresses: RechargeAddress[];
+  addRechargeAddress: () => void;
+  updateRechargeAddress: (id: string, updates: Partial<RechargeAddress>) => void;
+  deleteRechargeAddress: (id: string) => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -78,7 +82,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [dashboardPanels, setDashboardPanels] = useState<DashboardPanel[]>(initialDashboardPanels);
   const [referralBonusSettings, setReferralBonusSettings] = useState<ReferralBonusSettings>(initialReferralBonusSettings);
   const [active3DTheme, setActive3DTheme] = useState<BackgroundTheme>('FloatingCrystals');
-  
+  const [rechargeAddresses, setRechargeAddresses] = useState<RechargeAddress[]>(initialRechargeAddresses);
+
   // Admin-specific state
   const [allPendingRequests, setAllPendingRequests] = useState<AugmentedTransaction[]>([]);
   const [adminReferrals, setAdminReferrals] = useState<UserForAdmin[]>([]);
@@ -276,13 +281,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const submitDepositRequest = async (amount: number) => {
+  const submitDepositRequest = async (amount: number, address: string) => {
     if (!currentUser) return;
     const newRequest = {
       id: generateTxnId(),
       type: 'deposit' as 'deposit',
       amount,
       status: 'pending' as 'pending',
+      walletAddress: address,
       description: `User requested a deposit of ${amount} USDT.`
     };
     
@@ -639,6 +645,27 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: 'Panel Deleted', description: 'The panel has been removed from the user dashboard.' });
     };
 
+    const addRechargeAddress = () => {
+      const newAddress: RechargeAddress = {
+        id: `addr_${Date.now()}`,
+        address: 'New BEP-20 Address',
+        network: 'BEP-20',
+        isActive: false,
+      };
+      setRechargeAddresses(prev => [...prev, newAddress]);
+      toast({ title: 'Address Added', description: 'A new recharge address has been added.' });
+    };
+  
+    const updateRechargeAddress = (id: string, updates: Partial<RechargeAddress>) => {
+      setRechargeAddresses(prev => prev.map(addr => addr.id === id ? { ...addr, ...updates } : addr));
+      toast({ title: 'Address Updated', description: 'The recharge address has been updated.' });
+    };
+  
+    const deleteRechargeAddress = (id: string) => {
+      setRechargeAddresses(prev => prev.filter(addr => addr.id !== id));
+      toast({ title: 'Address Deleted', description: 'The recharge address has been removed.' });
+    };
+
     const fetchAllPendingRequests = useCallback(async () => {
         const usersRef = collection(db, "users");
         const allUsersSnap = await getDocs(usersRef);
@@ -800,6 +827,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateReferralBonusSettings,
     active3DTheme,
     setActive3DTheme,
+    rechargeAddresses,
+    addRechargeAddress,
+    updateRechargeAddress,
+    deleteRechargeAddress,
   };
 
   return (

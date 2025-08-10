@@ -158,10 +158,10 @@ const RechargePanel = () => {
     const [depositAlertMessage, setDepositAlertMessage] = useState('');
     const [depositAlertConfirmAction, setDepositAlertConfirmAction] = useState<(() => void) | null>(null);
 
-    const depositAddress = "0x4D26340f3B52DCf82dd537cBF3c7e4C1D9b53BDc";
-
     if (!context || !context.currentUser) return null;
-    const { currentUser, submitDepositRequest, restrictionMessages } = context;
+    const { currentUser, submitDepositRequest, restrictionMessages, rechargeAddresses } = context;
+    const activeAddress = rechargeAddresses.find(a => a.isActive);
+
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
@@ -169,6 +169,11 @@ const RechargePanel = () => {
     };
 
     const handleDepositRequest = () => {
+        if (!activeAddress) {
+            toast({ title: "Error", description: "No active deposit address. Please contact support.", variant: "destructive" });
+            return;
+        }
+
         const noAddressMsg = restrictionMessages.find(m => m.type === 'deposit_no_address' && m.isActive);
         const confirmMsg = restrictionMessages.find(m => m.type === 'deposit_confirm' && m.isActive);
 
@@ -188,12 +193,12 @@ const RechargePanel = () => {
         if (confirmMsg) {
             setDepositAlertMessage(confirmMsg.message);
             setDepositAlertConfirmAction(() => () => {
-                submitDepositRequest(amount);
+                submitDepositRequest(amount, activeAddress.address);
                 setDepositAmount('');
             });
             setIsDepositAlertOpen(true);
         } else {
-            submitDepositRequest(amount);
+            submitDepositRequest(amount, activeAddress.address);
             setDepositAmount('');
         }
     };
@@ -201,22 +206,31 @@ const RechargePanel = () => {
     return (
         <>
             <Card className="card-gradient-yellow-pink p-6">
-                <h3 className="text-xl font-semibold mb-3 text-blue-300">Recharge USDT (BEP-20)</h3>
+                <h3 className="text-xl font-semibold mb-3 text-blue-300">Recharge USDT ({activeAddress?.network || '...'})</h3>
                 <p className="text-xl text-gray-200 mb-3">Copy this address to deposit:</p>
-                <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
-                    <span className="font-mono text-sm break-all text-green-300">{depositAddress}</span>
-                    <Button size="icon" variant="ghost" onClick={() => copyToClipboard(depositAddress)}>
-                    <Copy className="size-4" />
-                    </Button>
-                </div>
+                {activeAddress ? (
+                    <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
+                        <span className="font-mono text-sm break-all text-green-300">{activeAddress.address}</span>
+                        <Button size="icon" variant="ghost" onClick={() => copyToClipboard(activeAddress.address)}>
+                            <Copy className="size-4" />
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="bg-gray-700 p-3 rounded-lg text-center text-yellow-400">
+                        No active deposit address.
+                    </div>
+                )}
                 <Input 
                     type="number" 
                     placeholder="Amount in USDT" 
                     className="mb-4 text-xl" 
                     value={depositAmount}
                     onChange={(e) => setDepositAmount(e.target.value)}
+                    disabled={!activeAddress}
                 />
-                <Button className="w-full py-3 text-lg" onClick={handleDepositRequest}>Submit Recharge Request</Button>
+                <Button className="w-full py-3 text-lg" onClick={handleDepositRequest} disabled={!activeAddress}>
+                    Submit Recharge Request
+                </Button>
             </Card>
 
             <AlertDialog open={isDepositAlertOpen} onOpenChange={setIsDepositAlertOpen}>

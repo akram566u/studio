@@ -13,7 +13,7 @@ import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BackgroundTheme, DashboardPanel, Level, ReferralBonusSettings, RestrictionMessage, Transaction } from '@/lib/types';
+import { BackgroundTheme, DashboardPanel, Level, RechargeAddress, ReferralBonusSettings, RestrictionMessage, Transaction } from '@/lib/types';
 import { Textarea } from '../ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ShieldCheck, ShieldX, UserCog } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ShieldCheck, ShieldX, Trash2, UserCog } from 'lucide-react';
 
 const AdminDashboard = () => {
   const context = useContext(AppContext);
@@ -44,6 +44,7 @@ const AdminDashboard = () => {
   const [themeColors, setThemeColors] = useState({ primary: '#2563eb', accent: '#7c3aed' });
   const [localPanels, setLocalPanels] = useState<DashboardPanel[]>([]);
   const [localReferralBonusSettings, setLocalReferralBonusSettings] = useState<ReferralBonusSettings>({ isEnabled: true, bonusAmount: 5, minDeposit: 100 });
+  const [localRechargeAddresses, setLocalRechargeAddresses] = useState<RechargeAddress[]>([]);
   
   // State for editing a user
   const [editingEmail, setEditingEmail] = useState('');
@@ -62,9 +63,10 @@ const AdminDashboard = () => {
     if(context?.restrictionMessages) setLocalRestrictions(context.restrictionMessages);
     if(context?.dashboardPanels) setLocalPanels(context.dashboardPanels);
     if(context?.referralBonusSettings) setLocalReferralBonusSettings(context.referralBonusSettings);
+    if(context?.rechargeAddresses) setLocalRechargeAddresses(context.rechargeAddresses);
 
 
-  }, [context?.websiteTitle, context?.startScreenContent, context?.levels, context?.restrictionMessages, context?.dashboardPanels, context?.referralBonusSettings]);
+  }, [context?.websiteTitle, context?.startScreenContent, context?.levels, context?.restrictionMessages, context?.dashboardPanels, context?.referralBonusSettings, context?.rechargeAddresses]);
   
   useEffect(() => {
       if (searchedUser) {
@@ -107,6 +109,10 @@ const AdminDashboard = () => {
       adminHistory,
       active3DTheme,
       setActive3DTheme,
+      rechargeAddresses,
+      addRechargeAddress,
+      updateRechargeAddress,
+      deleteRechargeAddress,
   } = context;
 
   const handleUserSearch = async (e: React.FormEvent) => {
@@ -180,6 +186,39 @@ const AdminDashboard = () => {
   const handleSaveReferralBonusSettings = () => {
     updateReferralBonusSettings(localReferralBonusSettings);
   }
+  
+    const handleRechargeAddressChange = (id: string, field: keyof RechargeAddress, value: any) => {
+        setLocalRechargeAddresses(prev => prev.map(addr => {
+            if (addr.id === id) {
+                if (field === 'isActive' && value === true) {
+                    // Deactivate all other addresses if this one is being activated
+                    return { ...addr, [field]: value };
+                }
+                return { ...addr, [field]: value };
+            }
+            // If another address was activated, this one should be deactivated if it was active
+            if (field === 'isActive' && value === true) {
+                return { ...addr, isActive: false };
+            }
+            return addr;
+        }));
+    };
+
+    const handleSaveRechargeAddress = (id: string) => {
+        const addressToUpdate = localRechargeAddresses.find(addr => addr.id === id);
+        if (addressToUpdate) {
+            updateRechargeAddress(id, addressToUpdate);
+            // If this address was activated, we need to deactivate others in the main context
+            if (addressToUpdate.isActive) {
+                rechargeAddresses.forEach(addr => {
+                    if (addr.id !== id && addr.isActive) {
+                        updateRechargeAddress(addr.id, { isActive: false });
+                    }
+                });
+            }
+        }
+    };
+
 
   const handleUserUpdate = async (field: 'email' | 'address' | 'balance' | 'level') => {
     if (!searchedUser) return;
@@ -530,6 +569,47 @@ const AdminDashboard = () => {
                         <div className="mt-4 flex gap-4">
                             <Button onClick={handleSaveLevels}>Save All Level Changes</Button>
                             <Button onClick={handleAddNewLevel} variant="secondary">Add New Level</Button>
+                        </div>
+                    </CardContent>
+                </Card>
+                 <Card className="card-gradient-yellow-pink p-6">
+                    <CardHeader>
+                        <CardTitle className="text-purple-300">Manage Recharge Addresses</CardTitle>
+                        <CardDescription>Add or update the USDT addresses users will deposit to.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ScrollArea className="h-72 custom-scrollbar">
+                            <div className="space-y-4">
+                                {localRechargeAddresses.map((addr) => (
+                                    <div key={addr.id} className="bg-black/20 p-4 rounded-lg space-y-2">
+                                        <div className="flex justify-between items-center">
+                                             <Label htmlFor={`addr-active-${addr.id}`} className="flex items-center gap-2 text-base">
+                                                <Switch
+                                                    id={`addr-active-${addr.id}`}
+                                                    checked={addr.isActive}
+                                                    onCheckedChange={checked => handleRechargeAddressChange(addr.id, 'isActive', checked)}
+                                                />
+                                                {addr.isActive ? 'Active Address' : 'Inactive Address'}
+                                            </Label>
+                                            <Button variant="destructive" size="icon" onClick={() => deleteRechargeAddress(addr.id)}>
+                                                <Trash2 />
+                                            </Button>
+                                        </div>
+                                        <div>
+                                            <Label htmlFor={`addr-address-${addr.id}`}>Address</Label>
+                                            <Input id={`addr-address-${addr.id}`} value={addr.address} onChange={e => handleRechargeAddressChange(addr.id, 'address', e.target.value)} />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor={`addr-network-${addr.id}`}>Network</Label>
+                                            <Input id={`addr-network-${addr.id}`} value={addr.network} onChange={e => handleRechargeAddressChange(addr.id, 'network', e.target.value)} />
+                                        </div>
+                                        <Button size="sm" onClick={() => handleSaveRechargeAddress(addr.id)}>Save Address</Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                        <div className="mt-4">
+                            <Button onClick={addRechargeAddress} variant="secondary">Add New Address</Button>
                         </div>
                     </CardContent>
                 </Card>
