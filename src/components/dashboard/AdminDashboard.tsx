@@ -13,7 +13,7 @@ import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { DashboardPanel, Level, ReferralBonusSettings, RestrictionMessage } from '@/lib/types';
+import { DashboardPanel, Level, ReferralBonusSettings, RestrictionMessage, Transaction } from '@/lib/types';
 import { Textarea } from '../ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ShieldCheck, ShieldX, UserCog } from 'lucide-react';
 
 const AdminDashboard = () => {
   const context = useContext(AppContext);
@@ -104,6 +104,7 @@ const AdminDashboard = () => {
       deleteDashboardPanel,
       updateReferralBonusSettings,
       allPendingRequests,
+      adminHistory
   } = context;
 
   const handleUserSearch = async (e: React.FormEvent) => {
@@ -210,6 +211,15 @@ const AdminDashboard = () => {
             updateDashboardPanel(id, panelToUpdate);
         }
     };
+    
+    const getHistoryIcon = (tx: Transaction) => {
+        switch(tx.type) {
+            case 'deposit': return <ShieldCheck className="text-green-400 size-6" />;
+            case 'withdrawal': return <ShieldX className="text-red-400 size-6" />;
+            case 'admin_adjusted': return <UserCog className="text-blue-400 size-6" />;
+            default: return <CheckCircle className="text-gray-400 size-6" />;
+        }
+    }
 
   return (
     <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
@@ -217,8 +227,9 @@ const AdminDashboard = () => {
         <p className="text-center text-gray-400 mb-6">Manage all user deposit, withdrawal, and referral bonus requests.</p>
         
         <Tabs defaultValue="dashboard" className="w-full">
-            <TabsList className="grid w-full grid-cols-6">
+            <TabsList className="grid w-full grid-cols-7">
                 <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+                <TabsTrigger value="history">Activity Log</TabsTrigger>
                 <TabsTrigger value="users">User Management</TabsTrigger>
                 <TabsTrigger value="settings">Content & UI</TabsTrigger>
                 <TabsTrigger value="system">System Settings</TabsTrigger>
@@ -324,6 +335,37 @@ const AdminDashboard = () => {
                                 </div>
                             ) : (
                                 <p className="text-gray-400">No users have signed up with the admin referral code yet.</p>
+                            )}
+                        </ScrollArea>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+
+             <TabsContent value="history" className="mt-6 space-y-6">
+                <Card className="card-gradient-orange-red p-6">
+                    <CardHeader>
+                        <CardTitle className="text-purple-300">Admin Activity Log</CardTitle>
+                        <CardDescription>A log of all approvals, declines, and adjustments.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ScrollArea className="h-[70vh] custom-scrollbar">
+                            {adminHistory && adminHistory.length > 0 ? (
+                                <div className="space-y-4">
+                                    {adminHistory.map(tx => (
+                                        <div key={`${tx.id}-${tx.timestamp}`} className="bg-black/20 p-4 rounded-lg flex items-start gap-4">
+                                            <div className="mt-1">{getHistoryIcon(tx)}</div>
+                                            <div className="flex-1 space-y-1">
+                                                <div className="flex justify-between items-start">
+                                                    <p className="font-bold text-lg text-yellow-300">{tx.description}</p>
+                                                    <p className="text-xs text-gray-400">{format(new Date(tx.timestamp), 'PPpp')}</p>
+                                                </div>
+                                                <p className="text-sm text-gray-300 font-mono">User: {tx.email}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-gray-400 text-center">No historical admin activities found.</p>
                             )}
                         </ScrollArea>
                     </CardContent>
@@ -627,5 +669,3 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
-
-    

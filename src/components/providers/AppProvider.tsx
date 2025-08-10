@@ -30,6 +30,7 @@ export interface AppContextType {
   addLevel: (newLevelKey: number) => void;
   deleteLevel: (levelKey: number) => void;
   allPendingRequests: AugmentedTransaction[];
+  adminHistory: AugmentedTransaction[];
   submitDepositRequest: (amount: number) => void;
   approveDeposit: (transactionId: string) => void;
   declineDeposit: (transactionId: string) => void;
@@ -78,6 +79,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   // Admin-specific state
   const [allPendingRequests, setAllPendingRequests] = useState<AugmentedTransaction[]>([]);
   const [adminReferrals, setAdminReferrals] = useState<UserForAdmin[]>([]);
+  const [adminHistory, setAdminHistory] = useState<AugmentedTransaction[]>([]);
+
   
   const { toast } = useToast();
   
@@ -287,28 +290,36 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   
   const processRequest = async (transactionId: string, newStatus: 'approved' | 'declined', type: 'deposit' | 'withdrawal') => {
     const usersRef = collection(db, "users");
+    const q = query(usersRef, where("transactions", "array-contains", { id: transactionId, status: 'pending' }));
+    
+    // Firestore cannot query for partial matches in array objects directly.
+    // The correct way is to fetch all users and filter client-side, which is what we were doing.
+    // The bug was in how the transaction was identified. Let's fix that.
+    
     const allUsersSnap = await getDocs(usersRef);
     let userFound: User | null = null;
     let userDocId: string | null = null;
-    
+    let originalRequest: Transaction | null = null;
+
     for (const userDoc of allUsersSnap.docs) {
         const userData = userDoc.data() as User;
-        if (userData.transactions.some(t => t.id === transactionId && t.status === 'pending')) {
+        const req = userData.transactions.find(t => t.id === transactionId && t.status === 'pending');
+        if (req) {
             userFound = userData;
             userDocId = userDoc.id;
+            originalRequest = req;
             break;
         }
     }
 
-    if (!userFound || !userDocId) {
+    if (!userFound || !userDocId || !originalRequest) {
         toast({ title: "Error", description: "Transaction not found or already processed.", variant: "destructive" });
         return;
     }
 
     const userRef = doc(db, "users", userDocId);
-    const request = userFound.transactions.find(tx => tx.id === transactionId)!;
-
-    const description = `${type.charAt(0).toUpperCase() + type.slice(1)} of ${request.amount} USDT ${newStatus}.`;
+    
+    const description = `${type.charAt(0).toUpperCase() + type.slice(1)} of ${originalRequest.amount} USDT ${newStatus}.`;
     const updatedTransactions = userFound.transactions.map(tx =>
         tx.id === transactionId ? { ...tx, status: newStatus, description } : tx
     );
@@ -318,12 +329,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     if (newStatus === 'approved') {
         if (type === 'deposit') {
-            updates.balance = userFound.balance + request.amount;
+            updates.balance = userFound.balance + originalRequest.amount;
             if (!userFound.firstDepositTime) {
                 updates.firstDepositTime = Date.now();
             }
         } else { // withdrawal
-            updates.balance = userFound.balance - request.amount;
+            updates.balance = userFound.balance - originalRequest.amount;
             updates.lastWithdrawalTime = Date.now();
         }
     }
@@ -355,7 +366,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
 
         const isFirstDeposit = !userFound.firstDepositTime;
-        if (isFirstDeposit && referralBonusSettings.isEnabled && request.amount >= referralBonusSettings.minDeposit && userFound.referredBy && userFound.referredBy !== ADMIN_REFERRAL_CODE) {
+        if (isFirstDeposit && referralBonusSettings.isEnabled && originalRequest.amount >= referralBonusSettings.minDeposit && userFound.referredBy && userFound.referredBy !== ADMIN_REFERRAL_CODE) {
             const referrerRef = doc(db, "users", userFound.referredBy);
             const referrerSnap = await getDoc(referrerRef);
             if (referrerSnap.exists()) {
@@ -379,6 +390,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     toast({ title: "Success", description: `${type} request has been ${newStatus}.` });
     fetchAllPendingRequests(); // Refresh admin list
+    fetchAdminHistory();
   };
     
     const approveDeposit = (transactionId: string) => processRequest(transactionId, 'approved', 'deposit');
@@ -648,9 +660,31 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     }, []);
 
+    const fetchAdminHistory = useCallback(async () => {
+        const usersRef = collection(db, "users");
+        const allUsersSnap = await getDocs(usersRef);
+        const allHistory: AugmentedTransaction[] = [];
+
+        allUsersSnap.forEach(userDoc => {
+            const userData = userDoc.data() as User;
+            const completed = userData.transactions.filter(tx => 
+                tx.status === 'approved' || tx.status === 'declined' || tx.type === 'admin_adjusted'
+            );
+            completed.forEach(c => {
+                allHistory.push({
+                    ...c,
+                    email: userData.email,
+                })
+            })
+        });
+
+        setAdminHistory(allHistory.sort((a,b) => b.timestamp - a.timestamp));
+    }, []);
+
     useEffect(() => {
         if(isAdmin) {
             fetchAllPendingRequests();
+            fetchAdminHistory();
             
             const fetchAdminReferrals = async () => {
                  const q = query(collection(db, "users"), where("referredBy", "==", ADMIN_REFERRAL_CODE));
@@ -670,7 +704,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             }
             fetchAdminReferrals();
         }
-    }, [isAdmin, fetchAllPendingRequests]);
+    }, [isAdmin, fetchAllPendingRequests, fetchAdminHistory]);
 
 
   // Effect for Daily Interest Credit (would be better as a Cloud Function in a real app)
@@ -735,6 +769,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     addLevel,
     deleteLevel,
     allPendingRequests,
+    adminHistory,
     submitDepositRequest,
     approveDeposit,
     declineDeposit,
@@ -768,6 +803,3 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
-
-    
-    
