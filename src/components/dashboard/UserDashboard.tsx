@@ -31,7 +31,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { DashboardPanel } from '@/lib/types';
+import { DashboardPanel, Transaction } from '@/lib/types';
 
 
 // Individual Panel Components
@@ -98,8 +98,8 @@ const TransactionHistoryPanel = ({ currentUser }: { currentUser: any }) => {
             <ScrollArea className="h-96 custom-scrollbar">
                 {currentUser.transactions && currentUser.transactions.length > 0 ? (
                 <div className="space-y-4">
-                    {currentUser.transactions.map((tx: any, index: number) => (
-                    <div key={`${tx.id}-${tx.timestamp}-${index}`} className="flex items-start gap-3">
+                    {currentUser.transactions.map((tx: Transaction) => (
+                    <div key={`${tx.id}-${tx.timestamp}`} className="flex items-start gap-3">
                         <div className="mt-1">{getIconForType(tx.type)}</div>
                         <div className="flex-1">
                         <div className="flex justify-between items-center">
@@ -506,3 +506,5 @@ const UserDashboard = () => {
 };
 
 export default UserDashboard;
+
+    

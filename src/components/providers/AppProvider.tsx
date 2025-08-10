@@ -118,8 +118,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return () => unsubscribe();
   }, [fetchUserData]);
 
-  const addTransaction = useCallback(async (userId: string, transactionData: Omit<Transaction, 'id' | 'userId' | 'timestamp'>) => {
-      const newTransaction: Omit<Transaction, 'id' | 'userId'> = {
+  const addTransaction = useCallback(async (userId: string, transactionData: Omit<Transaction, 'userId' | 'timestamp'>) => {
+      const newTransaction: Transaction = {
+          userId,
           timestamp: Date.now(),
           ...transactionData,
       };
@@ -198,6 +199,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         // Create user document in Firestore
         await setDoc(doc(db, "users", newUserAuth.uid), newUser);
         await addTransaction(newUserAuth.uid, {
+            id: generateTxnId(),
             type: 'account_created',
             amount: 0,
             status: 'completed',
@@ -211,6 +213,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 referredUsers: arrayUnion({ email: newUser.email, isActivated: false })
             });
             await addTransaction(referrerDoc.id, {
+                id: generateTxnId(),
                 type: 'new_referral',
                 amount: 0,
                 status: 'info',
@@ -240,6 +243,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const userDocRef = doc(db, "users", currentUser.id);
       await updateDoc(userDocRef, { primaryWithdrawalAddress: address });
       await addTransaction(currentUser.id, {
+          id: generateTxnId(),
           type: 'admin_adjusted',
           amount: 0,
           status: 'info',
@@ -255,6 +259,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const userDocRef = doc(db, "users", currentUser.id);
       await updateDoc(userDocRef, { primaryWithdrawalAddress: '' });
       await addTransaction(currentUser.id, {
+          id: generateTxnId(),
           type: 'admin_adjusted',
           amount: 0,
           status: 'info',
@@ -267,126 +272,114 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const submitDepositRequest = async (amount: number) => {
     if (!currentUser) return;
-    const newRequest: Omit<Transaction, 'id' | 'userId'> = {
-      type: 'deposit',
+    const newRequest = {
+      id: generateTxnId(),
+      type: 'deposit' as 'deposit',
       amount,
-      status: 'pending',
-      timestamp: Date.now(),
+      status: 'pending' as 'pending',
       description: `User requested a deposit of ${amount} USDT.`
     };
     
     await addTransaction(currentUser.id, newRequest);
-    setCurrentUser(prev => prev ? { ...prev, transactions: [ ...prev.transactions, {...newRequest, id: 'temp', userId: prev.id} ]} : null);
+    setCurrentUser(prev => prev ? { ...prev, transactions: [ ...prev.transactions, {...newRequest, userId: prev.id, timestamp: Date.now()} ]} : null);
     toast({ title: "Success", description: "Deposit request submitted." });
   };
   
-    const processRequest = async (transactionId: string, newStatus: 'approved' | 'declined', type: 'deposit' | 'withdrawal') => {
-        const batch = writeBatch(db);
-        const usersRef = collection(db, "users");
-        
-        // Find the user with the pending request
-        const q = query(usersRef, where("transactions", "array-contains", { id: transactionId, status: 'pending' }));
-        const querySnapshot = await getDocs(q);
-
-        if (querySnapshot.empty) {
-            console.error("Could not find transaction to update");
-            // Attempt to find it with slightly different data for older requests
-             const allUsersSnap = await getDocs(usersRef);
-             for (const userDoc of allUsersSnap.docs) {
-                const userData = userDoc.data() as User;
-                const tx = userData.transactions.find(t => t.id === transactionId && t.status === 'pending');
-                if (tx) {
-                     const userRef = doc(db, "users", userDoc.id);
-                     const newTransactions = userData.transactions.map(t => t.id === transactionId ? { ...t, status: newStatus } : t);
-                     batch.update(userRef, { transactions: newTransactions });
-                     // More logic needed here based on approval/decline
-                     await batch.commit();
-                     toast({ title: "Success", description: `${type} request ${newStatus}.`});
-                     return;
-                }
-             }
-            toast({ title: "Error", description: "Transaction not found or already processed.", variant: "destructive" });
-            return;
-        }
-
-        const userDoc = querySnapshot.docs[0];
-        const userRef = userDoc.ref;
+  const processRequest = async (transactionId: string, newStatus: 'approved' | 'declined', type: 'deposit' | 'withdrawal') => {
+    const usersRef = collection(db, "users");
+    const allUsersSnap = await getDocs(usersRef);
+    let userFound: User | null = null;
+    let userDocId: string | null = null;
+    
+    for (const userDoc of allUsersSnap.docs) {
         const userData = userDoc.data() as User;
-
-        const request = userData.transactions.find(tx => tx.id === transactionId && tx.status === 'pending');
-        if (!request) return;
-
-        const description = `${type.charAt(0).toUpperCase() + type.slice(1)} of ${request.amount} USDT ${newStatus}.`;
-        const updatedTransactions = userData.transactions.map(tx => 
-            tx.id === transactionId ? { ...tx, status: newStatus, description } : tx
-        );
-
-        const updates: any = { transactions: updatedTransactions };
-
-        if (newStatus === 'approved') {
-            if (type === 'deposit') {
-                updates.balance = userData.balance + request.amount;
-                const isFirstDeposit = !userData.firstDepositTime;
-                if(isFirstDeposit) {
-                    updates.firstDepositTime = Date.now();
-                }
-            } else { // withdrawal
-                updates.balance = userData.balance - request.amount;
-                updates.lastWithdrawalTime = Date.now();
-            }
+        if (userData.transactions.some(t => t.id === transactionId && t.status === 'pending')) {
+            userFound = userData;
+            userDocId = userDoc.id;
+            break;
         }
-        
-        batch.update(userRef, updates);
-        await batch.commit();
-        
-        // Handle post-approval logic like level up and referral bonus
-        if(newStatus === 'approved' && type === 'deposit') {
-            const postApprovalUserSnap = await getDoc(userRef);
-            const postApprovalUserData = postApprovalUserSnap.data() as User;
+    }
 
-            // Check for level up
-            const oldLevel = userData.level;
-            let newLevel = oldLevel;
-            const sortedLevels = Object.keys(levels).map(Number).sort((a,b) => b-a);
-            for (const levelKey of sortedLevels) {
-                if (levelKey === 0) continue;
+    if (!userFound || !userDocId) {
+        toast({ title: "Error", description: "Transaction not found or already processed.", variant: "destructive" });
+        return;
+    }
+
+    const userRef = doc(db, "users", userDocId);
+    const request = userFound.transactions.find(tx => tx.id === transactionId)!;
+
+    const description = `${type.charAt(0).toUpperCase() + type.slice(1)} of ${request.amount} USDT ${newStatus}.`;
+    const updatedTransactions = userFound.transactions.map(tx =>
+        tx.id === transactionId ? { ...tx, status: newStatus, description } : tx
+    );
+    
+    const batch = writeBatch(db);
+    const updates: any = { transactions: updatedTransactions };
+
+    if (newStatus === 'approved') {
+        if (type === 'deposit') {
+            updates.balance = userFound.balance + request.amount;
+            if (!userFound.firstDepositTime) {
+                updates.firstDepositTime = Date.now();
+            }
+        } else { // withdrawal
+            updates.balance = userFound.balance - request.amount;
+            updates.lastWithdrawalTime = Date.now();
+        }
+    }
+    
+    batch.update(userRef, updates);
+    await batch.commit();
+    
+    // Post-approval logic
+    if (newStatus === 'approved' && type === 'deposit') {
+        const postApprovalUserSnap = await getDoc(userRef);
+        const postApprovalUserData = postApprovalUserSnap.data() as User;
+
+        const oldLevel = userFound.level;
+        let newLevel = oldLevel;
+        const sortedLevels = Object.keys(levels).map(Number).sort((a, b) => b - a);
+        for (const levelKey of sortedLevels) {
+            if (levelKey > newLevel) { // Only check for promotion
                 const levelDetails = levels[levelKey];
                 if (postApprovalUserData.balance >= levelDetails.minBalance && postApprovalUserData.directReferrals >= levelDetails.directReferrals) {
                     newLevel = levelKey;
                     break;
                 }
             }
-            if (newLevel > oldLevel) {
-                 await updateDoc(userRef, { level: newLevel });
-                 await addTransaction(userData.id, { type: 'level_up', amount: newLevel, status: 'info', description: `Promoted to Level ${newLevel}` });
-            }
-
-            // Check for referral bonus on first deposit
-            const isFirstDeposit = !userData.firstDepositTime;
-            if (isFirstDeposit && referralBonusSettings.isEnabled && request.amount >= referralBonusSettings.minDeposit && userData.referredBy && userData.referredBy !== ADMIN_REFERRAL_CODE) {
-                const referrerRef = doc(db, "users", userData.referredBy);
-                const referrerSnap = await getDoc(referrerRef);
-                if(referrerSnap.exists()) {
-                    const referrerData = referrerSnap.data() as User;
-                    const bonusAmount = referralBonusSettings.bonusAmount;
-                    await updateDoc(referrerRef, {
-                        balance: referrerData.balance + bonusAmount,
-                        directReferrals: referrerData.directReferrals + 1,
-                        referredUsers: referrerData.referredUsers.map(u => u.email === userData.email ? { ...u, isActivated: true } : u)
-                    });
-                    await addTransaction(referrerData.id, {
-                        type: 'referral_bonus',
-                        amount: bonusAmount,
-                        status: 'credited',
-                        description: `You received a ${bonusAmount} USDT bonus for activating ${userData.email}!`
-                    });
-                }
-            }
         }
 
-        toast({ title: "Success", description: `${type} request has been ${newStatus}.` });
-        fetchAllPendingRequests(); // Refresh admin list
-    };
+        if (newLevel > oldLevel) {
+            await updateDoc(userRef, { level: newLevel });
+            await addTransaction(userDocId, { id: generateTxnId(), type: 'level_up', amount: newLevel, status: 'info', description: `Promoted to Level ${newLevel}` });
+        }
+
+        const isFirstDeposit = !userFound.firstDepositTime;
+        if (isFirstDeposit && referralBonusSettings.isEnabled && request.amount >= referralBonusSettings.minDeposit && userFound.referredBy && userFound.referredBy !== ADMIN_REFERRAL_CODE) {
+            const referrerRef = doc(db, "users", userFound.referredBy);
+            const referrerSnap = await getDoc(referrerRef);
+            if (referrerSnap.exists()) {
+                const referrerData = referrerSnap.data() as User;
+                const bonusAmount = referralBonusSettings.bonusAmount;
+                await updateDoc(referrerRef, {
+                    balance: referrerData.balance + bonusAmount,
+                    directReferrals: (referrerData.directReferrals || 0) + 1,
+                    referredUsers: referrerData.referredUsers.map(u => u.email === postApprovalUserData.email ? { ...u, isActivated: true } : u)
+                });
+                await addTransaction(referrerData.id, {
+                    id: generateTxnId(),
+                    type: 'referral_bonus',
+                    amount: bonusAmount,
+                    status: 'credited',
+                    description: `You received a ${bonusAmount} USDT bonus for activating ${postApprovalUserData.email}!`
+                });
+            }
+        }
+    }
+
+    toast({ title: "Success", description: `${type} request has been ${newStatus}.` });
+    fetchAllPendingRequests(); // Refresh admin list
+  };
     
     const approveDeposit = (transactionId: string) => processRequest(transactionId, 'approved', 'deposit');
     const declineDeposit = (transactionId: string) => processRequest(transactionId, 'declined', 'deposit');
@@ -418,17 +411,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
     }
 
-    const newRequest: Omit<Transaction, 'id' | 'userId'> = {
-        type: 'withdrawal',
+    const newRequest = {
+        id: generateTxnId(),
+        type: 'withdrawal' as 'withdrawal',
         amount,
-        status: 'pending',
-        timestamp: Date.now(),
+        status: 'pending' as 'pending',
         walletAddress: currentUser.primaryWithdrawalAddress,
         description: `User requested a withdrawal of ${amount} USDT.`
     };
     
     await addTransaction(currentUser.id, newRequest);
-    setCurrentUser(prev => prev ? { ...prev, transactions: [ ...prev.transactions, {...newRequest, id: 'temp', userId: prev.id} ]} : null);
+    setCurrentUser(prev => prev ? { ...prev, transactions: [ ...prev.transactions, {...newRequest, userId: prev.id, timestamp: Date.now()} ]} : null);
     toast({ title: "Success", description: "Withdrawal request submitted." });
   };
   
@@ -459,6 +452,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
       await updateDoc(userDocRef, { balance: newBalance });
       await addTransaction(userId, {
+          id: generateTxnId(),
           type: 'admin_adjusted',
           amount: amountDifference,
           status: 'completed',
@@ -477,6 +471,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
       await updateDoc(userDocRef, { level: level });
       await addTransaction(userId, {
+          id: generateTxnId(),
           type: 'level_up',
           amount: level,
           status: 'info',
@@ -510,6 +505,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const userDocRef = doc(db, "users", userId);
       await updateDoc(userDocRef, { primaryWithdrawalAddress: newAddress });
       await addTransaction(userId, {
+          id: generateTxnId(),
           type: 'admin_adjusted',
           amount: 0,
           status: 'info',
@@ -696,6 +692,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 lastInterestCreditTime: now
             });
             await addTransaction(currentUser.id, {
+                id: generateTxnId(),
                 type: 'interest_credit',
                 amount: interestAmount,
                 status: 'credited',
@@ -772,4 +769,5 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
+    
     
