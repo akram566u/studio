@@ -4,16 +4,16 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
-// IMPORTANT: Replace these placeholder values with the configuration
-// from your new Firebase project.
 const firebaseConfig = {
-  "projectId": "REPLACE_WITH_YOUR_PROJECT_ID",
-  "appId": "REPLACE_WITH_YOUR_APP_ID",
-  "storageBucket": "REPLACE_WITH_YOUR_STORAGE_BUCKET",
-  "apiKey": "REPLACE_WITH_YOUR_API_KEY",
-  "authDomain": "REPLACE_WITH_YOUR_AUTH_DOMAIN",
-  "messagingSenderId": "REPLACE_WITH_YOUR_MESSAGING_SENDER_ID"
+  apiKey: "AIzaSyCLJyWdCtjzJLPiVw9Aj0Uw16yhSxJfhS0",
+  authDomain: "staking-hub-3.firebaseapp.com",
+  projectId: "staking-hub-3",
+  storageBucket: "staking-hub-3.firebasestorage.app",
+  messagingSenderId: "1068308590899",
+  appId: "1:1068308590899:web:99866ad07a5a8e10f88e46",
+  measurementId: "G-PLZJDQ6SCZ"
 };
+
 
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
