@@ -1,3 +1,4 @@
+
 "use client";
 import React, { useState, useContext } from 'react';
 import { GlassPanel } from '@/components/ui/GlassPanel';
@@ -11,16 +12,23 @@ interface AuthFormProps {
   setView: React.Dispatch<React.SetStateAction<View>>;
 }
 
-export const SignUpForm: React.FC<AuthFormProps> = ({ setView }) => {
+interface SignUpFormProps extends AuthFormProps {
+  setEmailForVerification: (email: string) => void;
+}
+
+export const SignUpForm: React.FC<SignUpFormProps> = ({ setView, setEmailForVerification }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [referral, setReferral] = useState('');
   const context = useContext(AppContext);
   
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    context?.signUp(email, password, referral);
-    setView('signin');
+    const success = await context?.signUp(email, password, referral);
+    if (success) {
+      setEmailForVerification(email);
+      setView('verify_email');
+    }
   };
 
   return (

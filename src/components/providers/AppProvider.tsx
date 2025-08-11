@@ -5,7 +5,7 @@ import React, { createContext, useState, useEffect, ReactNode, useCallback } fro
 import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
+import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification } from "firebase/auth";
 import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks } from '@/lib/types';
 import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels, initialReferralBonusSettings, initialRechargeAddresses, initialAppLinks } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
@@ -20,7 +20,7 @@ export interface AppContextType {
   isAdmin: boolean;
   signIn: (email: string, pass: string) => void;
   signOut: () => void;
-  signUp: (email: string, pass: string, referral: string) => void;
+  signUp: (email: string, pass: string, referral: string) => Promise<boolean>;
   updateWithdrawalAddress: (address: string) => void;
   deleteWithdrawalAddress: () => void;
   websiteTitle: string;
@@ -124,7 +124,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             setLoading(false);
         } else {
             setIsAdmin(false);
-            fetchUserData(user);
+            if (user.emailVerified) {
+                fetchUserData(user);
+            } else {
+                // User is signed in but email is not verified
+                setCurrentUser(null);
+                setLoading(false);
+            }
         }
       } else {
         setCurrentUser(null);
@@ -151,23 +157,33 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const signIn = async (email: string, pass: string) => {
     try {
       if (email === ADMIN_EMAIL && pass === ADMIN_PASSWORD) {
-        // Sign in to a dummy admin account or handle admin logic
         await signInWithEmailAndPassword(auth, email, pass);
         toast({ title: "Admin signed in successfully!" });
         return;
       }
-      await signInWithEmailAndPassword(auth, email, pass);
+
+      const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+      if (!userCredential.user.emailVerified) {
+        await firebaseSignOut(auth);
+        toast({ 
+          title: "Email Not Verified", 
+          description: "Please check your inbox and click the verification link before signing in.", 
+          variant: "destructive" 
+        });
+        return;
+      }
       toast({ title: "Signed in successfully!" });
+
     } catch (error) {
       console.error("Sign in error:", error);
-      toast({ title: "Error", description: "Invalid credentials.", variant: "destructive" });
+      toast({ title: "Error", description: "Invalid credentials or email not verified.", variant: "destructive" });
     }
   };
   
-  const signUp = async (email: string, pass: string, referral: string) => {
+  const signUp = async (email: string, pass: string, referral: string): Promise<boolean> => {
     if(!email || !pass || !referral) {
         toast({ title: "Error", description: "Please fill all fields.", variant: "destructive"});
-        return;
+        return false;
     }
 
     try {
@@ -178,7 +194,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const emailQuerySnapshot = await getDocs(emailQuery);
         if (!emailQuerySnapshot.empty) {
             toast({ title: "Error", description: "User with this email already exists.", variant: "destructive"});
-            return;
+            return false;
         }
 
         // Check for referrer
@@ -189,12 +205,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         
         if (referralQuerySnapshot.empty && referral !== ADMIN_REFERRAL_CODE) {
             toast({ title: "Error", description: "Invalid referral code.", variant: "destructive"});
-            return;
+            return false;
         }
         
         // Create user in Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
         const newUserAuth = userCredential.user;
+
+        // Send verification email
+        await sendEmailVerification(newUserAuth);
 
         const newUser: User = {
             id: newUserAuth.uid,
@@ -220,7 +239,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             type: 'account_created',
             amount: 0,
             status: 'completed',
-            description: `Account created successfully. Referred by ${referral}.`,
+            description: `Account created successfully. Referred by ${referral}. Awaiting email verification.`,
         });
 
         // Update referrer if one exists
@@ -238,11 +257,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             });
         }
         
-        toast({ title: "Account created successfully!", description: "You can now sign in." });
+        toast({ title: "Verification Email Sent!", description: "Please check your inbox to activate your account." });
+        return true;
 
     } catch (error) {
         console.error("Sign up error:", error);
         toast({ title: "Error", description: "Could not create account.", variant: "destructive" });
+        return false;
     }
   };
   
@@ -819,7 +840,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             
             // Re-fetch user data to update UI
             const updatedUserDoc = await getDoc(userDocRef);
-            setCurrentUser(updatedUserDoc.data() as User);
+            if (updatedUserDoc.exists()) {
+                setCurrentUser({ id: updatedUserDoc.id, ...updatedUserDoc.data() } as User);
+            }
 
             toast({ title: "Interest Credited!", description: `You earned ${interestAmount.toFixed(4)} USDT.`});
           }
@@ -856,7 +879,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     adminHistory,
     submitDepositRequest,
     approveDeposit,
-    declineDeposit,
+declineDeposit,
     submitWithdrawalRequest,
     approveWithdrawal,
     declineWithdrawal,
