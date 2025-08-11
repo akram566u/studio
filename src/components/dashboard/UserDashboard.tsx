@@ -272,33 +272,36 @@ const WithdrawalCountdownInfo = () => {
     useEffect(() => {
         if (!context) return;
         const { currentUser, restrictionMessages } = context;
+        // Find the active withdrawal hold message, if any
         const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
-        if (currentUser && currentUser.firstDepositTime && currentUser.level > 0 && holdMsg) {
-          const RESTRICTION_DAYS = holdMsg.durationDays || 45;
-          const restrictionEndTime = currentUser.firstDepositTime + (RESTRICTION_DAYS * 24 * 60 * 60 * 1000);
+        
+        // A hold is only active if the message exists, is enabled, has a duration > 0, and user has deposited.
+        if (currentUser && currentUser.firstDepositTime && currentUser.level > 0 && holdMsg && (holdMsg.durationDays || 0) > 0) {
+            const RESTRICTION_DAYS = holdMsg.durationDays || 0;
+            const restrictionEndTime = currentUser.firstDepositTime + (RESTRICTION_DAYS * 24 * 60 * 60 * 1000);
           
-          const timer = setInterval(() => {
-            const now = new Date().getTime();
-            const distance = restrictionEndTime - now;
-    
-            if (distance <= 0) {
-              setIsWithdrawalLocked(false);
-              setWithdrawalCountdown('Withdrawals Unlocked');
-              clearInterval(timer);
-              return;
-            }
-    
-            setIsWithdrawalLocked(true);
-            const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-            setWithdrawalCountdown(`${days}d ${hours}h ${minutes}m ${seconds}s`);
-    
-          }, 1000);
-          return () => clearInterval(timer);
-    
+            const timer = setInterval(() => {
+                const now = new Date().getTime();
+                const distance = restrictionEndTime - now;
+        
+                if (distance <= 0) {
+                    setIsWithdrawalLocked(false);
+                    setWithdrawalCountdown('Withdrawals Unlocked');
+                    clearInterval(timer);
+                    return;
+                }
+        
+                setIsWithdrawalLocked(true);
+                const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+                setWithdrawalCountdown(`${days}d ${hours}h ${minutes}m ${seconds}s`);
+        
+            }, 1000);
+            return () => clearInterval(timer);
         } else if (currentUser) {
+            // Withdrawal is locked if level is 0, otherwise it's unlocked.
             setIsWithdrawalLocked(currentUser.level === 0);
             setWithdrawalCountdown('');
         }
@@ -306,6 +309,7 @@ const WithdrawalCountdownInfo = () => {
 
     return { isWithdrawalLocked, withdrawalCountdown };
 };
+
 
 const WithdrawPanel = () => {
     const context = useContext(AppContext);
@@ -319,11 +323,21 @@ const WithdrawPanel = () => {
     const currentLevelDetails = levels[currentUser.level];
 
     const handleSubmitWithdrawal = () => {
-        if (isWithdrawalLocked && currentUser.level > 0) {
+        if (isWithdrawalLocked) {
+            // If locked due to level 0
+            if (currentUser.level === 0) {
+                 toast({ 
+                    title: "Withdrawal Locked", 
+                    description: `You must reach level 1 to withdraw.`, 
+                    variant: "destructive" 
+                });
+                return;
+            }
+            // If locked due to time hold
             const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
             if(holdMsg) {
                 const message = holdMsg.message
-                    .replace('{durationDays}', holdMsg.durationDays?.toString() || '45')
+                    .replace('{durationDays}', (holdMsg.durationDays || 0).toString())
                     .replace('{countdown}', withdrawalCountdown);
                 toast({ 
                     title: "Withdrawal Locked", 
@@ -333,14 +347,7 @@ const WithdrawPanel = () => {
             }
             return;
         }
-        if (currentUser.level === 0) {
-            toast({ 
-                title: "Withdrawal Locked", 
-                description: `You must reach level 1 to withdraw.`, 
-                variant: "destructive" 
-            });
-            return;
-        }
+
         const amount = parseFloat(withdrawalAmount);
         if (isNaN(amount) || amount <= 0) {
             toast({ title: "Error", description: "Please enter a valid withdrawal amount.", variant: "destructive" });

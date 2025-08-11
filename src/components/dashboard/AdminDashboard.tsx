@@ -798,7 +798,14 @@ const AdminDashboard = () => {
                                 {localRestrictions.map(r => (
                                     <div key={r.id} className="bg-black/20 p-4 rounded-lg space-y-2">
                                         <div className="flex justify-between items-center">
-                                            <h4 className="font-bold text-lg text-yellow-300">{r.title}</h4>
+                                            <Label htmlFor={`restriction-active-${r.id}`} className="flex items-center gap-2 text-base font-bold text-yellow-300">
+                                                <Switch
+                                                    id={`restriction-active-${r.id}`}
+                                                    checked={r.isActive}
+                                                    onCheckedChange={checked => handleRestrictionChange(r.id, 'isActive', checked)}
+                                                />
+                                                {r.title}
+                                            </Label>
                                             <Button variant="destructive" size="sm" onClick={() => deleteRestrictionMessage(r.id)}>Delete</Button>
                                         </div>
                                         <div>
