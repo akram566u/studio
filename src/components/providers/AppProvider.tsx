@@ -62,7 +62,7 @@ export interface AppContextType {
   setActive3DTheme: (theme: BackgroundTheme) => void;
   rechargeAddresses: RechargeAddress[];
   addRechargeAddress: () => void;
-  updateRechargeAddress: (id: string, updates: Partial<RechargeAddress>) => void;
+  updateRechargeAddress: (id: string, updates: RechargeAddress) => void;
   deleteRechargeAddress: (id: string) => void;
   forgotPassword: (email: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
@@ -695,8 +695,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       };
       updateFirestoreSettings({ rechargeAddresses: [...rechargeAddresses, newAddress] });
     };
-    const updateRechargeAddress = (id: string, updates: Partial<RechargeAddress>) => {
-      const newAddresses = rechargeAddresses.map(addr => addr.id === id ? { ...addr, ...updates } : addr);
+    const updateRechargeAddress = (id: string, updates: RechargeAddress) => {
+      let newAddresses;
+      // If the address is being activated, deactivate all others.
+      if (updates.isActive) {
+        newAddresses = rechargeAddresses.map(addr => 
+          addr.id === id ? { ...updates } : { ...addr, isActive: false }
+        );
+      } else {
+        newAddresses = rechargeAddresses.map(addr => 
+          addr.id === id ? { ...updates } : addr
+        );
+      }
       updateFirestoreSettings({ rechargeAddresses: newAddresses });
     };
     const deleteRechargeAddress = (id: string) => {

@@ -197,7 +197,6 @@ const AdminDashboard = () => {
     const handleRechargeAddressChange = (id: string, field: keyof RechargeAddress, value: any) => {
         setLocalRechargeAddresses(prev => prev.map(addr => {
             if (addr.id === id) {
-                // If activating this one, we prepare to deactivate others in the save function
                 return { ...addr, [field]: value };
             }
             return addr;
@@ -207,15 +206,7 @@ const AdminDashboard = () => {
     const handleSaveRechargeAddress = (id: string) => {
         const addressToUpdate = localRechargeAddresses.find(addr => addr.id === id);
         if (addressToUpdate) {
-            if(addressToUpdate.isActive) {
-                // When one is activated, all others must be deactivated.
-                const updatedAddresses = localRechargeAddresses.map(addr =>
-                    addr.id === id ? { ...addr, isActive: true } : { ...addr, isActive: false }
-                );
-                context.updateRechargeAddress(id, { rechargeAddresses: updatedAddresses });
-            } else {
-                context.updateRechargeAddress(id, { rechargeAddresses: localRechargeAddresses });
-            }
+            context.updateRechargeAddress(id, addressToUpdate);
         }
     };
 
