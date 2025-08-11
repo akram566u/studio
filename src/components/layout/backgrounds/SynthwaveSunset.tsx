@@ -17,9 +17,9 @@ const SynthwaveSunset = () => {
     const init = () => {
       try {
         if (!canvasRef.current) return false;
-        const webglContext = canvasRef.current.getContext('webgl') || canvasRef.current.getContext('experimental-webgl');
-        if (!webglContext) {
-          console.warn("WebGL is not supported in this environment.");
+        const webgl2Context = canvasRef.current.getContext('webgl2');
+        if (!webgl2Context) {
+          console.warn("WebGL 2 is not supported in this environment.");
           return false;
         }
 
@@ -28,7 +28,7 @@ const SynthwaveSunset = () => {
         camera.position.set(0, 5, 20);
         camera.lookAt(0, 0, 0);
 
-        renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current!, alpha: true, antialias: true, context: webglContext });
+        renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current!, alpha: true, antialias: true, context: webgl2Context });
       } catch (e) {
         console.error("Failed to initialize WebGL for SynthwaveSunset", e);
         return false;
@@ -86,7 +86,7 @@ const SynthwaveSunset = () => {
     }
 
     return () => {
-      window.cancelAnimationFrame(animationFrameId);
+      if(animationFrameId) window.cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', onWindowResize);
       renderer?.dispose();
       grid?.geometry.dispose();
