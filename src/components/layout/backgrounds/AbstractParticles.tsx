@@ -18,11 +18,17 @@ const AbstractParticles = () => {
     let animationFrameId: number;
 
     const init = () => {
-      scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-      camera.position.z = 300;
+      try {
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 300;
 
-      renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current!, alpha: true, antialias: true });
+        renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current!, alpha: true, antialias: true });
+      } catch (e) {
+        console.error("Failed to initialize WebGL for AbstractParticles", e);
+        return false;
+      }
+      
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setPixelRatio(window.devicePixelRatio);
 
@@ -65,6 +71,7 @@ const AbstractParticles = () => {
 
       document.addEventListener('mousemove', onDocumentMouseMove, false);
       window.addEventListener('resize', onWindowResize, false);
+      return true;
     };
 
     const animate = () => {
@@ -96,16 +103,17 @@ const AbstractParticles = () => {
       mouseY = event.clientY - windowHalfY;
     };
 
-    init();
-    animate();
+    if (init()) {
+      animate();
+    }
 
     return () => {
       window.cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', onWindowResize);
       document.removeEventListener('mousemove', onDocumentMouseMove);
-      renderer.dispose();
-      particles.geometry.dispose();
-      (particles.material as THREE.Material).dispose();
+      renderer?.dispose();
+      particles?.geometry.dispose();
+      (particles?.material as THREE.Material)?.dispose();
     };
   }, []);
 

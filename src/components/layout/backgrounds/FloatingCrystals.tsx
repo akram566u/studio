@@ -18,9 +18,15 @@ const FloatingCrystals = () => {
     let animationFrameId: number;
 
     const init = () => {
-      scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-      renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current!, alpha: true, antialias: true });
+      try {
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current!, alpha: true, antialias: true });
+      } catch (e) {
+        console.error("Failed to initialize WebGL for FloatingCrystals", e);
+        return false;
+      }
+
 
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setPixelRatio(window.devicePixelRatio);
@@ -91,6 +97,7 @@ const FloatingCrystals = () => {
 
       document.addEventListener('mousemove', onDocumentMouseMove, false);
       window.addEventListener('resize', onWindowResize, false);
+      return true;
     };
 
     const animate = () => {
@@ -123,14 +130,15 @@ const FloatingCrystals = () => {
       mouseY = event.clientY - windowHalfY;
     };
 
-    init();
-    animate();
+    if (init()) {
+      animate();
+    }
 
     return () => {
       window.cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', onWindowResize);
       document.removeEventListener('mousemove', onDocumentMouseMove);
-      renderer.dispose();
+      renderer?.dispose();
       objects.forEach(obj => {
         obj.geometry.dispose();
         if (Array.isArray(obj.material)) {
