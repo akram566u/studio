@@ -4,13 +4,15 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
+// IMPORTANT: Replace these placeholder values with the configuration
+// from your new Firebase project.
 const firebaseConfig = {
-  "projectId": "staking-glass-0",
-  "appId": "1:966692134036:web:74c4f2a70e73bfe76ea881",
-  "storageBucket": "staking-glass-0.firebasestorage.app",
-  "apiKey": "AIzaSyCwT5IFEx49sJJ4l5vBsasUTlUUDcgwG_Q",
-  "authDomain": "staking-glass-0.firebaseapp.com",
-  "messagingSenderId": "966692134036"
+  "projectId": "REPLACE_WITH_YOUR_PROJECT_ID",
+  "appId": "REPLACE_WITH_YOUR_APP_ID",
+  "storageBucket": "REPLACE_WITH_YOUR_STORAGE_BUCKET",
+  "apiKey": "REPLACE_WITH_YOUR_API_KEY",
+  "authDomain": "REPLACE_WITH_YOUR_AUTH_DOMAIN",
+  "messagingSenderId": "REPLACE_WITH_YOUR_MESSAGING_SENDER_ID"
 };
 
 // Initialize Firebase
