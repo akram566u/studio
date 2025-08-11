@@ -274,7 +274,7 @@ const WithdrawalCountdownInfo = () => {
         const { currentUser, restrictionMessages } = context;
         if (!currentUser) return;
         
-        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
+        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive && (m.durationDays || 0) > 0);
         const holdDurationDays = holdMsg?.durationDays || 0;
         
         // Base case: Locked if level 0
@@ -635,24 +635,34 @@ const UserDashboard = () => {
     Custom: ({ panel }: { panel: DashboardPanel }) => <CustomPanel panel={panel} />,
   };
   
-  const visiblePanels = dashboardPanels.filter(p => p.isVisible).sort((a, b) => {
-    const order = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p10', 'p8', 'p9', 'p11'];
-    const aIndex = order.indexOf(a.id);
-    const bIndex = order.indexOf(b.id);
-    // If an id is not in the order array, push it to the end.
-    if (aIndex === -1) return 1;
-    if (bIndex === -1) return -1;
-    return aIndex - bIndex;
-  });
+  const visiblePanels = dashboardPanels.filter(p => p.isVisible);
 
-  const leftColumnPanels = visiblePanels.slice(0, 4);
-  const middleColumnPanels = visiblePanels.slice(4, 7);
-  const rightColumnPanels = visiblePanels.slice(7);
+  const panelOrder = {
+      left: ['p1', 'p2', 'p3', 'p4'],
+      middle: ['p5', 'p6', 'p7'],
+      right: ['p10', 'p8', 'p9', 'p11'],
+  };
+
+  const getPanelsForColumn = (column: 'left' | 'middle' | 'right') => {
+      const columnPanelIds = panelOrder[column];
+      return visiblePanels
+          .filter(p => columnPanelIds.includes(p.id))
+          .sort((a, b) => columnPanelIds.indexOf(a.id) - columnPanelIds.indexOf(b.id));
+  };
+  
+  const leftColumnPanels = getPanelsForColumn('left');
+  const middleColumnPanels = getPanelsForColumn('middle');
+  const rightColumnPanels = getPanelsForColumn('right');
+
 
   const renderPanel = (panel: DashboardPanel) => {
     const Component = panelComponentMap[panel.componentKey];
     if (!Component) return null;
-    return <Component key={panel.id} panel={panel} />;
+    // For custom panels, we need to pass the panel data itself
+    if (panel.componentKey === 'Custom') {
+        return <Component key={panel.id} panel={panel} />;
+    }
+    return <Component key={panel.id} />;
   };
 
   return (
@@ -678,3 +688,5 @@ const UserDashboard = () => {
 };
 
 export default UserDashboard;
+
+    
