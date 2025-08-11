@@ -32,7 +32,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { DashboardPanel, Notice, Transaction } from '@/lib/types';
+import { DashboardPanel, Level, Notice, Transaction } from '@/lib/types';
 import { Label } from '../ui/label';
 
 
@@ -272,7 +272,11 @@ const WithdrawalCountdownInfo = () => {
     useEffect(() => {
         if (!context) return;
         const { currentUser, restrictionMessages } = context;
-        if (!currentUser) return;
+        if (!currentUser || !currentUser.firstDepositTime) {
+            setIsWithdrawalLocked(false);
+            setWithdrawalCountdown('');
+            return;
+        }
         
         const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive && (m.durationDays || 0) > 0);
         
@@ -291,30 +295,28 @@ const WithdrawalCountdownInfo = () => {
             return;
         }
 
-        const lastWithdrawalTime = currentUser.lastWithdrawalTime;
-        if (lastWithdrawalTime) {
-            const restrictionEndTime = lastWithdrawalTime + (holdDurationDays * 24 * 60 * 60 * 1000);
-            if (Date.now() < restrictionEndTime) {
-                const timer = setInterval(() => {
-                    const now = new Date().getTime();
-                    const distance = restrictionEndTime - now;
-            
-                    if (distance <= 0) {
-                        setIsWithdrawalLocked(false);
-                        setWithdrawalCountdown('Withdrawals Unlocked');
-                        clearInterval(timer);
-                        return;
-                    }
-            
-                    setIsWithdrawalLocked(true);
-                    const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-                    const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                    const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-                    const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-                    setWithdrawalCountdown(`${days}d ${hours}h ${minutes}m ${seconds}s`);
-                }, 1000);
-                return () => clearInterval(timer);
-            }
+        const firstDepositTime = currentUser.firstDepositTime;
+        const restrictionEndTime = firstDepositTime + (holdDurationDays * 24 * 60 * 60 * 1000);
+        if (Date.now() < restrictionEndTime) {
+            const timer = setInterval(() => {
+                const now = new Date().getTime();
+                const distance = restrictionEndTime - now;
+        
+                if (distance <= 0) {
+                    setIsWithdrawalLocked(false);
+                    setWithdrawalCountdown('Withdrawals Unlocked');
+                    clearInterval(timer);
+                    return;
+                }
+        
+                setIsWithdrawalLocked(true);
+                const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+                setWithdrawalCountdown(`${days}d ${hours}h ${minutes}m ${seconds}s`);
+            }, 1000);
+            return () => clearInterval(timer);
         }
         
         // If no hold is active, withdrawals are unlocked.
@@ -343,9 +345,9 @@ const WithdrawPanel = () => {
             toast({ title: "Request Pending", description: "You already have a withdrawal request being processed.", variant: "destructive" });
             return;
         }
-
-        if (isWithdrawalLocked) {
-            const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive && (m.durationDays || 0) > 0);
+        
+        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive && (m.durationDays || 0) > 0);
+        if (holdMsg && isWithdrawalLocked && currentUser.firstDepositTime) {
             const message = holdMsg 
                 ? holdMsg.message.replace('{durationDays}', (holdMsg.durationDays || 0).toString()).replace('{countdown}', withdrawalCountdown)
                 : withdrawalCountdown; // Fallback to countdown message (e.g., for Level 0)
@@ -355,12 +357,15 @@ const WithdrawPanel = () => {
         }
 
         const monthlyLimitMsg = restrictionMessages.find(m => m.type === 'withdrawal_monthly_limit' && m.isActive);
-        if (monthlyLimitMsg && currentUser.lastWithdrawalTime) {
-            const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-            if (Date.now() - currentUser.lastWithdrawalTime < thirtyDays) {
-                toast({ title: "Withdrawal Limit", description: monthlyLimitMsg.message, variant: "destructive" });
-                return;
-            }
+        const monthlyWithdrawalsAllowed = currentLevelDetails?.monthlyWithdrawals || 0;
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        const recentWithdrawals = currentUser.transactions.filter(
+            tx => tx.type === 'withdrawal' && tx.status === 'approved' && tx.timestamp > thirtyDaysAgo
+        ).length;
+
+        if (monthlyLimitMsg && recentWithdrawals >= monthlyWithdrawalsAllowed) {
+            toast({ title: "Withdrawal Limit", description: `You have reached your monthly withdrawal limit of ${monthlyWithdrawalsAllowed}.`, variant: "destructive" });
+            return;
         }
         
         const amount = parseFloat(withdrawalAmount);
@@ -540,7 +545,7 @@ const ReferralNetworkPanel = ({ currentUser }: { currentUser: any }) => {
     );
 }
 
-const LevelDetailsPanel = ({ levels }: { levels: any }) => (
+const LevelDetailsPanel = ({ levels }: { levels: { [key: number]: Level } }) => (
     <Card className="card-gradient-green-cyan p-6">
         <h3 className="text-xl font-semibold mb-4 text-blue-300">Staking Level Details</h3>
         <ScrollArea className="h-96 custom-scrollbar">
@@ -551,16 +556,18 @@ const LevelDetailsPanel = ({ levels }: { levels: any }) => (
                 <TableHead className="text-white">Min Balance</TableHead>
                 <TableHead className="text-white">Referrals</TableHead>
                 <TableHead className="text-white">Withdraw Limit</TableHead>
+                <TableHead className="text-white">Monthly Withdrawals</TableHead>
                 <TableHead className="text-white">Interest</TableHead>
             </TableRow>
             </TableHeader>
             <TableBody>
-            {Object.entries(levels).map(([level, details]: [string, any]) => (
+            {Object.entries(levels).map(([level, details]) => (
                 <TableRow key={level}>
                 <TableCell><LevelBadge level={parseInt(level, 10)} /></TableCell>
                 <TableCell className="font-mono text-green-300">{details.minBalance} USDT</TableCell>
                 <TableCell className="font-mono text-blue-300">{details.directReferrals}</TableCell>
                 <TableCell className="font-mono text-yellow-300">{details.withdrawalLimit} USDT</TableCell>
+                <TableCell className="font-mono text-orange-300">{details.monthlyWithdrawals}</TableCell>
                 <TableCell className="font-mono text-purple-300">{(details.interest * 100).toFixed(2)}%</TableCell>
                 </TableRow>
             ))}

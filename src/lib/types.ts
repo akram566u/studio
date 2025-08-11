@@ -76,6 +76,7 @@ export interface Level {
   minBalance: number;
   directReferrals: number;
   withdrawalLimit: number;
+  monthlyWithdrawals: number;
 }
 
 export interface Levels {

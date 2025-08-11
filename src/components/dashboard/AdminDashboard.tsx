@@ -735,6 +735,10 @@ const AdminDashboard = () => {
                                             <Label htmlFor={`level-${level}-withdrawalLimit`}>Withdrawal Limit</Label>
                                             <Input id={`level-${level}-withdrawalLimit`} type="number" value={details.withdrawalLimit} onChange={(e) => handleLevelChange(level, 'withdrawalLimit', e.target.value)} />
                                         </div>
+                                        <div className="col-span-2">
+                                            <Label htmlFor={`level-${level}-monthlyWithdrawals`}>Monthly Withdrawals</Label>
+                                            <Input id={`level-${level}-monthlyWithdrawals`} type="number" value={details.monthlyWithdrawals} onChange={(e) => handleLevelChange(level, 'monthlyWithdrawals', e.target.value)} />
+                                        </div>
                                     </div>
                                     <div className='flex gap-2'>
                                         <Button onClick={() => handleSaveLevel(level)} className="mt-4">Save Level {level}</Button>

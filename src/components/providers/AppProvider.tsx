@@ -507,7 +507,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
     
-    const withdrawalLimit = levels[currentUser.level].withdrawalLimit;
+    const currentLevelDetails = levels[currentUser.level];
+    if (!currentLevelDetails) {
+        toast({ title: "Error", description: `Invalid level configuration.`, variant: "destructive" });
+        return;
+    }
+
+    const withdrawalLimit = currentLevelDetails.withdrawalLimit;
     if (amount > withdrawalLimit) {
         toast({ title: "Error", description: `Withdrawal amount exceeds your level limit of ${withdrawalLimit} USDT.`, variant: "destructive" });
         return;
@@ -519,19 +525,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive && (m.durationDays || 0) > 0);
-    if (holdMsg && currentUser.lastWithdrawalTime) {
+    if (holdMsg && currentUser.firstDepositTime) {
       const holdDuration = (holdMsg.durationDays || 0) * 24 * 60 * 60 * 1000;
-      if (Date.now() - currentUser.lastWithdrawalTime < holdDuration) {
-        toast({ title: "Error", description: `Please wait for the ${holdMsg.durationDays}-day holding period to end.`, variant: "destructive" });
+      if (Date.now() - currentUser.firstDepositTime < holdDuration) {
+        toast({ title: "Error", description: `Please wait for the initial ${holdMsg.durationDays}-day holding period to end.`, variant: "destructive" });
         return;
       }
     }
 
     const monthlyLimitMsg = restrictionMessages.find(m => m.type === 'withdrawal_monthly_limit' && m.isActive);
-    if(monthlyLimitMsg && currentUser.lastWithdrawalTime) {
-        const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-        if (Date.now() - currentUser.lastWithdrawalTime < thirtyDays) {
-            toast({ title: "Error", description: monthlyLimitMsg.message, variant: "destructive" });
+    if(monthlyLimitMsg) {
+        const monthlyWithdrawalsAllowed = currentLevelDetails.monthlyWithdrawals;
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        const recentWithdrawals = currentUser.transactions.filter(
+            tx => tx.type === 'withdrawal' && tx.status === 'approved' && tx.timestamp > thirtyDaysAgo
+        ).length;
+
+        if (recentWithdrawals >= monthlyWithdrawalsAllowed) {
+            toast({ title: "Withdrawal Limit", description: `You have reached your monthly withdrawal limit of ${monthlyWithdrawalsAllowed}.`, variant: "destructive" });
             return;
         }
     }
@@ -682,6 +693,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             minBalance: 20000,
             directReferrals: 60,
             withdrawalLimit: 1500,
+            monthlyWithdrawals: 2,
         };
         const updatedLevels = { ...levels, [newLevelKey]: newLevelData };
         updateFirestoreSettings({ levels: updatedLevels });

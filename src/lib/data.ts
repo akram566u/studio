@@ -18,12 +18,12 @@ export const initialAppSettings: AppSettings = {
     websiteTitle: 'Staking Hub',
 
     levels: {
-        0: { interest: 0, minBalance: 0, directReferrals: 0, withdrawalLimit: 0 },
-        1: { interest: 0.018, minBalance: 100, directReferrals: 0, withdrawalLimit: 150 },
-        2: { interest: 0.03, minBalance: 800, directReferrals: 8, withdrawalLimit: 300 },
-        3: { interest: 0.05, minBalance: 2000, directReferrals: 20, withdrawalLimit: 500 },
-        4: { interest: 0.07, minBalance: 8000, directReferrals: 36, withdrawalLimit: 750 },
-        5: { interest: 0.09, minBalance: 16000, directReferrals: 55, withdrawalLimit: 1000 },
+        0: { interest: 0, minBalance: 0, directReferrals: 0, withdrawalLimit: 0, monthlyWithdrawals: 0 },
+        1: { interest: 0.018, minBalance: 100, directReferrals: 0, withdrawalLimit: 150, monthlyWithdrawals: 1 },
+        2: { interest: 0.03, minBalance: 800, directReferrals: 8, withdrawalLimit: 300, monthlyWithdrawals: 1 },
+        3: { interest: 0.05, minBalance: 2000, directReferrals: 20, withdrawalLimit: 500, monthlyWithdrawals: 1 },
+        4: { interest: 0.07, minBalance: 8000, directReferrals: 36, withdrawalLimit: 750, monthlyWithdrawals: 2 },
+        5: { interest: 0.09, minBalance: 16000, directReferrals: 55, withdrawalLimit: 1000, monthlyWithdrawals: 2 },
     },
 
     rechargeAddresses: [
