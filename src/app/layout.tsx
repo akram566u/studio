@@ -3,6 +3,7 @@ import './globals.css';
 import { AppProvider } from '@/components/providers/AppProvider';
 import StakingApp from '@/components/StakingApp';
 import { Toaster } from "@/components/ui/toaster"
+import Script from 'next/script';
 
 export const metadata: Metadata = {
   title: 'Staking Hub',
@@ -29,6 +30,21 @@ export default function RootLayout({
           {children}
           <Toaster />
         </AppProvider>
+        
+        {/* Add the Tawk.to script here */}
+        <Script id="tawk-to-script" strategy="lazyOnload">
+          {`
+            var Tawk_API=Tawk_API||{}, Tawk_LoadStart=new Date();
+            (function(){
+            var s1=document.createElement("script"),s0=document.getElementsByTagName("script")[0];
+            s1.async=true;
+            s1.src='https://embed.tawk.to/YOUR_PROPERTY_ID/YOUR_WIDGET_ID';
+            s1.charset='UTF-8';
+            s1.setAttribute('crossorigin','*');
+            s0.parentNode.insertBefore(s1,s0);
+            })();
+          `}
+        </Script>
       </body>
     </html>
   );
