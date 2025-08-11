@@ -1,8 +1,4 @@
 
-
-
-
-
 export type BackgroundTheme = 'FloatingCrystals' | 'CosmicNebula' | 'DigitalMatrix' | 'AbstractParticles' | 'SynthwaveSunset';
 
 export interface RechargeAddress {
@@ -10,6 +6,11 @@ export interface RechargeAddress {
   address: string;
   network: string;
   isActive: boolean;
+}
+
+export interface AppLinks {
+    downloadUrl: string;
+    supportUrl: string;
 }
 
 export interface Transaction {
@@ -98,7 +99,7 @@ export interface StartScreenSettings {
 export interface DashboardPanel {
   id: string;
   title: string;
-  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom';
+  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword';
   isVisible: boolean;
   isDeletable: boolean;
   isEditable: boolean;

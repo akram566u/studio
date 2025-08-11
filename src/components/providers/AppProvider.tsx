@@ -5,9 +5,9 @@ import React, { createContext, useState, useEffect, ReactNode, useCallback } fro
 import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress } from '@/lib/types';
-import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels, initialReferralBonusSettings, initialRechargeAddresses } from '@/lib/data';
+import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks } from '@/lib/types';
+import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels, initialReferralBonusSettings, initialRechargeAddresses, initialAppLinks } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
 
@@ -62,6 +62,10 @@ export interface AppContextType {
   addRechargeAddress: () => void;
   updateRechargeAddress: (id: string, updates: Partial<RechargeAddress>) => void;
   deleteRechargeAddress: (id: string) => void;
+  forgotPassword: (email: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
+  appLinks: AppLinks;
+  updateAppLinks: (links: AppLinks) => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -83,6 +87,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [referralBonusSettings, setReferralBonusSettings] = useState<ReferralBonusSettings>(initialReferralBonusSettings);
   const [active3DTheme, setActive3DTheme] = useState<BackgroundTheme>('FloatingCrystals');
   const [rechargeAddresses, setRechargeAddresses] = useState<RechargeAddress[]>(initialRechargeAddresses);
+  const [appLinks, setAppLinks] = useState<AppLinks>(initialAppLinks);
+
 
   // Admin-specific state
   const [allPendingRequests, setAllPendingRequests] = useState<AugmentedTransaction[]>([]);
@@ -299,11 +305,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   
   const processRequest = async (transactionId: string, newStatus: 'approved' | 'declined', type: 'deposit' | 'withdrawal') => {
     const usersRef = collection(db, "users");
-    const q = query(usersRef, where("transactions", "array-contains", { id: transactionId, status: 'pending' }));
-    
-    // Firestore cannot query for partial matches in array objects directly.
-    // The correct way is to fetch all users and filter client-side, which is what we were doing.
-    // The bug was in how the transaction was identified. Let's fix that.
     
     const allUsersSnap = await getDocs(usersRef);
     let userFound: User | null = null;
@@ -312,7 +313,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     for (const userDoc of allUsersSnap.docs) {
         const userData = userDoc.data() as User;
-        const req = userData.transactions.find(t => t.id === transactionId && t.status === 'pending');
+        const req = userData.transactions.find(t => t.id === transactionId && t.status === 'pending' && t.type === type);
         if (req) {
             userFound = userData;
             userDocId = userDoc.id;
@@ -322,7 +323,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
 
     if (!userFound || !userDocId || !originalRequest) {
-        toast({ title: "Error", description: "Transaction not found or already processed.", variant: "destructive" });
+        toast({ title: "Error", description: `Transaction not found or already processed. ID: ${transactionId}`, variant: "destructive" });
         return;
     }
 
@@ -335,6 +336,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     const batch = writeBatch(db);
     const updates: any = { transactions: updatedTransactions };
+    const adminTxDescription = `Admin ${newStatus} ${type} of ${originalRequest.amount} for user ${userFound.email}`;
+
 
     if (newStatus === 'approved') {
         if (type === 'deposit') {
@@ -350,6 +353,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     batch.update(userRef, updates);
     await batch.commit();
+
+    // Log this action to admin history by adding a transaction to the admin's (or a global log's) doc
+    // For simplicity, I'm logging it back to the user with a special type.
+    await addTransaction(userDocId, {
+      id: generateTxnId(),
+      type: 'admin_adjusted',
+      amount: originalRequest.amount,
+      status: newStatus,
+      description: adminTxDescription,
+    });
     
     // Post-approval logic
     if (newStatus === 'approved' && type === 'deposit') {
@@ -666,6 +679,47 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       toast({ title: 'Address Deleted', description: 'The recharge address has been removed.' });
     };
 
+    const forgotPassword = async (email: string) => {
+        try {
+            const q = query(collection(db, "users"), where("email", "==", email));
+            const querySnapshot = await getDocs(q);
+            if (querySnapshot.empty) {
+                toast({ title: "Error", description: "No user found with this email address.", variant: "destructive" });
+                return;
+            }
+            await sendPasswordResetEmail(auth, email);
+            toast({ title: "Success", description: "A password reset link has been sent to your email." });
+        } catch (error) {
+            console.error("Forgot password error:", error);
+            toast({ title: "Error", description: "Failed to send password reset email.", variant: "destructive" });
+        }
+    };
+    
+    const changePassword = async (currentPassword: string, newPassword: string): Promise<boolean> => {
+        const user = auth.currentUser;
+        if (!user || !user.email) {
+            toast({ title: "Error", description: "You are not logged in.", variant: "destructive" });
+            return false;
+        }
+
+        try {
+            const credential = EmailAuthProvider.credential(user.email, currentPassword);
+            await reauthenticateWithCredential(user, credential);
+            await updatePassword(user, newPassword);
+            toast({ title: "Success", description: "Your password has been changed." });
+            return true;
+        } catch (error) {
+            console.error("Change password error:", error);
+            toast({ title: "Error", description: "Failed to change password. Please check your current password.", variant: "destructive" });
+            return false;
+        }
+    };
+    
+    const updateAppLinks = (links: AppLinks) => {
+        setAppLinks(links);
+        toast({ title: "Success", description: "App links have been updated." });
+    };
+
     const fetchAllPendingRequests = useCallback(async () => {
         const usersRef = collection(db, "users");
         const allUsersSnap = await getDocs(usersRef);
@@ -831,6 +885,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     addRechargeAddress,
     updateRechargeAddress,
     deleteRechargeAddress,
+    forgotPassword,
+    changePassword,
+    appLinks,
+    updateAppLinks,
   };
 
   return (

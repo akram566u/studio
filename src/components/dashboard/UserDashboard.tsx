@@ -8,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -32,6 +32,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { DashboardPanel, Transaction } from '@/lib/types';
+import { Label } from '../ui/label';
 
 
 // Individual Panel Components
@@ -429,6 +430,54 @@ const ManageAddressPanel = () => {
     );
 }
 
+const ChangePasswordPanel = () => {
+    const context = useContext(AppContext);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newPassword !== confirmPassword) {
+            context?.toast({ title: "Error", description: "New passwords do not match.", variant: "destructive" });
+            return;
+        }
+        if (newPassword.length < 6) {
+            context?.toast({ title: "Error", description: "Password must be at least 6 characters.", variant: "destructive" });
+            return;
+        }
+
+        const success = await context?.changePassword(currentPassword, newPassword);
+        if (success) {
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+        }
+    };
+
+    return (
+        <Card className="card-gradient-yellow-pink p-6">
+            <h3 className="text-xl font-semibold mb-3 text-blue-300">Change Password</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <Label htmlFor="currentPassword">Current Password</Label>
+                    <Input id="currentPassword" type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required />
+                </div>
+                <div>
+                    <Label htmlFor="newPassword">New Password</Label>
+                    <Input id="newPassword" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
+                </div>
+                <div>
+                    <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                    <Input id="confirmPassword" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
+                </div>
+                <Button type="submit" className="w-full"><KeyRound /> Update Password</Button>
+            </form>
+        </Card>
+    );
+};
+
+
 const ReferralNetworkPanel = ({ currentUser }: { currentUser: any }) => {
     const { toast } = useToast();
     const copyToClipboard = (text: string) => {
@@ -532,11 +581,16 @@ const UserDashboard = () => {
     ManageAddress: () => <ManageAddressPanel />,
     ReferralNetwork: () => <ReferralNetworkPanel currentUser={currentUser} />,
     LevelDetails: () => <LevelDetailsPanel levels={levels} />,
+    ChangePassword: () => <ChangePasswordPanel />,
     Custom: ({ panel }: { panel: DashboardPanel }) => <CustomPanel panel={panel} />,
   };
   
   // This creates three arrays of panels for the three columns
-  const visiblePanels = dashboardPanels.filter(p => p.isVisible);
+  const visiblePanels = dashboardPanels.filter(p => p.isVisible).sort((a, b) => {
+    const order = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p10', 'p8', 'p9'];
+    return order.indexOf(a.id) - order.indexOf(b.id);
+  });
+
   const leftColumnPanels = visiblePanels.slice(0, 4);
   const middleColumnPanels = visiblePanels.slice(4, 7);
   const rightColumnPanels = visiblePanels.slice(7);
@@ -570,5 +624,3 @@ const UserDashboard = () => {
 };
 
 export default UserDashboard;
-
-    

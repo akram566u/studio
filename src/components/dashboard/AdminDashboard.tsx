@@ -1,5 +1,4 @@
 
-
 "use client";
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext, UserForAdmin } from '@/components/providers/AppProvider';
@@ -13,7 +12,7 @@ import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BackgroundTheme, DashboardPanel, Level, RechargeAddress, ReferralBonusSettings, RestrictionMessage, Transaction } from '@/lib/types';
+import { AppLinks, BackgroundTheme, DashboardPanel, Level, RechargeAddress, ReferralBonusSettings, RestrictionMessage, Transaction } from '@/lib/types';
 import { Textarea } from '../ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -45,6 +44,8 @@ const AdminDashboard = () => {
   const [localPanels, setLocalPanels] = useState<DashboardPanel[]>([]);
   const [localReferralBonusSettings, setLocalReferralBonusSettings] = useState<ReferralBonusSettings>({ isEnabled: true, bonusAmount: 5, minDeposit: 100 });
   const [localRechargeAddresses, setLocalRechargeAddresses] = useState<RechargeAddress[]>([]);
+  const [localAppLinks, setLocalAppLinks] = useState<AppLinks>({ downloadUrl: '', supportUrl: '' });
+
   
   // State for editing a user
   const [editingEmail, setEditingEmail] = useState('');
@@ -64,9 +65,9 @@ const AdminDashboard = () => {
     if(context?.dashboardPanels) setLocalPanels(context.dashboardPanels);
     if(context?.referralBonusSettings) setLocalReferralBonusSettings(context.referralBonusSettings);
     if(context?.rechargeAddresses) setLocalRechargeAddresses(context.rechargeAddresses);
+    if(context?.appLinks) setLocalAppLinks(context.appLinks);
 
-
-  }, [context?.websiteTitle, context?.startScreenContent, context?.levels, context?.restrictionMessages, context?.dashboardPanels, context?.referralBonusSettings, context?.rechargeAddresses]);
+  }, [context?.websiteTitle, context?.startScreenContent, context?.levels, context?.restrictionMessages, context?.dashboardPanels, context?.referralBonusSettings, context?.rechargeAddresses, context?.appLinks]);
   
   useEffect(() => {
       if (searchedUser) {
@@ -113,6 +114,7 @@ const AdminDashboard = () => {
       addRechargeAddress,
       updateRechargeAddress,
       deleteRechargeAddress,
+      updateAppLinks,
   } = context;
 
   const handleUserSearch = async (e: React.FormEvent) => {
@@ -261,6 +263,14 @@ const AdminDashboard = () => {
             default: return <CheckCircle className="text-gray-400 size-6" />;
         }
     }
+    
+    const handleAppLinksChange = (field: keyof AppLinks, value: string) => {
+        setLocalAppLinks(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleSaveAppLinks = () => {
+        updateAppLinks(localAppLinks);
+    };
 
   return (
     <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
@@ -611,6 +621,33 @@ const AdminDashboard = () => {
                         <div className="mt-4">
                             <Button onClick={addRechargeAddress} variant="secondary">Add New Address</Button>
                         </div>
+                    </CardContent>
+                </Card>
+                <Card className="card-gradient-blue-purple p-6">
+                    <CardHeader>
+                        <CardTitle className="text-purple-300">Manage App Links</CardTitle>
+                        <CardDescription>Set the URLs for the download and support buttons.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div>
+                            <Label htmlFor="downloadUrl">Download App URL</Label>
+                            <Input
+                                id="downloadUrl"
+                                value={localAppLinks.downloadUrl}
+                                onChange={(e) => handleAppLinksChange('downloadUrl', e.target.value)}
+                                placeholder="https://example.com/app.apk"
+                            />
+                        </div>
+                        <div>
+                            <Label htmlFor="supportUrl">Customer Support URL</Label>
+                            <Input
+                                id="supportUrl"
+                                value={localAppLinks.supportUrl}
+                                onChange={(e) => handleAppLinksChange('supportUrl', e.target.value)}
+                                placeholder="https://t.me/your-support-channel"
+                            />
+                        </div>
+                        <Button onClick={handleSaveAppLinks}>Save App Links</Button>
                     </CardContent>
                 </Card>
                 <Card className="card-gradient-orange-red p-6">
