@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ShieldCheck, ShieldX, Trash2, UserCog } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, KeyRound, ShieldCheck, ShieldX, Trash2, UserCog } from 'lucide-react';
 
 const AdminDashboard = () => {
   const context = useContext(AppContext);
@@ -115,6 +115,7 @@ const AdminDashboard = () => {
       updateRechargeAddress,
       deleteRechargeAddress,
       updateAppLinks,
+      forgotPassword,
   } = context;
 
   const handleUserSearch = async (e: React.FormEvent) => {
@@ -270,6 +271,11 @@ const AdminDashboard = () => {
 
     const handleSaveAppLinks = () => {
         updateAppLinks(localAppLinks);
+    };
+
+    const handlePasswordReset = () => {
+        if (!searchedUser?.email) return;
+        forgotPassword(searchedUser.email);
     };
 
   return (
@@ -475,6 +481,14 @@ const AdminDashboard = () => {
                                         </div>
                                         <p className="text-xs text-gray-400">Sets the user's balance to this exact amount.</p>
                                     </div>
+                                </div>
+                                <hr className="border-white/10" />
+                                <div className="space-y-2">
+                                    <Label>Password Management</Label>
+                                    <Button onClick={handlePasswordReset} variant="destructive" className="w-full">
+                                        <KeyRound /> Send Password Reset Email
+                                    </Button>
+                                    <p className="text-xs text-gray-400">This will send a secure link to the user's email for them to reset their own password.</p>
                                 </div>
                            </div>
                         )}
