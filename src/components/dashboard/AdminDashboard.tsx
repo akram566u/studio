@@ -165,7 +165,6 @@ const AdminDashboard = () => {
 
   const handleLevelChange = (level: number, field: keyof Level, value: string) => {
     const numericValue = Number(value);
-    // Allow setting to 0, but not NaN
     if (!isNaN(numericValue)) {
         setLocalLevels(prev => ({
             ...prev,

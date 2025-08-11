@@ -280,7 +280,7 @@ const WithdrawalCountdownInfo = () => {
         
         const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive && (m.durationDays || 0) > 0);
         
-        if (!holdMsg || (holdMsg.durationDays || 0) <= 0) {
+        if (!holdMsg) {
             setIsWithdrawalLocked(false);
             setWithdrawalCountdown('');
             return;
@@ -288,15 +288,14 @@ const WithdrawalCountdownInfo = () => {
 
         const holdDurationDays = holdMsg.durationDays || 0;
         
-        // Base case: Locked if level 0
-        if (currentUser.level === 0) {
-            setIsWithdrawalLocked(true);
-            setWithdrawalCountdown('Reach Level 1 to withdraw.');
+        if (holdDurationDays === 0) {
+            setIsWithdrawalLocked(false);
+            setWithdrawalCountdown('');
             return;
         }
 
-        const firstDepositTime = currentUser.firstDepositTime;
-        const restrictionEndTime = firstDepositTime + (holdDurationDays * 24 * 60 * 60 * 1000);
+        const lastActionTime = currentUser.lastWithdrawalTime || currentUser.firstDepositTime;
+        const restrictionEndTime = lastActionTime + (holdDurationDays * 24 * 60 * 60 * 1000);
         if (Date.now() < restrictionEndTime) {
             const timer = setInterval(() => {
                 const now = new Date().getTime();
@@ -319,7 +318,6 @@ const WithdrawalCountdownInfo = () => {
             return () => clearInterval(timer);
         }
         
-        // If no hold is active, withdrawals are unlocked.
         setIsWithdrawalLocked(false);
         setWithdrawalCountdown('');
 
@@ -347,25 +345,24 @@ const WithdrawPanel = () => {
         }
         
         const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive && (m.durationDays || 0) > 0);
-        if (holdMsg && isWithdrawalLocked && currentUser.firstDepositTime) {
-            const message = holdMsg 
-                ? holdMsg.message.replace('{durationDays}', (holdMsg.durationDays || 0).toString()).replace('{countdown}', withdrawalCountdown)
-                : withdrawalCountdown; // Fallback to countdown message (e.g., for Level 0)
-            
+        if (holdMsg && isWithdrawalLocked) {
+             const message = holdMsg.message.replace('{durationDays}', (holdMsg.durationDays || 0).toString()).replace('{countdown}', withdrawalCountdown)
             toast({ title: "Withdrawal Locked", description: message, variant: "destructive" });
             return;
         }
 
         const monthlyLimitMsg = restrictionMessages.find(m => m.type === 'withdrawal_monthly_limit' && m.isActive);
-        const monthlyWithdrawalsAllowed = currentLevelDetails?.monthlyWithdrawals || 0;
-        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-        const recentWithdrawals = currentUser.transactions.filter(
-            tx => tx.type === 'withdrawal' && tx.status === 'approved' && tx.timestamp > thirtyDaysAgo
-        ).length;
+        if (monthlyLimitMsg) {
+            const monthlyWithdrawalsAllowed = currentLevelDetails?.monthlyWithdrawals || 0;
+            const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+            const recentWithdrawals = currentUser.transactions.filter(
+                tx => tx.type === 'withdrawal' && tx.status === 'approved' && tx.timestamp > thirtyDaysAgo
+            ).length;
 
-        if (monthlyLimitMsg && recentWithdrawals >= monthlyWithdrawalsAllowed) {
-            toast({ title: "Withdrawal Limit", description: `You have reached your monthly withdrawal limit of ${monthlyWithdrawalsAllowed}.`, variant: "destructive" });
-            return;
+            if (recentWithdrawals >= monthlyWithdrawalsAllowed) {
+                toast({ title: "Withdrawal Limit", description: monthlyLimitMsg.message.replace('{limit}', monthlyWithdrawalsAllowed.toString()), variant: "destructive" });
+                return;
+            }
         }
         
         const amount = parseFloat(withdrawalAmount);
@@ -396,11 +393,11 @@ const WithdrawPanel = () => {
                 className="mb-4 text-xl"
                 value={withdrawalAmount}
                 onChange={e => setWithdrawalAmount(e.target.value)}
-                disabled={hasPendingWithdrawal}
+                disabled={hasPendingWithdrawal || isWithdrawalLocked}
             />
             <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-xl bg-gray-800/50" />
-            <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} disabled={hasPendingWithdrawal}>
-                {hasPendingWithdrawal ? <><Ban/>Request Pending</> : <><Send/>Request Withdrawal</>}
+            <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} disabled={hasPendingWithdrawal || isWithdrawalLocked}>
+                {hasPendingWithdrawal ? <><Ban/>Request Pending</> : isWithdrawalLocked ? <><Ban/> {withdrawalCountdown}</> : <><Send/>Request Withdrawal</>}
             </Button>
         </Card>
     )
@@ -584,7 +581,7 @@ const NoticesPanel = () => {
     const activeNotices = context.notices.filter(n => n.isActive);
 
     if (activeNotices.length === 0) {
-        return null; // Don't render the panel if there are no active notices
+        return null;
     }
 
     return (
