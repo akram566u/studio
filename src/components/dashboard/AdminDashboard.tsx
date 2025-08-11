@@ -286,7 +286,7 @@ const AdminDashboard = () => {
         setLocalFabSettings(prev => ({ ...prev, [field]: value }));
     };
     
-    const handleFabItemChange = (id: string, field: keyof FloatingActionItem, value: string) => {
+    const handleFabItemChange = (id: string, field: keyof FloatingActionItem, value: string | undefined) => {
         setLocalFabSettings(prev => ({
             ...prev,
             items: prev.items.map(item => item.id === id ? { ...item, [field]: value } : item)
@@ -298,7 +298,8 @@ const AdminDashboard = () => {
             id: `fab_${Date.now()}`,
             label: 'New Action',
             icon: 'PlusCircle',
-            action: 'forgot_password'
+            action: 'custom_link',
+            url: '#'
         };
         setLocalFabSettings(prev => ({ ...prev, items: [...prev.items, newItem] }));
     };
@@ -616,7 +617,7 @@ const AdminDashboard = () => {
                                                 onChange={e => handleFabItemChange(item.id, 'label', e.target.value)}
                                             />
                                             <Input 
-                                                placeholder="Icon Name" 
+                                                placeholder="Icon Name (lucide-react)" 
                                                 value={item.icon} 
                                                 onChange={e => handleFabItemChange(item.id, 'icon', e.target.value)}
                                             />
@@ -631,9 +632,19 @@ const AdminDashboard = () => {
                                                         <SelectItem value="forgot_password">Forgot Password</SelectItem>
                                                         <SelectItem value="download_app">Download App</SelectItem>
                                                         <SelectItem value="customer_support">Customer Support</SelectItem>
+                                                        <SelectItem value="custom_link">Custom Link</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             </div>
+                                            {item.action === 'custom_link' && (
+                                                <div className="col-span-2">
+                                                    <Input
+                                                        placeholder="https://example.com"
+                                                        value={item.url}
+                                                        onChange={e => handleFabItemChange(item.id, 'url', e.target.value)}
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
                                         <Button variant="destructive" size="icon" onClick={() => handleDeleteFabItem(item.id)}>
                                             <Trash2 />

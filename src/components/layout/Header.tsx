@@ -1,3 +1,4 @@
+
 "use client";
 import React, { useContext } from 'react';
 import { AppContext } from '@/components/providers/AppProvider';
@@ -19,9 +20,20 @@ const Header: React.FC<HeaderProps> = ({ setView }) => {
     setView('start');
   };
 
+  const handleTitleClick = () => {
+      if (!currentUser && !isAdmin) {
+          setView('start');
+      }
+  }
+
   return (
     <header className="glass-panel p-4 shadow-lg flex justify-between items-center z-10 w-full">
-      <h1 className="text-3xl font-bold text-blue-400">{websiteTitle}</h1>
+      <h1 
+        className={`text-3xl font-bold text-blue-400 ${!currentUser && !isAdmin ? 'cursor-pointer' : ''}`}
+        onClick={handleTitleClick}
+      >
+        {websiteTitle}
+      </h1>
       <nav className="space-x-4">
         {!currentUser && !isAdmin ? (
           <>

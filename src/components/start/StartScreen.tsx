@@ -12,6 +12,7 @@ import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { FloatingActionItem } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 interface StartScreenProps {
   setView: React.Dispatch<React.SetStateAction<View>>;
@@ -63,40 +64,50 @@ const DraggableFloatingActionButton = ({ onOpenChange, setMockupView }: { onOpen
     const context = useContext(AppContext);
     const { toast } = useToast();
     const fabRef = useRef<HTMLDivElement>(null);
-    const [position, setPosition] = useState({ x: window.innerWidth - 80, y: window.innerHeight - 80 });
-    const [isDragging, setIsDragging] = useState(false);
+    const [position, setPosition] = useState({ x: window.innerWidth - 100, y: window.innerHeight - 100 });
+    const isDragging = useRef(false);
     const offset = useRef({ x: 0, y: 0 });
-
-    useEffect(() => {
-        const handleMouseMove = (e: MouseEvent) => {
-            if (isDragging && fabRef.current) {
-                setPosition({
-                    x: Math.max(0, Math.min(window.innerWidth - fabRef.current!.offsetWidth, e.clientX - offset.current.x)),
-                    y: Math.max(0, Math.min(window.innerHeight - fabRef.current!.offsetHeight, e.clientY - offset.current.y))
-                });
-            }
-        };
-
-        const handleMouseUp = () => setIsDragging(false);
-
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        };
-    }, [isDragging]);
 
     const handleMouseDown = (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
         if (fabRef.current) {
+            isDragging.current = true;
             offset.current = {
-                x: e.clientX - fabRef.current.offsetLeft,
-                y: e.clientY - fabRef.current.offsetTop,
+                x: e.clientX - fabRef.current.getBoundingClientRect().left,
+                y: e.clientY - fabRef.current.getBoundingClientRect().top,
             };
-            setIsDragging(true);
+            fabRef.current.style.cursor = 'grabbing';
+        }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+        if (isDragging.current && fabRef.current) {
+            e.preventDefault();
+            const newX = e.clientX - offset.current.x;
+            const newY = e.clientY - offset.current.y;
+            setPosition({
+                x: Math.max(0, Math.min(window.innerWidth - fabRef.current.offsetWidth, newX)),
+                y: Math.max(0, Math.min(window.innerHeight - fabRef.current.offsetHeight, newY))
+            });
         }
     };
     
+    const handleMouseUp = () => {
+        isDragging.current = false;
+        if (fabRef.current) {
+            fabRef.current.style.cursor = 'grab';
+        }
+    };
+    
+    useEffect(() => {
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+        
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, []);
+
     if (!context || !context.floatingActionButtonSettings.isEnabled) {
         return null;
     }
@@ -130,6 +141,13 @@ const DraggableFloatingActionButton = ({ onOpenChange, setMockupView }: { onOpen
                     toast({ title: "Not Available", description: "Support link has not been configured.", variant: "destructive" });
                 }
                 break;
+            case 'custom_link':
+                if (item.url && item.url !== '#') {
+                    window.open(item.url, '_blank');
+                } else {
+                    toast({ title: "Not Available", description: "Custom link has not been configured.", variant: "destructive" });
+                }
+                break;
         }
     };
 
@@ -138,7 +156,7 @@ const DraggableFloatingActionButton = ({ onOpenChange, setMockupView }: { onOpen
     return (
         <div
             ref={fabRef}
-            className="fixed z-50"
+            className="fixed z-50 cursor-grab"
             style={{ top: `${position.y}px`, left: `${position.x}px` }}
         >
             <Popover>
@@ -146,7 +164,7 @@ const DraggableFloatingActionButton = ({ onOpenChange, setMockupView }: { onOpen
                     <Button 
                         variant="outline" 
                         size="icon" 
-                        className="rounded-full size-16 bg-accent/50 backdrop-blur-sm border-accent/20 hover:bg-accent/80 cursor-grab active:cursor-grabbing"
+                        className="rounded-full size-16 bg-accent/50 backdrop-blur-sm border-accent/20 hover:bg-accent/80 active:cursor-grabbing"
                         onMouseDown={handleMouseDown}
                     >
                         <MainIcon className="size-8" />
@@ -182,12 +200,12 @@ const StartScreen: React.FC<StartScreenProps> = ({ setView }) => {
   const [isForgotPassOpen, setIsForgotPassOpen] = useState(false);
   const [mockupView, setMockupView] = useState<'desktop' | 'mobile'>('desktop');
 
-  const contentWidth = mockupView === 'desktop' ? 'max-w-3xl' : 'max-w-sm';
+  const contentWidth = mockupView === 'desktop' ? 'max-w-4xl' : 'max-w-sm';
 
   return (
     <>
-        <section className="relative text-center flex flex-col items-center justify-center overflow-hidden w-full h-full">
-            <div className={`relative z-10 p-8 glass-panel rounded-lg shadow-xl transition-all duration-300 ${contentWidth}`}>
+        <section className="relative text-center flex flex-col items-center justify-center overflow-hidden w-full h-full p-4">
+            <div className={`relative z-10 p-8 glass-panel rounded-lg shadow-xl transition-all duration-500 w-full ${contentWidth}`}>
                 <h2 className="text-5xl font-extrabold text-white mb-6 animate-pulse">{context?.startScreenContent.title}</h2>
                 <p className="text-xl text-gray-300 mb-8">
                 {context?.startScreenContent.subtitle}
