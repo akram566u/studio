@@ -102,7 +102,7 @@ export interface AdminContent {
 export interface RestrictionMessage {
   id:string;
   title: string;
-  type: 'deposit_no_address' | 'deposit_confirm' | 'withdrawal_hold';
+  type: 'deposit_no_address' | 'deposit_confirm' | 'withdrawal_hold' | 'withdrawal_monthly_limit';
   message: string;
   durationDays?: number; // Optional duration for time-based restrictions
   isActive: boolean;

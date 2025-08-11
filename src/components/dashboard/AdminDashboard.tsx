@@ -850,7 +850,8 @@ const AdminDashboard = () => {
                                                 <SelectContent>
                                                     <SelectItem value="deposit_no_address">Deposit - No Address</SelectItem>
                                                     <SelectItem value="deposit_confirm">Deposit - Confirmation</SelectItem>
-                                                    <SelectItem value="withdrawal_hold">Withdrawal - Hold</SelectItem>
+                                                    <SelectItem value="withdrawal_hold">Withdrawal - Hold Period</SelectItem>
+                                                    <SelectItem value="withdrawal_monthly_limit">Withdrawal - Monthly Limit</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>

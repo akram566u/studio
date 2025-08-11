@@ -68,7 +68,14 @@ export const initialAppSettings: AppSettings = {
             message: 'Please wait for the {durationDays}-day holding period to end. {countdown} remaining',
             durationDays: 45,
             isActive: true,
-        }
+        },
+        {
+            id: 'withdrawal_monthly_1',
+            title: 'Monthly Withdrawal Limit',
+            type: 'withdrawal_monthly_limit',
+            message: 'You can only make one withdrawal request per month.',
+            isActive: true,
+        },
     ],
 
     referralBonusSettings: {
