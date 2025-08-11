@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, GripVertical, KeyRound, ShieldCheck, ShieldX, Trash2, UserCog, Users } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, ShieldCheck, ShieldX, Trash2, UserCog, Users } from 'lucide-react';
 
 const AdminDashboard = () => {
   const context = useContext(AppContext);
@@ -297,6 +297,7 @@ const AdminDashboard = () => {
         updateFloatingActionButtonSettings(localFabSettings);
     };
 
+  const firebaseProjectId = "staking-hub-3";
 
   return (
     <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
@@ -391,7 +392,6 @@ const AdminDashboard = () => {
                     </CardContent>
                 </Card>
 
-
                 <Card className="card-gradient-yellow-pink p-6">
                     <CardHeader>
                         <CardTitle className="text-purple-300">Admin Referred Users</CardTitle>
@@ -416,6 +416,25 @@ const AdminDashboard = () => {
                                 <p className="text-gray-400">No users have signed up with the admin referral code yet.</p>
                             )}
                         </ScrollArea>
+                    </CardContent>
+                </Card>
+                 <Card className="card-gradient-indigo-fuchsia p-6">
+                    <CardHeader>
+                        <CardTitle className="text-purple-300">Firebase Usage &amp; Billing</CardTitle>
+                        <CardDescription>Monitor your project's resource usage directly in the Firebase Console.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <p className="text-sm text-gray-300">
+                           For security reasons, live usage data cannot be displayed here. Please use the links below to view your detailed usage and billing information in the Firebase Console.
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-4">
+                            <a href={`https://console.firebase.google.com/project/${firebaseProjectId}/usage/firestore`} target="_blank" rel="noopener noreferrer" className="w-full">
+                                <Button className="w-full"><ExternalLink /> View Database Usage</Button>
+                            </a>
+                            <a href={`https://console.firebase.google.com/project/${firebaseProjectId}/usage/billing`} target="_blank" rel="noopener noreferrer" className="w-full">
+                                <Button className="w-full"><ExternalLink /> Manage Billing</Button>
+                            </a>
+                        </div>
                     </CardContent>
                 </Card>
             </TabsContent>
@@ -942,3 +961,5 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
+
+    
