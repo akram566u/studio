@@ -9,7 +9,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -66,9 +66,10 @@ const StakingLevelPanel = ({ currentUser, currentLevelDetails }: { currentUser: 
     </Card>
 );
 
-const InterestCountdown = () => {
+const InterestCountdownPanel = () => {
     const context = useContext(AppContext);
     const [interestCountdown, setInterestCountdown] = useState('00h 00m 00s');
+    const [isClaimable, setIsClaimable] = useState(false);
 
     useEffect(() => {
         if (context?.currentUser && context.currentUser.level > 0 && context.currentUser.firstDepositTime) {
@@ -79,10 +80,13 @@ const InterestCountdown = () => {
             const distance = nextCredit - now;
     
             if (distance < 0) {
-              setInterestCountdown('Crediting...');
+              setInterestCountdown('Ready to Claim!');
+              setIsClaimable(true);
+              clearInterval(timer);
               return;
             }
-    
+            
+            setIsClaimable(false);
             const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
             const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
             const seconds = Math.floor((distance % (1000 * 60)) / 1000);
@@ -90,20 +94,32 @@ const InterestCountdown = () => {
           }, 1000);
           return () => clearInterval(timer);
         } else {
-          setInterestCountdown('00h 00m 00s');
+          setInterestCountdown('N/A');
+          setIsClaimable(false);
         }
     }, [context?.currentUser]);
     
-    return <p className="text-5xl font-bold text-purple-400 text-center">{interestCountdown}</p>
+    const handleClaim = () => {
+        if(context && isClaimable) {
+            context.claimDailyInterest();
+        }
+    }
+    
+    return (
+        <Card className="card-gradient-orange-red p-6 text-center">
+            <h3 className="text-xl font-semibold mb-3 text-blue-300">Daily Interest Credit</h3>
+            <p className="text-xl text-gray-200 mb-3">Next credit in:</p>
+            <p className="text-5xl font-bold text-purple-400 mb-4">{interestCountdown}</p>
+            <Button 
+                onClick={handleClaim} 
+                disabled={!isClaimable}
+                className="w-full py-3 text-lg"
+            >
+               {isClaimable ? <><Check/> Claim & Start Timer</> : <><Ban/>Claim</>}
+            </Button>
+        </Card>
+    );
 }
-
-const InterestCreditPanel = () => (
-    <Card className="card-gradient-orange-red p-6">
-        <h3 className="text-xl font-semibold mb-3 text-blue-300">Daily Interest Credit</h3>
-        <p className="text-xl text-gray-200 mb-3">Next credit in:</p>
-        <InterestCountdown />
-    </Card>
-);
 
 const TransactionHistoryPanel = ({ currentUser }: { currentUser: any }) => {
     const getStatusBadge = (status: string) => {
@@ -272,23 +288,22 @@ const WithdrawalCountdownInfo = () => {
     useEffect(() => {
         if (!context) return;
         const { currentUser, restrictionMessages } = context;
-        if (!currentUser || !currentUser.firstDepositTime) {
+        if (!currentUser) {
             setIsWithdrawalLocked(false);
             setWithdrawalCountdown('');
             return;
         }
-        
+
         const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
-        if (!holdMsg || !holdMsg.durationDays || holdMsg.durationDays <= 0) {
+
+        if (!holdMsg || !holdMsg.durationDays || holdMsg.durationDays <= 0 || !currentUser.lastWithdrawalTime) {
             setIsWithdrawalLocked(false);
             setWithdrawalCountdown('');
             return;
         }
 
         const holdDurationDays = holdMsg.durationDays;
-        
-        const lastActionTime = currentUser.lastWithdrawalTime || currentUser.firstDepositTime;
-        const restrictionEndTime = lastActionTime + (holdDurationDays * 24 * 60 * 60 * 1000);
+        const restrictionEndTime = currentUser.lastWithdrawalTime + (holdDurationDays * 24 * 60 * 60 * 1000);
 
         if (Date.now() < restrictionEndTime) {
             const timer = setInterval(() => {
@@ -338,16 +353,16 @@ const WithdrawPanel = () => {
             return;
         }
         
-        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive && (m.durationDays || 0) > 0);
-        if (holdMsg && isWithdrawalLocked) {
+        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
+        if (holdMsg && (holdMsg.durationDays || 0) > 0 && isWithdrawalLocked) {
              const message = holdMsg.message.replace('{durationDays}', (holdMsg.durationDays || 0).toString()).replace('{countdown}', withdrawalCountdown)
             toast({ title: "Withdrawal Locked", description: message, variant: "destructive" });
             return;
         }
 
         const monthlyLimitMsg = restrictionMessages.find(m => m.type === 'withdrawal_monthly_limit' && m.isActive);
-        if (monthlyLimitMsg) {
-            const monthlyWithdrawalsAllowed = currentLevelDetails?.monthlyWithdrawals || 0;
+        if (monthlyLimitMsg && currentLevelDetails) {
+            const monthlyWithdrawalsAllowed = currentLevelDetails.monthlyWithdrawals || 0;
             const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
             const recentWithdrawals = currentUser.transactions.filter(
                 tx => tx.type === 'withdrawal' && tx.status === 'approved' && tx.timestamp > thirtyDaysAgo
@@ -627,7 +642,7 @@ const UserDashboard = () => {
   const panelComponentMap: { [key: string]: React.ComponentType<any> } = {
     UserOverview: () => <UserOverviewPanel currentUser={currentUser} />,
     StakingLevel: () => <StakingLevelPanel currentUser={currentUser} currentLevelDetails={currentLevelDetails} />,
-    InterestCredit: () => <InterestCreditPanel />,
+    InterestCredit: () => <InterestCountdownPanel />,
     TransactionHistory: () => <TransactionHistoryPanel currentUser={currentUser} />,
     Recharge: () => <RechargePanel />,
     Withdraw: () => <WithdrawPanel />,
@@ -641,19 +656,18 @@ const UserDashboard = () => {
   
   const visiblePanels = dashboardPanels.filter(p => p.isVisible);
 
-  const panelOrder = {
-      left: ['p1', 'p2', 'p3', 'p4'],
-      middle: ['p5', 'p6', 'p7'],
-      right: ['p10', 'p8', 'p9', 'p11'],
-  };
+    const getPanelsForColumn = (column: 'left' | 'middle' | 'right') => {
+        const panelIds = {
+            left: ['p1', 'p2', 'p3', 'p4'],
+            middle: ['p5', 'p6', 'p7'],
+            right: ['p10', 'p8', 'p9', 'p11'],
+        };
+        const columnPanelIds = panelIds[column];
+        return visiblePanels
+            .filter(p => columnPanelIds.includes(p.id))
+            .sort((a, b) => columnPanelIds.indexOf(a.id) - columnPanelIds.indexOf(b.id));
+    };
 
-  const getPanelsForColumn = (column: 'left' | 'middle' | 'right') => {
-      const columnPanelIds = panelOrder[column];
-      return visiblePanels
-          .filter(p => columnPanelIds.includes(p.id))
-          .sort((a, b) => columnPanelIds.indexOf(a.id) - columnPanelIds.indexOf(b.id));
-  };
-  
   const leftColumnPanels = getPanelsForColumn('left');
   const middleColumnPanels = getPanelsForColumn('middle');
   const rightColumnPanels = getPanelsForColumn('right');

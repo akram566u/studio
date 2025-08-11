@@ -75,6 +75,7 @@ export interface AppContextType {
   addNotice: () => void;
   updateNotice: (id: string, updates: Partial<Notice>) => void;
   deleteNotice: (id: string) => void;
+  claimDailyInterest: () => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -421,6 +422,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             updates.balance = userFound.balance + originalRequest.amount;
             if (!userFound.firstDepositTime) {
                 updates.firstDepositTime = Date.now();
+                 // On first deposit, set lastInterestCreditTime to now to start the first 24h cycle
+                updates.lastInterestCreditTime = Date.now();
             }
         } else { // withdrawal
             updates.balance = userFound.balance - originalRequest.amount;
@@ -524,25 +527,25 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
 
-    const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive && (m.durationDays || 0) > 0);
-    if (holdMsg && currentUser.firstDepositTime) {
+    const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
+    if (holdMsg && (holdMsg.durationDays || 0) > 0 && currentUser.lastWithdrawalTime) {
       const holdDuration = (holdMsg.durationDays || 0) * 24 * 60 * 60 * 1000;
-      if (Date.now() - currentUser.firstDepositTime < holdDuration) {
-        toast({ title: "Error", description: `Please wait for the initial ${holdMsg.durationDays}-day holding period to end.`, variant: "destructive" });
+      if (Date.now() - currentUser.lastWithdrawalTime < holdDuration) {
+        toast({ title: "Error", description: `Please wait for the ${holdMsg.durationDays}-day withdrawal cooldown period to end.`, variant: "destructive" });
         return;
       }
     }
-
+    
     const monthlyLimitMsg = restrictionMessages.find(m => m.type === 'withdrawal_monthly_limit' && m.isActive);
-    if(monthlyLimitMsg) {
-        const monthlyWithdrawalsAllowed = currentLevelDetails.monthlyWithdrawals;
+    if (monthlyLimitMsg) {
+        const monthlyWithdrawalsAllowed = currentLevelDetails?.monthlyWithdrawals || 0;
         const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
         const recentWithdrawals = currentUser.transactions.filter(
             tx => tx.type === 'withdrawal' && tx.status === 'approved' && tx.timestamp > thirtyDaysAgo
         ).length;
 
         if (recentWithdrawals >= monthlyWithdrawalsAllowed) {
-            toast({ title: "Withdrawal Limit", description: `You have reached your monthly withdrawal limit of ${monthlyWithdrawalsAllowed}.`, variant: "destructive" });
+            toast({ title: "Withdrawal Limit", description: monthlyLimitMsg.message.replace('{limit}', monthlyWithdrawalsAllowed.toString()), variant: "destructive" });
             return;
         }
     }
@@ -882,42 +885,40 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             return () => unsubscribe();
         }
     }, [isAdmin, fetchAllUsersData]);
+    
+    const claimDailyInterest = async () => {
+        if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
+            const now = Date.now();
+            const lastCredit = currentUser.lastInterestCreditTime || currentUser.firstDepositTime;
+            const timeSinceLastCredit = now - lastCredit;
+            const twentyFourHours = 24 * 60 * 60 * 1000;
 
-
-  // Effect for Daily Interest Credit (would be better as a Cloud Function in a real app)
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
-          const now = Date.now();
-          const lastCredit = currentUser.lastInterestCreditTime || currentUser.firstDepositTime;
-          const timeSinceLastCredit = now - lastCredit;
-          const twentyFourHours = 24 * 60 * 60 * 1000;
-
-          if (timeSinceLastCredit >= twentyFourHours) {
-            const interestRate = levels[currentUser.level].interest;
-            const interestAmount = currentUser.balance * interestRate;
-            
-            const userDocRef = doc(db, "users", currentUser.id);
-            await updateDoc(userDocRef, {
-                balance: currentUser.balance + interestAmount,
-                lastInterestCreditTime: now
-            });
-            await addTransaction(currentUser.id, {
-                id: generateTxnId(),
-                type: 'interest_credit',
-                amount: interestAmount,
-                status: 'credited',
-                description: `Daily interest of ${interestAmount.toFixed(4)} USDT credited.`
-            });
-            
-            // No manual refetch needed due to onSnapshot listener.
-            toast({ title: "Interest Credited!", description: `You earned ${interestAmount.toFixed(4)} USDT.`});
-          }
+            if (timeSinceLastCredit >= twentyFourHours) {
+                const interestRate = levels[currentUser.level].interest;
+                const interestAmount = currentUser.balance * interestRate;
+                
+                const userDocRef = doc(db, "users", currentUser.id);
+                await updateDoc(userDocRef, {
+                    balance: currentUser.balance + interestAmount,
+                    lastInterestCreditTime: now
+                });
+                await addTransaction(currentUser.id, {
+                    id: generateTxnId(),
+                    type: 'interest_credit',
+                    amount: interestAmount,
+                    status: 'credited',
+                    description: `Daily interest of ${interestAmount.toFixed(4)} USDT credited.`
+                });
+                
+                // No manual refetch needed due to onSnapshot listener.
+                toast({ title: "Interest Claimed!", description: `You earned ${interestAmount.toFixed(4)} USDT.`});
+            } else {
+                toast({ title: "Not Yet", description: `You can claim your next interest in some time.`});
+            }
+        } else {
+            toast({ title: "Ineligible", description: "You must make a deposit and be at least Level 1 to earn interest.", variant: "destructive" });
         }
-    }, 60000); // Check every minute
-
-    return () => clearInterval(interval);
-  }, [currentUser, levels, addTransaction, toast]);
+    };
 
 
   if (loading) {
@@ -986,6 +987,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     addNotice,
     updateNotice,
     deleteNotice,
+    claimDailyInterest,
   };
 
   return (
@@ -1009,3 +1011,4 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
+
