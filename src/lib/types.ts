@@ -13,7 +13,7 @@ export interface FloatingActionItem {
   id: string;
   label: string;
   icon: string; // lucide-react icon name
-  action: 'switch_view' | 'forgot_password' | 'download_app' | 'customer_support';
+  action: 'switch_view_desktop' | 'switch_view_mobile' | 'forgot_password' | 'download_app' | 'customer_support';
 }
 
 export interface FloatingActionButtonSettings {

@@ -626,7 +626,8 @@ const AdminDashboard = () => {
                                                         <SelectValue placeholder="Select action" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        <SelectItem value="switch_view">Switch View</SelectItem>
+                                                        <SelectItem value="switch_view_desktop">Switch View to Desktop</SelectItem>
+                                                        <SelectItem value="switch_view_mobile">Switch View to Mobile</SelectItem>
                                                         <SelectItem value="forgot_password">Forgot Password</SelectItem>
                                                         <SelectItem value="download_app">Download App</SelectItem>
                                                         <SelectItem value="customer_support">Customer Support</SelectItem>
@@ -860,9 +861,23 @@ const AdminDashboard = () => {
                                         <div className="flex justify-between items-center">
                                             <h4 className="font-bold text-lg text-yellow-300">{panel.title}</h4>
                                             {panel.isDeletable && (
-                                                <Button variant="destructive" size="sm" onClick={() => deleteDashboardPanel(panel.id)}>
-                                                    Delete Panel
-                                                </Button>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button variant="destructive" size="sm">Delete Panel</Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                This will permanently delete the custom panel. This action cannot be undone.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={() => deleteDashboardPanel(panel.id)}>Delete</AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
                                             )}
                                         </div>
                                         <div className="flex items-center space-x-2">

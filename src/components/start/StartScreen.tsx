@@ -1,5 +1,4 @@
 
-
 "use client";
 import React, { useContext, useState, useRef, useEffect } from 'react';
 import { GlassPanel } from '@/components/ui/GlassPanel';
@@ -60,20 +59,21 @@ const ForgotPasswordDialog = ({ open, onOpenChange }: { open: boolean, onOpenCha
     );
 }
 
-const DraggableFloatingActionButton = ({ onOpenChange }: { onOpenChange: (open: boolean) => void }) => {
+const DraggableFloatingActionButton = ({ onOpenChange, setMockupView }: { onOpenChange: (open: boolean) => void, setMockupView: (view: 'desktop' | 'mobile') => void }) => {
     const context = useContext(AppContext);
     const { toast } = useToast();
     const fabRef = useRef<HTMLDivElement>(null);
-    const [position, setPosition] = useState({ x: 20, y: 20 });
+    const [position, setPosition] = useState({ x: window.innerWidth - 80, y: window.innerHeight - 80 });
     const [isDragging, setIsDragging] = useState(false);
+    const offset = useRef({ x: 0, y: 0 });
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             if (isDragging && fabRef.current) {
-                setPosition(prev => ({
-                    x: Math.max(0, Math.min(window.innerWidth - fabRef.current!.offsetWidth, prev.x + e.movementX)),
-                    y: Math.max(0, Math.min(window.innerHeight - fabRef.current!.offsetHeight, prev.y + e.movementY))
-                }));
+                setPosition({
+                    x: Math.max(0, Math.min(window.innerWidth - fabRef.current!.offsetWidth, e.clientX - offset.current.x)),
+                    y: Math.max(0, Math.min(window.innerHeight - fabRef.current!.offsetHeight, e.clientY - offset.current.y))
+                });
             }
         };
 
@@ -87,6 +87,16 @@ const DraggableFloatingActionButton = ({ onOpenChange }: { onOpenChange: (open: 
         };
     }, [isDragging]);
 
+    const handleMouseDown = (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
+        if (fabRef.current) {
+            offset.current = {
+                x: e.clientX - fabRef.current.offsetLeft,
+                y: e.clientY - fabRef.current.offsetTop,
+            };
+            setIsDragging(true);
+        }
+    };
+    
     if (!context || !context.floatingActionButtonSettings.isEnabled) {
         return null;
     }
@@ -95,9 +105,13 @@ const DraggableFloatingActionButton = ({ onOpenChange }: { onOpenChange: (open: 
 
     const handleActionClick = (item: FloatingActionItem) => {
         switch (item.action) {
-            case 'switch_view':
-                toast({ title: "View Switched", description: "Desktop/Mobile view toggled." });
-                // In a real app, you'd implement logic to change the viewport or apply different CSS classes.
+            case 'switch_view_mobile':
+                setMockupView('mobile');
+                toast({ title: "View Switched", description: "Displaying mobile layout." });
+                break;
+            case 'switch_view_desktop':
+                setMockupView('desktop');
+                toast({ title: "View Switched", description: "Displaying desktop layout." });
                 break;
             case 'forgot_password':
                 onOpenChange(true);
@@ -125,7 +139,7 @@ const DraggableFloatingActionButton = ({ onOpenChange }: { onOpenChange: (open: 
         <div
             ref={fabRef}
             className="fixed z-50"
-            style={{ bottom: `${position.y}px`, right: `${position.x}px` }}
+            style={{ top: `${position.y}px`, left: `${position.x}px` }}
         >
             <Popover>
                 <PopoverTrigger asChild>
@@ -133,7 +147,7 @@ const DraggableFloatingActionButton = ({ onOpenChange }: { onOpenChange: (open: 
                         variant="outline" 
                         size="icon" 
                         className="rounded-full size-16 bg-accent/50 backdrop-blur-sm border-accent/20 hover:bg-accent/80 cursor-grab active:cursor-grabbing"
-                        onMouseDown={(e) => { e.preventDefault(); setIsDragging(true); }}
+                        onMouseDown={handleMouseDown}
                     >
                         <MainIcon className="size-8" />
                     </Button>
@@ -166,11 +180,14 @@ const DraggableFloatingActionButton = ({ onOpenChange }: { onOpenChange: (open: 
 const StartScreen: React.FC<StartScreenProps> = ({ setView }) => {
   const context = useContext(AppContext);
   const [isForgotPassOpen, setIsForgotPassOpen] = useState(false);
+  const [mockupView, setMockupView] = useState<'desktop' | 'mobile'>('desktop');
+
+  const contentWidth = mockupView === 'desktop' ? 'max-w-3xl' : 'max-w-sm';
 
   return (
     <>
         <section className="relative text-center flex flex-col items-center justify-center overflow-hidden w-full h-full">
-            <div className="relative z-10 p-8 glass-panel rounded-lg shadow-xl max-w-3xl">
+            <div className={`relative z-10 p-8 glass-panel rounded-lg shadow-xl transition-all duration-300 ${contentWidth}`}>
                 <h2 className="text-5xl font-extrabold text-white mb-6 animate-pulse">{context?.startScreenContent.title}</h2>
                 <p className="text-xl text-gray-300 mb-8">
                 {context?.startScreenContent.subtitle}
@@ -184,7 +201,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ setView }) => {
                 </Button>
             </div>
             
-            <DraggableFloatingActionButton onOpenChange={setIsForgotPassOpen} />
+            <DraggableFloatingActionButton onOpenChange={setIsForgotPassOpen} setMockupView={setMockupView} />
             
         </section>
         <ForgotPasswordDialog open={isForgotPassOpen} onOpenChange={setIsForgotPassOpen} />
