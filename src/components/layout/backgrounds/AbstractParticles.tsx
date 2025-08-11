@@ -19,11 +19,18 @@ const AbstractParticles = () => {
 
     const init = () => {
       try {
+        if (!canvasRef.current) return false;
+        const webglContext = canvasRef.current.getContext('webgl') || canvasRef.current.getContext('experimental-webgl');
+        if (!webglContext) {
+          console.warn("WebGL is not supported in this environment.");
+          return false;
+        }
+
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.z = 300;
 
-        renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current!, alpha: true, antialias: true });
+        renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current!, alpha: true, antialias: true, context: webglContext });
       } catch (e) {
         console.error("Failed to initialize WebGL for AbstractParticles", e);
         return false;

@@ -11,17 +11,24 @@ const SynthwaveSunset = () => {
     if (!canvasRef.current) return;
 
     let scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer;
-    let grid: THREE.LineSegments, sun: THREE.Mesh;
+    let grid: THREE.GridHelper, sun: THREE.Mesh;
     let animationFrameId: number;
 
     const init = () => {
       try {
+        if (!canvasRef.current) return false;
+        const webglContext = canvasRef.current.getContext('webgl') || canvasRef.current.getContext('experimental-webgl');
+        if (!webglContext) {
+          console.warn("WebGL is not supported in this environment.");
+          return false;
+        }
+
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 5, 20);
         camera.lookAt(0, 0, 0);
 
-        renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current!, alpha: true, antialias: true });
+        renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current!, alpha: true, antialias: true, context: webglContext });
       } catch (e) {
         console.error("Failed to initialize WebGL for SynthwaveSunset", e);
         return false;
@@ -36,6 +43,8 @@ const SynthwaveSunset = () => {
       const gridHelper = new THREE.GridHelper(size, divisions, 0xff00ff, 0x00ffff);
       gridHelper.position.y = -10;
       scene.add(gridHelper);
+      grid = gridHelper;
+
 
       // Sun
       const sunGeometry = new THREE.SphereGeometry(10, 32, 32);
@@ -80,8 +89,8 @@ const SynthwaveSunset = () => {
       window.cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', onWindowResize);
       renderer?.dispose();
-      (grid?.geometry as any)?.dispose();
-      (grid?.material as any)?.dispose();
+      grid?.geometry.dispose();
+      (grid?.material as THREE.Material)?.dispose();
       sun?.geometry.dispose();
       (sun?.material as any)?.dispose();
     };
