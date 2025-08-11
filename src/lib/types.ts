@@ -1,4 +1,5 @@
 
+
 export type BackgroundTheme = 'FloatingCrystals' | 'CosmicNebula' | 'DigitalMatrix' | 'AbstractParticles' | 'SynthwaveSunset';
 
 export interface RechargeAddress {
@@ -6,6 +7,18 @@ export interface RechargeAddress {
   address: string;
   network: string;
   isActive: boolean;
+}
+
+export interface FloatingActionItem {
+  id: string;
+  label: string;
+  icon: string; // lucide-react icon name
+  action: 'switch_view' | 'forgot_password' | 'download_app' | 'customer_support';
+}
+
+export interface FloatingActionButtonSettings {
+  isEnabled: boolean;
+  items: FloatingActionItem[];
 }
 
 export interface AppLinks {

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
@@ -6,8 +7,8 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks } from '@/lib/types';
-import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels, initialReferralBonusSettings, initialRechargeAddresses, initialAppLinks } from '@/lib/data';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem } from '@/lib/types';
+import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels, initialReferralBonusSettings, initialRechargeAddresses, initialAppLinks, initialFloatingActionButtonSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
 
@@ -66,6 +67,8 @@ export interface AppContextType {
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
   appLinks: AppLinks;
   updateAppLinks: (links: AppLinks) => void;
+  floatingActionButtonSettings: FloatingActionButtonSettings;
+  updateFloatingActionButtonSettings: (settings: FloatingActionButtonSettings) => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -88,6 +91,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [active3DTheme, setActive3DTheme] = useState<BackgroundTheme>('FloatingCrystals');
   const [rechargeAddresses, setRechargeAddresses] = useState<RechargeAddress[]>(initialRechargeAddresses);
   const [appLinks, setAppLinks] = useState<AppLinks>(initialAppLinks);
+  const [floatingActionButtonSettings, setFloatingActionButtonSettings] = useState<FloatingActionButtonSettings>(initialFloatingActionButtonSettings);
 
 
   // Admin-specific state
@@ -701,18 +705,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const forgotPassword = async (email: string) => {
+        if (!email) {
+            toast({ title: "Error", description: "Please enter an email address.", variant: "destructive" });
+            return;
+        }
         try {
-            const q = query(collection(db, "users"), where("email", "==", email));
-            const querySnapshot = await getDocs(q);
-            if (querySnapshot.empty) {
-                toast({ title: "Error", description: "No user found with this email address.", variant: "destructive" });
-                return;
-            }
+            // We don't check if the user exists to prevent email enumeration.
+            // Firebase's sendPasswordResetEmail does not throw an error for non-existent emails.
             await sendPasswordResetEmail(auth, email);
-            toast({ title: "Success", description: "A password reset link has been sent to your email." });
+            toast({ title: "Success", description: "If an account with that email exists, a password reset link has been sent." });
         } catch (error) {
             console.error("Forgot password error:", error);
-            toast({ title: "Error", description: "Failed to send password reset email.", variant: "destructive" });
+            // Show a generic message to the user
+            toast({ title: "Error", description: "Failed to send password reset email. Please try again later.", variant: "destructive" });
         }
     };
     
@@ -739,6 +744,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const updateAppLinks = (links: AppLinks) => {
         setAppLinks(links);
         toast({ title: "Success", description: "App links have been updated." });
+    };
+
+    const updateFloatingActionButtonSettings = (settings: FloatingActionButtonSettings) => {
+        setFloatingActionButtonSettings(settings);
+        toast({ title: "Success", description: "Floating Action Button settings updated."});
     };
 
     const fetchAllPendingRequests = useCallback(async () => {
@@ -912,6 +922,8 @@ declineDeposit,
     changePassword,
     appLinks,
     updateAppLinks,
+    floatingActionButtonSettings,
+    updateFloatingActionButtonSettings,
   };
 
   return (

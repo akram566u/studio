@@ -1,4 +1,5 @@
 
+
 "use client";
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext, UserForAdmin } from '@/components/providers/AppProvider';
@@ -12,7 +13,7 @@ import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AppLinks, BackgroundTheme, DashboardPanel, Level, RechargeAddress, ReferralBonusSettings, RestrictionMessage, Transaction } from '@/lib/types';
+import { AppLinks, BackgroundTheme, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, RechargeAddress, ReferralBonusSettings, RestrictionMessage, Transaction } from '@/lib/types';
 import { Textarea } from '../ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -28,7 +29,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, KeyRound, ShieldCheck, ShieldX, Trash2, UserCog } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, GripVertical, KeyRound, ShieldCheck, ShieldX, Trash2, UserCog } from 'lucide-react';
 
 const AdminDashboard = () => {
   const context = useContext(AppContext);
@@ -45,6 +46,7 @@ const AdminDashboard = () => {
   const [localReferralBonusSettings, setLocalReferralBonusSettings] = useState<ReferralBonusSettings>({ isEnabled: true, bonusAmount: 5, minDeposit: 100 });
   const [localRechargeAddresses, setLocalRechargeAddresses] = useState<RechargeAddress[]>([]);
   const [localAppLinks, setLocalAppLinks] = useState<AppLinks>({ downloadUrl: '', supportUrl: '' });
+  const [localFabSettings, setLocalFabSettings] = useState<FloatingActionButtonSettings>({ isEnabled: true, items: [] });
 
   
   // State for editing a user
@@ -66,8 +68,9 @@ const AdminDashboard = () => {
     if(context?.referralBonusSettings) setLocalReferralBonusSettings(context.referralBonusSettings);
     if(context?.rechargeAddresses) setLocalRechargeAddresses(context.rechargeAddresses);
     if(context?.appLinks) setLocalAppLinks(context.appLinks);
+    if(context?.floatingActionButtonSettings) setLocalFabSettings(context.floatingActionButtonSettings);
 
-  }, [context?.websiteTitle, context?.startScreenContent, context?.levels, context?.restrictionMessages, context?.dashboardPanels, context?.referralBonusSettings, context?.rechargeAddresses, context?.appLinks]);
+  }, [context?.websiteTitle, context?.startScreenContent, context?.levels, context?.restrictionMessages, context?.dashboardPanels, context?.referralBonusSettings, context?.rechargeAddresses, context?.appLinks, context?.floatingActionButtonSettings]);
   
   useEffect(() => {
       if (searchedUser) {
@@ -116,6 +119,7 @@ const AdminDashboard = () => {
       deleteRechargeAddress,
       updateAppLinks,
       forgotPassword,
+      updateFloatingActionButtonSettings,
   } = context;
 
   const handleUserSearch = async (e: React.FormEvent) => {
@@ -277,6 +281,36 @@ const AdminDashboard = () => {
         if (!searchedUser?.email) return;
         forgotPassword(searchedUser.email);
     };
+    
+    const handleFabSettingsChange = (field: keyof FloatingActionButtonSettings, value: any) => {
+        setLocalFabSettings(prev => ({ ...prev, [field]: value }));
+    };
+    
+    const handleFabItemChange = (id: string, field: keyof FloatingActionItem, value: string) => {
+        setLocalFabSettings(prev => ({
+            ...prev,
+            items: prev.items.map(item => item.id === id ? { ...item, [field]: value } : item)
+        }));
+    };
+    
+    const handleAddFabItem = () => {
+        const newItem: FloatingActionItem = {
+            id: `fab_${Date.now()}`,
+            label: 'New Action',
+            icon: 'PlusCircle',
+            action: 'forgot_password'
+        };
+        setLocalFabSettings(prev => ({ ...prev, items: [...prev.items, newItem] }));
+    };
+    
+    const handleDeleteFabItem = (id: string) => {
+        setLocalFabSettings(prev => ({ ...prev, items: prev.items.filter(item => item.id !== id)}));
+    };
+
+    const handleSaveFabSettings = () => {
+        updateFloatingActionButtonSettings(localFabSettings);
+    };
+
 
   return (
     <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
@@ -552,6 +586,66 @@ const AdminDashboard = () => {
                                 <SelectItem value="SynthwaveSunset">Synthwave Sunset</SelectItem>
                             </SelectContent>
                         </Select>
+                    </CardContent>
+                </Card>
+                <Card className="card-gradient-yellow-pink p-6">
+                    <CardHeader>
+                        <CardTitle>Floating Action Button</CardTitle>
+                        <CardDescription>Manage the floating helper button on the start screen.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="flex items-center justify-between">
+                            <Label htmlFor="fab-enabled" className="text-lg">Enable Floating Button</Label>
+                            <Switch
+                                id="fab-enabled"
+                                checked={localFabSettings.isEnabled}
+                                onCheckedChange={checked => handleFabSettingsChange('isEnabled', checked)}
+                            />
+                        </div>
+                        
+                        <div className="space-y-4">
+                            <Label>Button Actions</Label>
+                            {localFabSettings.items.map((item, index) => (
+                                <div key={item.id} className="bg-black/20 p-4 rounded-lg space-y-2">
+                                    <div className="flex items-center gap-2">
+                                        <GripVertical className="cursor-grab text-gray-400" />
+                                        <div className="flex-1 grid grid-cols-2 gap-2">
+                                            <Input 
+                                                placeholder="Label" 
+                                                value={item.label} 
+                                                onChange={e => handleFabItemChange(item.id, 'label', e.target.value)}
+                                            />
+                                            <Input 
+                                                placeholder="Icon Name" 
+                                                value={item.icon} 
+                                                onChange={e => handleFabItemChange(item.id, 'icon', e.target.value)}
+                                            />
+                                            <div className="col-span-2">
+                                                <Select value={item.action} onValueChange={(value: FloatingActionItem['action']) => handleFabItemChange(item.id, 'action', value)}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Select action" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="switch_view">Switch View</SelectItem>
+                                                        <SelectItem value="forgot_password">Forgot Password</SelectItem>
+                                                        <SelectItem value="download_app">Download App</SelectItem>
+                                                        <SelectItem value="customer_support">Customer Support</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+                                        <Button variant="destructive" size="icon" onClick={() => handleDeleteFabItem(item.id)}>
+                                            <Trash2 />
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="flex gap-4">
+                            <Button onClick={handleSaveFabSettings}>Save FAB Settings</Button>
+                            <Button onClick={handleAddFabItem} variant="secondary">Add New Action</Button>
+                        </div>
                     </CardContent>
                 </Card>
             </TabsContent>

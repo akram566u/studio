@@ -1,4 +1,4 @@
-import { RestrictionMessage, Levels, StartScreenSettings, DashboardPanel, ReferralBonusSettings, RechargeAddress, AppLinks } from '@/lib/types';
+import { RestrictionMessage, Levels, StartScreenSettings, DashboardPanel, ReferralBonusSettings, RechargeAddress, AppLinks, FloatingActionButtonSettings } from '@/lib/types';
 
 export const initialLevels: Levels = {
     0: { interest: 0, minBalance: 0, directReferrals: 0, withdrawalLimit: 0 },
@@ -16,6 +16,16 @@ export const initialRechargeAddresses: RechargeAddress[] = [
 export const initialAppLinks: AppLinks = {
     downloadUrl: '#',
     supportUrl: '#',
+};
+
+export const initialFloatingActionButtonSettings: FloatingActionButtonSettings = {
+    isEnabled: true,
+    items: [
+        { id: 'fab_1', label: 'Switch View', icon: 'ScreenShare', action: 'switch_view' },
+        { id: 'fab_2', label: 'Forgot Password', icon: 'KeyRound', action: 'forgot_password' },
+        { id: 'fab_3', label: 'Download App', icon: 'Download', action: 'download_app' },
+        { id: 'fab_4', label: 'Customer Support', icon: 'MessageSquare', action: 'customer_support' },
+    ]
 };
 
 export const initialRestrictionMessages: RestrictionMessage[] = [
