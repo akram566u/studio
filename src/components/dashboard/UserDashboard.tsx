@@ -4,12 +4,12 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '@/components/providers/AppProvider';
 import { GlassPanel } from '@/components/ui/GlassPanel';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -32,7 +32,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { DashboardPanel, Transaction } from '@/lib/types';
+import { DashboardPanel, Notice, Transaction } from '@/lib/types';
 import { Label } from '../ui/label';
 
 
@@ -284,19 +284,11 @@ const WithdrawalCountdownInfo = () => {
             return;
         }
 
-        const lastWithdrawalTime = currentUser.lastWithdrawalTime;
-        const firstDepositTime = currentUser.firstDepositTime;
-        
-        // Determine the start time for the hold period.
-        // It's either the last withdrawal or the first deposit, whichever is more recent.
-        const holdStartTime = lastWithdrawalTime && lastWithdrawalTime > (firstDepositTime || 0) 
-            ? lastWithdrawalTime 
-            : firstDepositTime;
+        // Check if there's a hold due to a recent deposit
+        const firstDepositHoldActive = (holdDurationDays > 0 && currentUser.firstDepositTime && (Date.now() - currentUser.firstDepositTime) < (holdDurationDays * 24 * 60 * 60 * 1000));
 
-        // If a hold is active (duration > 0) and we have a start time
-        if (holdDurationDays > 0 && holdStartTime) {
-            const restrictionEndTime = holdStartTime + (holdDurationDays * 24 * 60 * 60 * 1000);
-            
+        if (firstDepositHoldActive) {
+            const restrictionEndTime = currentUser.firstDepositTime! + (holdDurationDays * 24 * 60 * 60 * 1000);
             const timer = setInterval(() => {
                 const now = new Date().getTime();
                 const distance = restrictionEndTime - now;
@@ -316,11 +308,12 @@ const WithdrawalCountdownInfo = () => {
                 setWithdrawalCountdown(`${days}d ${hours}h ${minutes}m ${seconds}s`);
             }, 1000);
             return () => clearInterval(timer);
-        } else {
-            // No hold duration, or no start time.
-            setIsWithdrawalLocked(false);
-            setWithdrawalCountdown('');
         }
+
+        // If no deposit hold, then withdrawals are unlocked.
+        setIsWithdrawalLocked(false);
+        setWithdrawalCountdown('');
+
     }, [context]);
 
     return { isWithdrawalLocked, withdrawalCountdown };
@@ -571,6 +564,37 @@ const LevelDetailsPanel = ({ levels }: { levels: any }) => (
     </Card>
 );
 
+const NoticesPanel = () => {
+    const context = useContext(AppContext);
+    if (!context || !context.notices) return null;
+
+    const activeNotices = context.notices.filter(n => n.isActive);
+
+    if (activeNotices.length === 0) {
+        return null; // Don't render the panel if there are no active notices
+    }
+
+    return (
+        <Card className="card-gradient-blue-purple p-6">
+            <CardHeader className="p-0 mb-4">
+                <CardTitle className="flex items-center gap-2 text-blue-300"><Megaphone /> Notices & Events</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+                <ScrollArea className="h-60 custom-scrollbar pr-4">
+                    <div className="space-y-4">
+                        {activeNotices.map((notice: Notice) => (
+                            <div key={notice.id} className="bg-black/20 p-3 rounded-lg">
+                                <h4 className="font-bold text-yellow-300">{notice.title}</h4>
+                                <p className="text-sm text-gray-300 whitespace-pre-wrap">{notice.content}</p>
+                            </div>
+                        ))}
+                    </div>
+                </ScrollArea>
+            </CardContent>
+        </Card>
+    );
+};
+
 const CustomPanel = ({ panel }: { panel: DashboardPanel }) => (
     <Card className="card-gradient-yellow-pink p-6">
         <CardHeader>
@@ -607,11 +631,12 @@ const UserDashboard = () => {
     ReferralNetwork: () => <ReferralNetworkPanel currentUser={currentUser} />,
     LevelDetails: () => <LevelDetailsPanel levels={levels} />,
     ChangePassword: () => <ChangePasswordPanel />,
+    Notices: () => <NoticesPanel />,
     Custom: ({ panel }: { panel: DashboardPanel }) => <CustomPanel panel={panel} />,
   };
   
   const visiblePanels = dashboardPanels.filter(p => p.isVisible).sort((a, b) => {
-    const order = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p10', 'p8', 'p9'];
+    const order = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p10', 'p8', 'p9', 'p11'];
     const aIndex = order.indexOf(a.id);
     const bIndex = order.indexOf(b.id);
     // If an id is not in the order array, push it to the end.
@@ -653,5 +678,3 @@ const UserDashboard = () => {
 };
 
 export default UserDashboard;
-
-    

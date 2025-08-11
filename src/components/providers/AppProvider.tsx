@@ -7,7 +7,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
@@ -62,7 +62,7 @@ export interface AppContextType {
   setActive3DTheme: (theme: BackgroundTheme) => void;
   rechargeAddresses: RechargeAddress[];
   addRechargeAddress: () => void;
-  updateRechargeAddress: (id: string, updates: RechargeAddress) => void;
+  updateRechargeAddress: (id: string, updates: Partial<RechargeAddress>) => void;
   deleteRechargeAddress: (id: string) => void;
   forgotPassword: (email: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
@@ -71,6 +71,10 @@ export interface AppContextType {
   floatingActionButtonSettings: FloatingActionButtonSettings;
   updateFloatingActionButtonSettings: (settings: FloatingActionButtonSettings) => void;
   tawkToSrcUrl: string;
+  notices: Notice[];
+  addNotice: () => void;
+  updateNotice: (id: string, updates: Partial<Notice>) => void;
+  deleteNotice: (id: string) => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -110,7 +114,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     rechargeAddresses,
     appLinks,
     floatingActionButtonSettings,
-    tawkToSrcUrl
+    tawkToSrcUrl,
+    notices,
   } = appSettings;
 
   // Effect to fetch and listen for real-time AppSettings from Firestore
@@ -119,7 +124,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     const unsubscribe = onSnapshot(settingsDocRef, (docSnap) => {
       if (docSnap.exists()) {
-        setAppSettings(docSnap.data() as AppSettings);
+        const data = docSnap.data();
+        // Ensure notices is an array to prevent crashes
+        if (!data.notices) {
+          data.notices = [];
+        }
+        setAppSettings(data as AppSettings);
       } else {
         // If no settings doc, create one from initial data
         console.log("No settings document found, creating one from initial data.");
@@ -709,16 +719,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       };
       updateFirestoreSettings({ rechargeAddresses: [...rechargeAddresses, newAddress] });
     };
-    const updateRechargeAddress = (id: string, updates: RechargeAddress) => {
+    const updateRechargeAddress = (id: string, updates: Partial<RechargeAddress>) => {
       let newAddresses;
+      const addressToUpdate = rechargeAddresses.find(a => a.id === id);
+      if (!addressToUpdate) return;
+    
+      const finalUpdates = {...addressToUpdate, ...updates};
+
       // If the address is being activated, deactivate all others.
-      if (updates.isActive) {
+      if (finalUpdates.isActive) {
         newAddresses = rechargeAddresses.map(addr => 
-          addr.id === id ? { ...updates } : { ...addr, isActive: false }
+          addr.id === id ? { ...finalUpdates } : { ...addr, isActive: false }
         );
       } else {
         newAddresses = rechargeAddresses.map(addr => 
-          addr.id === id ? { ...updates } : addr
+          addr.id === id ? { ...finalUpdates } : addr
         );
       }
       updateFirestoreSettings({ rechargeAddresses: newAddresses });
@@ -728,7 +743,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
     const updateAppLinks = (links: AppLinks) => updateFirestoreSettings({ appLinks: links });
     const updateFloatingActionButtonSettings = (settings: FloatingActionButtonSettings) => updateFirestoreSettings({ floatingActionButtonSettings: settings });
-    
+    const addNotice = () => {
+        const newNotice: Notice = {
+            id: `notice_${Date.now()}`,
+            title: 'New Notice',
+            content: 'Enter your notice content here.',
+            isActive: false,
+        };
+        updateFirestoreSettings({ notices: [...(notices || []), newNotice] });
+    };
+    const updateNotice = (id: string, updates: Partial<Notice>) => {
+        const newNotices = (notices || []).map(n => n.id === id ? { ...n, ...updates } : n);
+        updateFirestoreSettings({ notices: newNotices });
+    };
+    const deleteNotice = (id: string) => {
+        updateFirestoreSettings({ notices: (notices || []).filter(n => n.id !== id) });
+    };
+
     const applyTheme = (theme: {primary: string, accent: string}) => {
       const root = document.documentElement;
       const primaryHsl = hexToHsl(theme.primary);
@@ -938,6 +969,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     floatingActionButtonSettings,
     updateFloatingActionButtonSettings,
     tawkToSrcUrl,
+    notices,
+    addNotice,
+    updateNotice,
+    deleteNotice,
   };
 
   return (
@@ -961,5 +996,3 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
-
-    

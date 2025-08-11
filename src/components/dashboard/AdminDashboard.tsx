@@ -13,7 +13,7 @@ import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AppLinks, BackgroundTheme, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, RechargeAddress, ReferralBonusSettings, RestrictionMessage, Transaction } from '@/lib/types';
+import { AppLinks, BackgroundTheme, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, Transaction } from '@/lib/types';
 import { Textarea } from '../ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -47,6 +47,7 @@ const AdminDashboard = () => {
   const [localRechargeAddresses, setLocalRechargeAddresses] = useState<RechargeAddress[]>([]);
   const [localAppLinks, setLocalAppLinks] = useState<AppLinks>({ downloadUrl: '', supportUrl: '' });
   const [localFabSettings, setLocalFabSettings] = useState<FloatingActionButtonSettings>({ isEnabled: true, items: [] });
+  const [localNotices, setLocalNotices] = useState<Notice[]>([]);
 
   
   // State for editing a user
@@ -69,8 +70,20 @@ const AdminDashboard = () => {
     if(context?.rechargeAddresses) setLocalRechargeAddresses(context.rechargeAddresses);
     if(context?.appLinks) setLocalAppLinks(context.appLinks);
     if(context?.floatingActionButtonSettings) setLocalFabSettings(context.floatingActionButtonSettings);
+    if(context?.notices) setLocalNotices(context.notices);
 
-  }, [context?.websiteTitle, context?.startScreenContent, context?.levels, context?.restrictionMessages, context?.dashboardPanels, context?.referralBonusSettings, context?.rechargeAddresses, context?.appLinks, context?.floatingActionButtonSettings]);
+  }, [
+    context?.websiteTitle, 
+    context?.startScreenContent, 
+    context?.levels, 
+    context?.restrictionMessages, 
+    context?.dashboardPanels, 
+    context?.referralBonusSettings, 
+    context?.rechargeAddresses, 
+    context?.appLinks, 
+    context?.floatingActionButtonSettings,
+    context?.notices
+  ]);
   
   useEffect(() => {
       if (searchedUser) {
@@ -119,6 +132,9 @@ const AdminDashboard = () => {
       updateAppLinks,
       forgotPassword,
       updateFloatingActionButtonSettings,
+      addNotice,
+      updateNotice,
+      deleteNotice
   } = context;
 
   const handleUserSearch = async (e: React.FormEvent) => {
@@ -195,12 +211,13 @@ const AdminDashboard = () => {
   }
   
     const handleRechargeAddressChange = (id: string, field: keyof RechargeAddress, value: any) => {
-        setLocalRechargeAddresses(prev => prev.map(addr => {
+        const newAddresses = localRechargeAddresses.map(addr => {
             if (addr.id === id) {
                 return { ...addr, [field]: value };
             }
             return addr;
-        }));
+        });
+        setLocalRechargeAddresses(newAddresses);
     };
 
     const handleSaveRechargeAddress = (id: string) => {
@@ -297,6 +314,17 @@ const AdminDashboard = () => {
         updateFloatingActionButtonSettings(localFabSettings);
     };
 
+    const handleNoticeChange = (id: string, field: keyof Notice, value: any) => {
+        setLocalNotices(prev => prev.map(n => n.id === id ? { ...n, [field]: value } : n));
+    };
+
+    const handleSaveNotice = (id: string) => {
+        const noticeToUpdate = localNotices.find(n => n.id === id);
+        if (noticeToUpdate) {
+            updateNotice(id, noticeToUpdate);
+        }
+    };
+
   const firebaseProjectId = "staking-hub-3";
 
   return (
@@ -305,13 +333,14 @@ const AdminDashboard = () => {
         <p className="text-center text-gray-400 mb-6">Manage all user deposit, withdrawal, and referral bonus requests.</p>
         
         <Tabs defaultValue="dashboard" className="w-full">
-            <TabsList className="grid w-full grid-cols-7">
+            <TabsList className="grid w-full grid-cols-8">
                 <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                 <TabsTrigger value="history">Activity Log</TabsTrigger>
                 <TabsTrigger value="users">User Management</TabsTrigger>
                 <TabsTrigger value="settings">Content & UI</TabsTrigger>
                 <TabsTrigger value="system">System Settings</TabsTrigger>
                 <TabsTrigger value="panels">User Panels</TabsTrigger>
+                <TabsTrigger value="notices">Notices</TabsTrigger>
                 <TabsTrigger value="view_examples">View Examples</TabsTrigger>
             </TabsList>
             
@@ -953,6 +982,57 @@ const AdminDashboard = () => {
                         </ScrollArea>
                         <div className="mt-4">
                             <Button onClick={addDashboardPanel} variant="secondary">Add New Custom Panel</Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+            
+            <TabsContent value="notices" className="mt-6 space-y-6">
+                <Card className="card-gradient-blue-purple p-6">
+                    <CardHeader>
+                        <CardTitle>Manage Notices &amp; Events</CardTitle>
+                        <CardDescription>Create, edit, and publish global notices for all users.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ScrollArea className="h-[70vh] custom-scrollbar">
+                            <div className="space-y-4">
+                                {(localNotices || []).map(notice => (
+                                    <div key={notice.id} className="bg-black/20 p-4 rounded-lg space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <Label htmlFor={`notice-active-${notice.id}`} className="flex items-center gap-2 text-base font-bold text-yellow-300">
+                                                <Switch
+                                                    id={`notice-active-${notice.id}`}
+                                                    checked={notice.isActive}
+                                                    onCheckedChange={checked => handleNoticeChange(notice.id, 'isActive', checked)}
+                                                />
+                                                Active
+                                            </Label>
+                                            <Button variant="destructive" size="sm" onClick={() => deleteNotice(notice.id)}>Delete</Button>
+                                        </div>
+                                        <div>
+                                            <Label htmlFor={`notice-title-${notice.id}`}>Title</Label>
+                                            <Input 
+                                                id={`notice-title-${notice.id}`}
+                                                value={notice.title}
+                                                onChange={e => handleNoticeChange(notice.id, 'title', e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor={`notice-content-${notice.id}`}>Content (Markdown supported)</Label>
+                                            <Textarea 
+                                                id={`notice-content-${notice.id}`}
+                                                value={notice.content}
+                                                onChange={e => handleNoticeChange(notice.id, 'content', e.target.value)}
+                                                rows={4}
+                                            />
+                                        </div>
+                                        <Button size="sm" onClick={() => handleSaveNotice(notice.id)}>Save Notice</Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                        <div className="mt-4">
+                            <Button onClick={addNotice} variant="secondary">Add New Notice</Button>
                         </div>
                     </CardContent>
                 </Card>

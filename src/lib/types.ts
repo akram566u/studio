@@ -82,6 +82,13 @@ export interface Levels {
   [key: number]: Level;
 }
 
+export interface Notice {
+  id: string;
+  title: string;
+  content: string;
+  isActive: boolean;
+}
+
 export interface AdminContent {
   id: string;
   title: string;
@@ -115,7 +122,7 @@ export interface StartScreenSettings {
 export interface DashboardPanel {
   id: string;
   title: string;
-  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword';
+  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices';
   isVisible: boolean;
   isDeletable: boolean;
   isEditable: boolean;
@@ -136,4 +143,5 @@ export interface AppSettings {
     floatingActionButtonSettings: FloatingActionButtonSettings;
     tawkToSrcUrl: string;
     themeColors: { primary: string; accent: string };
+    notices: Notice[];
 }

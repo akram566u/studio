@@ -93,6 +93,12 @@ export const initialAppSettings: AppSettings = {
         { id: 'p10', title: 'Change Password', componentKey: 'ChangePassword', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p8', title: 'Your Referral Network', componentKey: 'ReferralNetwork', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p9', title: 'Staking Level Details', componentKey: 'LevelDetails', isVisible: true, isDeletable: false, isEditable: true },
+        { id: 'p11', title: 'Notices', componentKey: 'Notices', isVisible: true, isDeletable: false, isEditable: true },
+    ],
+
+    notices: [
+        { id: 'notice_1', title: 'Welcome to Staking Hub!', content: 'We are excited to have you here. Start staking today to earn daily rewards.', isActive: true },
+        { id: 'notice_2', title: 'Scheduled Maintenance', content: 'The platform will be undergoing scheduled maintenance on Saturday at 11 PM UTC. The service might be temporarily unavailable.', isActive: false },
     ],
 
     active3DTheme: 'FloatingCrystals',
