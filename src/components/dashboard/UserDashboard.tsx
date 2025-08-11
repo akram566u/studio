@@ -272,14 +272,19 @@ const WithdrawalCountdownInfo = () => {
     useEffect(() => {
         if (!context) return;
         const { currentUser, restrictionMessages } = context;
-        // Find the active withdrawal hold message, if any
         const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
         
-        // A hold is only active if the message exists, is enabled, has a duration > 0, and user has deposited.
-        if (currentUser && currentUser.firstDepositTime && currentUser.level > 0 && holdMsg && (holdMsg.durationDays || 0) > 0) {
+        if (currentUser && currentUser.firstDepositTime && holdMsg && (holdMsg.durationDays || 0) > 0) {
             const RESTRICTION_DAYS = holdMsg.durationDays || 0;
             const restrictionEndTime = currentUser.firstDepositTime + (RESTRICTION_DAYS * 24 * 60 * 60 * 1000);
-          
+            
+            const now = new Date().getTime();
+            if (now >= restrictionEndTime) {
+                 setIsWithdrawalLocked(false);
+                 setWithdrawalCountdown('Withdrawals Unlocked');
+                 return;
+            }
+
             const timer = setInterval(() => {
                 const now = new Date().getTime();
                 const distance = restrictionEndTime - now;
@@ -301,7 +306,6 @@ const WithdrawalCountdownInfo = () => {
             }, 1000);
             return () => clearInterval(timer);
         } else if (currentUser) {
-            // Withdrawal is locked if level is 0, otherwise it's unlocked.
             setIsWithdrawalLocked(currentUser.level === 0);
             setWithdrawalCountdown('');
         }
@@ -335,7 +339,7 @@ const WithdrawPanel = () => {
             }
             // If locked due to time hold
             const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
-            if(holdMsg) {
+            if(holdMsg && (holdMsg.durationDays || 0) > 0) {
                 const message = holdMsg.message
                     .replace('{durationDays}', (holdMsg.durationDays || 0).toString())
                     .replace('{countdown}', withdrawalCountdown);
