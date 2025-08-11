@@ -15,6 +15,7 @@ export interface FloatingActionItem {
   icon: string; // lucide-react icon name
   action: 'switch_view_desktop' | 'switch_view_mobile' | 'forgot_password' | 'download_app' | 'customer_support' | 'custom_link';
   url?: string; // only for custom_link
+  isEnabled: boolean;
 }
 
 export interface FloatingActionButtonSettings {
@@ -48,6 +49,7 @@ export interface AugmentedTransaction extends Transaction {
     userWithdrawalAddress?: string;
     userDepositCount?: number;
     userWithdrawalCount?: number;
+    directReferrals?: number;
 }
 
 
@@ -120,14 +122,18 @@ export interface DashboardPanel {
   content?: string; // For custom panels
 }
 
-
-export interface AdminTransaction {
-    id: string;
-    type: 'admin_deposit' | 'admin_withdrawal' | 'admin_referral_bonus';
-    amount: number;
-    status: 'completed' | 'credited';
-    timestamp: number;
-    note: string;
-    referredUserId?: string;
-    walletAddress?: string;
+// Single document in Firestore to hold all settings
+export interface AppSettings {
+    websiteTitle: string;
+    levels: Levels;
+    restrictionMessages: RestrictionMessage[];
+    startScreenContent: StartScreenSettings;
+    dashboardPanels: DashboardPanel[];
+    referralBonusSettings: ReferralBonusSettings;
+    active3DTheme: BackgroundTheme;
+    rechargeAddresses: RechargeAddress[];
+    appLinks: AppLinks;
+    floatingActionButtonSettings: FloatingActionButtonSettings;
+    tawkToSrcUrl: string;
+    themeColors: { primary: string; accent: string };
 }

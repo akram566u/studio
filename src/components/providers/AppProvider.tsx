@@ -4,18 +4,18 @@
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem } from '@/lib/types';
-import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels, initialReferralBonusSettings, initialRechargeAddresses, initialAppLinks, initialFloatingActionButtonSettings, tawkToSrcUrl } from '@/lib/data';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings } from '@/lib/types';
+import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
 import Script from 'next/script';
 
 
 // A version of the User type that is safe to expose to the admin panel
-export type UserForAdmin = Pick<User, 'id' | 'email' | 'balance' | 'level' | 'primaryWithdrawalAddress'>;
+export type UserForAdmin = Pick<User, 'id' | 'email' | 'balance' | 'level' | 'primaryWithdrawalAddress' | 'directReferrals'>;
 
 export interface AppContextType {
   currentUser: User | null;
@@ -28,8 +28,8 @@ export interface AppContextType {
   websiteTitle: string;
   updateWebsiteTitle: (newTitle: string) => void;
   levels: Levels;
-  updateLevel: (level: number, details: Level) => void;
-  addLevel: (newLevelKey: number) => void;
+  updateLevel: (level: number, details: Partial<Level>) => void;
+  addLevel: () => void;
   deleteLevel: (levelKey: number) => void;
   allPendingRequests: AugmentedTransaction[];
   adminHistory: AugmentedTransaction[];
@@ -70,6 +70,7 @@ export interface AppContextType {
   updateAppLinks: (links: AppLinks) => void;
   floatingActionButtonSettings: FloatingActionButtonSettings;
   updateFloatingActionButtonSettings: (settings: FloatingActionButtonSettings) => void;
+  tawkToSrcUrl: string;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -82,19 +83,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // App settings - for a real app, these could be stored in Firestore as well
-  const [websiteTitle, setWebsiteTitle] = useState("Staking Hub");
-  const [levels, setLevels] = useState<Levels>(initialLevels);
-  const [restrictionMessages, setRestrictionMessages] = useState<RestrictionMessage[]>(initialRestrictionMessages);
-  const [startScreenContent, setStartScreenContent] = useState<StartScreenSettings>(initialStartScreen);
-  const [dashboardPanels, setDashboardPanels] = useState<DashboardPanel[]>(initialDashboardPanels);
-  const [referralBonusSettings, setReferralBonusSettings] = useState<ReferralBonusSettings>(initialReferralBonusSettings);
-  const [active3DTheme, setActive3DTheme] = useState<BackgroundTheme>('FloatingCrystals');
-  const [rechargeAddresses, setRechargeAddresses] = useState<RechargeAddress[]>(initialRechargeAddresses);
-  const [appLinks, setAppLinks] = useState<AppLinks>(initialAppLinks);
-  const [floatingActionButtonSettings, setFloatingActionButtonSettings] = useState<FloatingActionButtonSettings>(initialFloatingActionButtonSettings);
-
-
+  // App settings - now fetched from Firestore
+  const [appSettings, setAppSettings] = useState<AppSettings>(initialAppSettings);
+  
   // Admin-specific state
   const [allPendingRequests, setAllPendingRequests] = useState<AugmentedTransaction[]>([]);
   const [adminReferrals, setAdminReferrals] = useState<UserForAdmin[]>([]);
@@ -107,21 +98,62 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const ADMIN_PASSWORD = "admin123";
   const ADMIN_REFERRAL_CODE = "ADMINREF";
 
+  // Destructure for easier access
+  const { 
+    websiteTitle, 
+    levels, 
+    restrictionMessages, 
+    startScreenContent, 
+    dashboardPanels, 
+    referralBonusSettings, 
+    active3DTheme, 
+    rechargeAddresses,
+    appLinks,
+    floatingActionButtonSettings,
+    tawkToSrcUrl
+  } = appSettings;
+
+  // Effect to fetch and listen for real-time AppSettings from Firestore
+  useEffect(() => {
+    const settingsDocRef = doc(db, 'settings', 'global');
+    
+    const unsubscribe = onSnapshot(settingsDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setAppSettings(docSnap.data() as AppSettings);
+      } else {
+        // If no settings doc, create one from initial data
+        console.log("No settings document found, creating one from initial data.");
+        setDoc(settingsDocRef, initialAppSettings).then(() => {
+          setAppSettings(initialAppSettings);
+        });
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+
   const fetchUserData = useCallback(async (firebaseUser: FirebaseUser) => {
+    if (!firebaseUser) return;
     const userDocRef = doc(db, "users", firebaseUser.uid);
-    const userDocSnap = await getDoc(userDocRef);
-    if (userDocSnap.exists()) {
-      setCurrentUser({ id: userDocSnap.id, ...userDocSnap.data() } as User);
-    } else {
-      console.log("No such user document!");
-      // This case might happen if user is created in Auth but not in Firestore.
-      // We can create it here or handle as an error.
-    }
-    setLoading(false);
+    
+    const unsubscribe = onSnapshot(userDocRef, (userDocSnap) => {
+        if (userDocSnap.exists()) {
+          setCurrentUser({ id: userDocSnap.id, ...userDocSnap.data() } as User);
+        } else {
+          console.log("No such user document!");
+        }
+        setLoading(false);
+    });
+
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    let userUnsubscribe: Unsubscribe | undefined;
+    const authUnsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (userUnsubscribe) userUnsubscribe(); // Unsubscribe from previous user listener
+
       if (user) {
         if (user.email === ADMIN_EMAIL) {
             setIsAdmin(true);
@@ -130,7 +162,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         } else {
             setIsAdmin(false);
             if (user.emailVerified) {
-                fetchUserData(user);
+                userUnsubscribe = await fetchUserData(user);
             } else {
                 // User is signed in but email is not verified
                 setCurrentUser(null);
@@ -143,7 +175,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false);
       }
     });
-    return () => unsubscribe();
+    return () => {
+        authUnsubscribe();
+        if (userUnsubscribe) userUnsubscribe();
+    };
   }, [fetchUserData]);
 
   const addTransaction = useCallback(async (userId: string, transactionData: Omit<Transaction, 'userId' | 'timestamp'>) => {
@@ -179,9 +214,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
       toast({ title: "Signed in successfully!" });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Sign in error:", error);
-      toast({ title: "Error", description: "Invalid credentials or email not verified.", variant: "destructive" });
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+          toast({ title: "Error", description: "Invalid email or password.", variant: "destructive" });
+      } else if(error.code === 'auth/operation-not-allowed') {
+          toast({ title: "Error", description: "Email/Password sign in is not enabled in Firebase.", variant: "destructive" });
+      } else {
+          toast({ title: "Error", description: "An unknown error occurred during sign in.", variant: "destructive" });
+      }
     }
   };
   
@@ -292,7 +333,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           status: 'info',
           description: `Withdrawal address updated to ${address.substring(0, 10)}...`
       });
-      setCurrentUser(prev => prev ? { ...prev, primaryWithdrawalAddress: address } : null);
+      // No need for local state update, Firestore listener will handle it.
       toast({ title: "Success", description: "Withdrawal address updated." });
     }
   };
@@ -308,7 +349,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           status: 'info',
           description: `Withdrawal address deleted.`
       });
-      setCurrentUser(prev => prev ? { ...prev, primaryWithdrawalAddress: '' } : null);
+      // No need for local state update, Firestore listener will handle it.
       toast({ title: "Success", description: "Withdrawal address deleted." });
     }
   };
@@ -325,7 +366,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
     
     await addTransaction(currentUser.id, newRequest);
-    setCurrentUser(prev => prev ? { ...prev, transactions: [ ...prev.transactions, {...newRequest, userId: prev.id, timestamp: Date.now()} ]} : null);
+    // No need for local state update, Firestore listener will handle it.
     toast({ title: "Success", description: "Deposit request submitted." });
   };
   
@@ -437,8 +478,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
 
     toast({ title: "Success", description: `${type} request has been ${newStatus}.` });
-    fetchAllPendingRequests(); // Refresh admin list
-    fetchAdminHistory();
+    // No need to manually refresh admin list, Firestore listener will do it.
   };
     
     const approveDeposit = (transactionId: string) => processRequest(transactionId, 'approved', 'deposit');
@@ -481,7 +521,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
     
     await addTransaction(currentUser.id, newRequest);
-    setCurrentUser(prev => prev ? { ...prev, transactions: [ ...prev.transactions, {...newRequest, userId: prev.id, timestamp: Date.now()} ]} : null);
+    // No need for local state update, Firestore listener will handle it.
     toast({ title: "Success", description: "Withdrawal request submitted." });
   };
   
@@ -499,6 +539,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           balance: userData.balance,
           level: userData.level,
           primaryWithdrawalAddress: userData.primaryWithdrawalAddress,
+          directReferrals: userData.directReferrals,
       };
   };
 
@@ -546,7 +587,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
   
   const adminUpdateUserEmail = async (userId: string, newEmail: string): Promise<UserForAdmin | null> => {
-      // Note: This does NOT update Firebase Auth email. That requires a more secure, server-side (Cloud Function) implementation.
       const userDocRef = doc(db, "users", userId);
       const emailQuery = query(collection(db, "users"), where("email", "==", newEmail));
       const snapshot = await getDocs(emailQuery);
@@ -557,7 +597,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
       
       await updateDoc(userDocRef, { email: newEmail });
-      toast({ title: "Success", description: `User email updated.` });
+      toast({ title: "Success", description: `User email updated in Firestore. Note: Auth email is unchanged.` });
       return findUser(newEmail);
   };
 
@@ -578,11 +618,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return findUser(userDoc.data().email);
   };
 
-    const updateRestrictionMessages = (messages: RestrictionMessage[]) => {
-        setRestrictionMessages(messages);
-        toast({ title: 'Success', description: 'Restriction messages have been updated.' });
+    const updateFirestoreSettings = async (updates: Partial<AppSettings>) => {
+        const settingsDocRef = doc(db, 'settings', 'global');
+        try {
+            await updateDoc(settingsDocRef, updates);
+            toast({ title: 'Success', description: 'Settings have been updated globally.' });
+        } catch (error) {
+            console.error("Error updating settings:", error);
+            toast({ title: 'Error', description: 'Failed to update settings.', variant: 'destructive' });
+        }
     };
 
+    const updateRestrictionMessages = (messages: RestrictionMessage[]) => updateFirestoreSettings({ restrictionMessages: messages });
     const addRestrictionMessage = () => {
         const newId = `restriction_${Date.now()}`;
         const newRestriction: RestrictionMessage = {
@@ -593,32 +640,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             isActive: true,
             durationDays: 0,
         };
-        setRestrictionMessages(prev => [...prev, newRestriction]);
+        updateFirestoreSettings({ restrictionMessages: [...restrictionMessages, newRestriction] });
         toast({ title: 'New restriction added', description: 'Please edit and save the details.'});
     };
-
-    const deleteRestrictionMessage = (id: string) => {
-        setRestrictionMessages(prev => prev.filter(r => r.id !== id));
-        toast({ title: 'Success', description: 'Restriction message deleted.'});
+    const deleteRestrictionMessage = (id: string) => updateFirestoreSettings({ restrictionMessages: restrictionMessages.filter(r => r.id !== id) });
+    const updateStartScreenContent = (content: Omit<StartScreenSettings, 'customContent'>) => updateFirestoreSettings({ startScreenContent: { ...startScreenContent, ...content } });
+    const updateWebsiteTitle = (newTitle: string) => updateFirestoreSettings({ websiteTitle: newTitle });
+    const updateLevel = (levelKey: number, details: Partial<Level>) => {
+        const updatedLevels = { ...levels, [levelKey]: { ...levels[levelKey], ...details } };
+        updateFirestoreSettings({ levels: updatedLevels });
     };
-
-    const updateStartScreenContent = (content: Omit<StartScreenSettings, 'customContent'>) => {
-        setStartScreenContent(prev => ({ ...prev, ...content }));
-        toast({ title: "Success", description: "Start screen content updated." });
-    };
-
-    const updateWebsiteTitle = (newTitle: string) => {
-        setWebsiteTitle(newTitle);
-        toast({ title: "Success", description: "Website title updated." });
-    };
-
-     const updateLevel = (levelKey: number, details: Level) => {
-        const updatedLevels = { ...levels, [levelKey]: details };
-        setLevels(updatedLevels);
-        toast({ title: "Success", description: `Level ${levelKey} has been updated.` });
-    };
-
-    const addLevel = (newLevelKey: number) => {
+    const addLevel = () => {
+        const newLevelKey = Object.keys(levels).length;
         const newLevelData: Level = {
             interest: 0.1,
             minBalance: 20000,
@@ -626,45 +659,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             withdrawalLimit: 1500,
         };
         const updatedLevels = { ...levels, [newLevelKey]: newLevelData };
-        setLevels(updatedLevels);
-        toast({ title: "Success", description: `Level ${newLevelKey} has been added.` });
+        updateFirestoreSettings({ levels: updatedLevels });
     };
-
     const deleteLevel = (levelKey: number) => {
         const { [levelKey]: _, ...remainingLevels } = levels;
-        setLevels(remainingLevels);
-        toast({ title: "Success", description: `Level ${levelKey} has been deleted.` });
+        updateFirestoreSettings({ levels: remainingLevels });
     };
-    
-    const updateReferralBonusSettings = (settings: ReferralBonusSettings) => {
-        setReferralBonusSettings(settings);
-        toast({title: 'Success', description: 'Referral bonus settings have been updated.'});
-    }
-
-    const applyTheme = (theme: {primary: string, accent: string}) => {
-      const root = document.documentElement;
-      const primaryHsl = hexToHsl(theme.primary);
-      const accentHsl = hexToHsl(theme.accent);
-
-      if (primaryHsl) {
-        root.style.setProperty('--primary', `${primaryHsl.h} ${primaryHsl.s}% ${primaryHsl.l}%`);
-        const primaryFg = primaryHsl.l > 50 ? '222.2 84% 4.9%' : '210 40% 98%';
-        root.style.setProperty('--primary-foreground', primaryFg);
-      }
-      if (accentHsl) {
-        root.style.setProperty('--accent', `${accentHsl.h} ${accentHsl.s}% ${accentHsl.l}%`);
-        const accentFg = accentHsl.l > 50 ? '222.2 84% 4.9%' : '210 40% 98%';
-         root.style.setProperty('--accent-foreground', accentFg);
-      }
-
-      toast({ title: "Success", description: "Theme has been applied." });
-    }
-    
+    const updateReferralBonusSettings = (settings: ReferralBonusSettings) => updateFirestoreSettings({ referralBonusSettings: settings });
     const updateDashboardPanel = (id: string, updates: Partial<DashboardPanel>) => {
-        setDashboardPanels(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-        toast({ title: 'Success', description: 'Panel updated.' });
+        const newPanels = dashboardPanels.map(p => p.id === id ? { ...p, ...updates } : p);
+        updateFirestoreSettings({ dashboardPanels: newPanels });
     };
-
     const addDashboardPanel = () => {
         const newPanel: DashboardPanel = {
             id: `custom_${Date.now()}`,
@@ -675,15 +680,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             isEditable: true,
             content: 'Edit this content.',
         };
-        setDashboardPanels(prev => [...prev, newPanel]);
-        toast({ title: 'Panel Added', description: 'A new custom panel has been added to the user dashboard.' });
+        updateFirestoreSettings({ dashboardPanels: [...dashboardPanels, newPanel] });
     };
-
     const deleteDashboardPanel = (id: string) => {
-        setDashboardPanels(prev => prev.filter(p => p.id !== id));
-        toast({ title: 'Panel Deleted', description: 'The panel has been removed from the user dashboard.' });
+        updateFirestoreSettings({ dashboardPanels: dashboardPanels.filter(p => p.id !== id) });
     };
-
+    const setActive3DTheme = (theme: BackgroundTheme) => updateFirestoreSettings({ active3DTheme: theme });
     const addRechargeAddress = () => {
       const newAddress: RechargeAddress = {
         id: `addr_${Date.now()}`,
@@ -691,19 +693,29 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         network: 'BEP-20',
         isActive: false,
       };
-      setRechargeAddresses(prev => [...prev, newAddress]);
-      toast({ title: 'Address Added', description: 'A new recharge address has been added.' });
+      updateFirestoreSettings({ rechargeAddresses: [...rechargeAddresses, newAddress] });
     };
-  
     const updateRechargeAddress = (id: string, updates: Partial<RechargeAddress>) => {
-      setRechargeAddresses(prev => prev.map(addr => addr.id === id ? { ...addr, ...updates } : addr));
-      toast({ title: 'Address Updated', description: 'The recharge address has been updated.' });
+      const newAddresses = rechargeAddresses.map(addr => addr.id === id ? { ...addr, ...updates } : addr);
+      updateFirestoreSettings({ rechargeAddresses: newAddresses });
     };
-  
     const deleteRechargeAddress = (id: string) => {
-      setRechargeAddresses(prev => prev.filter(addr => addr.id !== id));
-      toast({ title: 'Address Deleted', description: 'The recharge address has been removed.' });
+      updateFirestoreSettings({ rechargeAddresses: rechargeAddresses.filter(addr => addr.id !== id) });
     };
+    const updateAppLinks = (links: AppLinks) => updateFirestoreSettings({ appLinks: links });
+    const updateFloatingActionButtonSettings = (settings: FloatingActionButtonSettings) => updateFirestoreSettings({ floatingActionButtonSettings: settings });
+    
+    const applyTheme = (theme: {primary: string, accent: string}) => {
+      const root = document.documentElement;
+      const primaryHsl = hexToHsl(theme.primary);
+      const accentHsl = hexToHsl(theme.accent);
+
+      if (primaryHsl) root.style.setProperty('--primary', `${primaryHsl.h} ${primaryHsl.s}% ${primaryHsl.l}%`);
+      if (accentHsl) root.style.setProperty('--accent', `${accentHsl.h} ${accentHsl.s}% ${accentHsl.l}%`);
+      
+      updateFirestoreSettings({ themeColors: theme });
+      toast({ title: "Success", description: "Theme has been applied." });
+    }
 
     const forgotPassword = async (email: string) => {
         if (!email) {
@@ -711,13 +723,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             return;
         }
         try {
-            // We don't check if the user exists to prevent email enumeration.
-            // Firebase's sendPasswordResetEmail does not throw an error for non-existent emails.
             await sendPasswordResetEmail(auth, email);
             toast({ title: "Success", description: "If an account with that email exists, a password reset link has been sent." });
         } catch (error) {
             console.error("Forgot password error:", error);
-            // Show a generic message to the user
             toast({ title: "Error", description: "Failed to send password reset email. Please try again later.", variant: "destructive" });
         }
     };
@@ -741,24 +750,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             return false;
         }
     };
-    
-    const updateAppLinks = (links: AppLinks) => {
-        setAppLinks(links);
-        toast({ title: "Success", description: "App links have been updated." });
-    };
 
-    const updateFloatingActionButtonSettings = (settings: FloatingActionButtonSettings) => {
-        setFloatingActionButtonSettings(settings);
-        toast({ title: "Success", description: "Floating Action Button settings updated."});
-    };
-
-    const fetchAllPendingRequests = useCallback(async () => {
+    const fetchAllUsersData = useCallback(async () => {
+        if (!isAdmin) return;
+        
         const usersRef = collection(db, "users");
         const allUsersSnap = await getDocs(usersRef);
+        const allUsers: User[] = allUsersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+
+        // Process for pending requests
         const allRequests: AugmentedTransaction[] = [];
-        
-        allUsersSnap.forEach(userDoc => {
-            const userData = userDoc.data() as User;
+        allUsers.forEach(userData => {
             const pending = userData.transactions.filter(tx => tx.status === 'pending');
             pending.forEach(p => {
                 allRequests.push({
@@ -768,59 +770,50 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     userDepositCount: userData.transactions.filter(tx => tx.type === 'deposit' && tx.status === 'approved').length,
                     userWithdrawalCount: userData.transactions.filter(tx => tx.type === 'withdrawal' && tx.status === 'approved').length,
                     userWithdrawalAddress: userData.primaryWithdrawalAddress,
+                    directReferrals: userData.directReferrals,
                 })
             })
         });
-        
         setAllPendingRequests(allRequests.sort((a,b) => b.timestamp - a.timestamp));
 
-    }, []);
-
-    const fetchAdminHistory = useCallback(async () => {
-        const usersRef = collection(db, "users");
-        const allUsersSnap = await getDocs(usersRef);
+        // Process for admin history
         const allHistory: AugmentedTransaction[] = [];
-
-        allUsersSnap.forEach(userDoc => {
-            const userData = userDoc.data() as User;
+        allUsers.forEach(userData => {
             const completed = userData.transactions.filter(tx => 
                 tx.status === 'approved' || tx.status === 'declined' || tx.type === 'admin_adjusted'
             );
             completed.forEach(c => {
-                allHistory.push({
-                    ...c,
-                    email: userData.email,
-                })
+                allHistory.push({ ...c, email: userData.email })
             })
         });
-
         setAdminHistory(allHistory.sort((a,b) => b.timestamp - a.timestamp));
-    }, []);
+        
+        // Process admin referrals
+        const referredUsers: UserForAdmin[] = [];
+        allUsers.forEach(u => {
+            if (u.referredBy === ADMIN_REFERRAL_CODE) {
+                referredUsers.push({
+                    id: u.id,
+                    email: u.email,
+                    balance: u.balance,
+                    level: u.level,
+                    primaryWithdrawalAddress: u.primaryWithdrawalAddress,
+                    directReferrals: u.directReferrals,
+                })
+            }
+        });
+        setAdminReferrals(referredUsers);
+
+    }, [isAdmin]);
 
     useEffect(() => {
         if(isAdmin) {
-            fetchAllPendingRequests();
-            fetchAdminHistory();
-            
-            const fetchAdminReferrals = async () => {
-                 const q = query(collection(db, "users"), where("referredBy", "==", ADMIN_REFERRAL_CODE));
-                 const querySnapshot = await getDocs(q);
-                 const referredUsers: UserForAdmin[] = [];
-                 querySnapshot.forEach(doc => {
-                     const u = doc.data() as User;
-                     referredUsers.push({
-                        id: u.id,
-                        email: u.email,
-                        balance: u.balance,
-                        level: u.level,
-                        primaryWithdrawalAddress: u.primaryWithdrawalAddress
-                    })
-                 });
-                 setAdminReferrals(referredUsers);
-            }
-            fetchAdminReferrals();
+            const unsubscribe = onSnapshot(collection(db, "users"), () => {
+                fetchAllUsersData();
+            });
+            return () => unsubscribe();
         }
-    }, [isAdmin, fetchAllPendingRequests, fetchAdminHistory]);
+    }, [isAdmin, fetchAllUsersData]);
 
 
   // Effect for Daily Interest Credit (would be better as a Cloud Function in a real app)
@@ -849,12 +842,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 description: `Daily interest of ${interestAmount.toFixed(4)} USDT credited.`
             });
             
-            // Re-fetch user data to update UI
-            const updatedUserDoc = await getDoc(userDocRef);
-            if (updatedUserDoc.exists()) {
-                setCurrentUser({ id: updatedUserDoc.id, ...updatedUserDoc.data() } as User);
-            }
-
+            // No manual refetch needed due to onSnapshot listener.
             toast({ title: "Interest Credited!", description: `You earned ${interestAmount.toFixed(4)} USDT.`});
           }
         }
@@ -866,13 +854,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   if (loading) {
     return (
-        <div className="flex items-center justify-center min-h-screen">
+        <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
             <div className="text-xl">Loading Application...</div>
         </div>
     );
   }
 
-  const value = {
+  const value: AppContextType = {
     currentUser,
     isAdmin,
     signIn,
@@ -890,7 +878,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     adminHistory,
     submitDepositRequest,
     approveDeposit,
-declineDeposit,
+    declineDeposit,
     submitWithdrawalRequest,
     approveWithdrawal,
     declineWithdrawal,
@@ -925,6 +913,7 @@ declineDeposit,
     updateAppLinks,
     floatingActionButtonSettings,
     updateFloatingActionButtonSettings,
+    tawkToSrcUrl,
   };
 
   return (

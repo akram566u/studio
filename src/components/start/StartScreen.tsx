@@ -80,28 +80,40 @@ const DraggableFloatingActionButton = ({ onOpenChange, setMockupView }: { onOpen
     };
 
     const handleMouseMove = (e: MouseEvent) => {
-        if (isDragging.current && fabRef.current) {
-            e.preventDefault();
-            const newX = e.clientX - offset.current.x;
-            const newY = e.clientY - offset.current.y;
-            setPosition({
-                x: Math.max(0, Math.min(window.innerWidth - fabRef.current.offsetWidth, newX)),
-                y: Math.max(0, Math.min(window.innerHeight - fabRef.current.offsetHeight, newY))
-            });
-        }
+        if (!isDragging.current || !fabRef.current) return;
+        
+        // Prevent text selection while dragging
+        e.preventDefault();
+        e.stopPropagation();
+
+        const newX = e.clientX - offset.current.x;
+        const newY = e.clientY - offset.current.y;
+        
+        // Constrain movement within the viewport
+        const constrainedX = Math.max(0, Math.min(window.innerWidth - fabRef.current.offsetWidth, newX));
+        const constrainedY = Math.max(0, Math.min(window.innerHeight - fabRef.current.offsetHeight, newY));
+
+        setPosition({ x: constrainedX, y: constrainedY });
     };
-    
+
     const handleMouseUp = () => {
         isDragging.current = false;
         if (fabRef.current) {
             fabRef.current.style.cursor = 'grab';
         }
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
     };
-    
-    useEffect(() => {
+
+    const startDrag = (e: React.MouseEvent<HTMLButtonElement>) => {
+        if (e.button !== 0) return; // Only drag with left mouse button
+        handleMouseDown(e);
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
-        
+    }
+    
+    useEffect(() => {
+        // Cleanup function
         return () => {
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
@@ -113,6 +125,10 @@ const DraggableFloatingActionButton = ({ onOpenChange, setMockupView }: { onOpen
     }
 
     const { floatingActionButtonSettings, appLinks } = context;
+    const visibleItems = floatingActionButtonSettings.items.filter(item => item.isEnabled);
+
+    if (visibleItems.length === 0) return null;
+
 
     const handleActionClick = (item: FloatingActionItem) => {
         switch (item.action) {
@@ -151,21 +167,21 @@ const DraggableFloatingActionButton = ({ onOpenChange, setMockupView }: { onOpen
         }
     };
 
-    const MainIcon = (LucideIcons as any)[floatingActionButtonSettings.items[0]?.icon || 'HelpCircle'] || LucideIcons.HelpCircle;
+    const MainIcon = (LucideIcons as any)[visibleItems[0]?.icon || 'HelpCircle'] || LucideIcons.HelpCircle;
 
     return (
         <div
             ref={fabRef}
-            className="fixed z-50 cursor-grab"
-            style={{ top: `${position.y}px`, left: `${position.x}px` }}
+            className="fixed z-50"
+            style={{ top: `${position.y}px`, left: `${position.x}px`, touchAction: 'none' }}
         >
             <Popover>
                 <PopoverTrigger asChild>
                     <Button 
                         variant="outline" 
                         size="icon" 
-                        className="rounded-full size-16 bg-accent/50 backdrop-blur-sm border-accent/20 hover:bg-accent/80 active:cursor-grabbing"
-                        onMouseDown={handleMouseDown}
+                        className="rounded-full size-16 bg-accent/50 backdrop-blur-sm border-accent/20 hover:bg-accent/80 cursor-grab active:cursor-grabbing"
+                        onMouseDown={startDrag}
                     >
                         <MainIcon className="size-8" />
                     </Button>
@@ -179,7 +195,7 @@ const DraggableFloatingActionButton = ({ onOpenChange, setMockupView }: { onOpen
                             </p>
                         </div>
                         <div className="grid gap-2">
-                            {floatingActionButtonSettings.items.map(item => {
+                            {visibleItems.map(item => {
                                 const ItemIcon = (LucideIcons as any)[item.icon] || LucideIcons.AlertCircle;
                                 return (
                                     <Button key={item.id} variant="outline" onClick={() => handleActionClick(item)}>

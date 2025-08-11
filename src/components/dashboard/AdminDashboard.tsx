@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, GripVertical, KeyRound, ShieldCheck, ShieldX, Trash2, UserCog } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, GripVertical, KeyRound, ShieldCheck, ShieldX, Trash2, UserCog, Users } from 'lucide-react';
 
 const AdminDashboard = () => {
   const context = useContext(AppContext);
@@ -113,7 +113,6 @@ const AdminDashboard = () => {
       adminHistory,
       active3DTheme,
       setActive3DTheme,
-      rechargeAddresses,
       addRechargeAddress,
       updateRechargeAddress,
       deleteRechargeAddress,
@@ -150,6 +149,7 @@ const AdminDashboard = () => {
 
   const handleLevelChange = (level: number, field: keyof Level, value: string) => {
     const numericValue = Number(value);
+    // Allow setting to 0, but not NaN
     if (!isNaN(numericValue)) {
         setLocalLevels(prev => ({
             ...prev,
@@ -158,15 +158,15 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleSaveLevels = () => {
-      Object.entries(localLevels).forEach(([level, details]) => {
-          updateLevel(Number(level), details);
-      });
+  const handleSaveLevel = (levelKey: number) => {
+      const levelDetails = localLevels[levelKey];
+      if (levelDetails) {
+          updateLevel(levelKey, levelDetails);
+      }
   };
 
   const handleAddNewLevel = () => {
-      const newLevelKey = Object.keys(localLevels).length;
-      addLevel(newLevelKey);
+      addLevel();
   };
   
   const handleRestrictionChange = (id: string, field: keyof RestrictionMessage, value: string | boolean | number) => {
@@ -197,15 +197,8 @@ const AdminDashboard = () => {
     const handleRechargeAddressChange = (id: string, field: keyof RechargeAddress, value: any) => {
         setLocalRechargeAddresses(prev => prev.map(addr => {
             if (addr.id === id) {
-                if (field === 'isActive' && value === true) {
-                    // Deactivate all other addresses if this one is being activated
-                    return { ...addr, [field]: value };
-                }
+                // If activating this one, we prepare to deactivate others in the save function
                 return { ...addr, [field]: value };
-            }
-            // If another address was activated, this one should be deactivated if it was active
-            if (field === 'isActive' && value === true) {
-                return { ...addr, isActive: false };
             }
             return addr;
         }));
@@ -214,14 +207,14 @@ const AdminDashboard = () => {
     const handleSaveRechargeAddress = (id: string) => {
         const addressToUpdate = localRechargeAddresses.find(addr => addr.id === id);
         if (addressToUpdate) {
-            updateRechargeAddress(id, addressToUpdate);
-            // If this address was activated, we need to deactivate others in the main context
-            if (addressToUpdate.isActive) {
-                rechargeAddresses.forEach(addr => {
-                    if (addr.id !== id && addr.isActive) {
-                        updateRechargeAddress(addr.id, { isActive: false });
-                    }
-                });
+            if(addressToUpdate.isActive) {
+                // When one is activated, all others must be deactivated.
+                const updatedAddresses = localRechargeAddresses.map(addr =>
+                    addr.id === id ? { ...addr, isActive: true } : { ...addr, isActive: false }
+                );
+                context.updateRechargeAddress(id, { rechargeAddresses: updatedAddresses });
+            } else {
+                context.updateRechargeAddress(id, { rechargeAddresses: localRechargeAddresses });
             }
         }
     };
@@ -286,7 +279,7 @@ const AdminDashboard = () => {
         setLocalFabSettings(prev => ({ ...prev, [field]: value }));
     };
     
-    const handleFabItemChange = (id: string, field: keyof FloatingActionItem, value: string | undefined) => {
+    const handleFabItemChange = (id: string, field: keyof FloatingActionItem, value: string | boolean | undefined) => {
         setLocalFabSettings(prev => ({
             ...prev,
             items: prev.items.map(item => item.id === id ? { ...item, [field]: value } : item)
@@ -299,7 +292,8 @@ const AdminDashboard = () => {
             label: 'New Action',
             icon: 'PlusCircle',
             action: 'custom_link',
-            url: '#'
+            url: '#',
+            isEnabled: true,
         };
         setLocalFabSettings(prev => ({ ...prev, items: [...prev.items, newItem] }));
     };
@@ -385,7 +379,9 @@ const AdminDashboard = () => {
                                                 </div>
                                                 
                                                 <div className="text-xs text-gray-400 space-y-1">
-                                                    <p>Lvl: {request.userLevel} | Deposits: {request.userDepositCount} | Withdrawals: {request.userWithdrawalCount}</p>
+                                                    <p>
+                                                        Lvl: {request.userLevel} | Deposits: {request.userDepositCount} | Withdrawals: {request.userWithdrawalCount} | Referrals: {request.directReferrals}
+                                                    </p>
                                                     <p className="break-all">Address: {request.walletAddress || request.userWithdrawalAddress}</p>
                                                 </div>
 
@@ -488,7 +484,7 @@ const AdminDashboard = () => {
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <Label htmlFor="edit-email">Email</Label>
+                                        <Label htmlFor="edit-email">Email (Firestore Only)</Label>
                                         <div className="flex gap-2">
                                             <Input id="edit-email" value={editingEmail} onChange={e => setEditingEmail(e.target.value)} />
                                             <Button onClick={() => handleUserUpdate('email')}>Save</Button>
@@ -606,11 +602,19 @@ const AdminDashboard = () => {
                         
                         <div className="space-y-4">
                             <Label>Button Actions</Label>
-                            {localFabSettings.items.map((item, index) => (
+                            {localFabSettings.items.map((item) => (
                                 <div key={item.id} className="bg-black/20 p-4 rounded-lg space-y-2">
                                     <div className="flex items-center gap-2">
                                         <GripVertical className="cursor-grab text-gray-400" />
                                         <div className="flex-1 grid grid-cols-2 gap-2">
+                                            <div className="col-span-2 flex items-center gap-2">
+                                                <Label htmlFor={`fab-item-enabled-${item.id}`} className='text-sm'>Enabled</Label>
+                                                <Switch
+                                                    id={`fab-item-enabled-${item.id}`}
+                                                    checked={item.isEnabled}
+                                                    onCheckedChange={checked => handleFabItemChange(item.id, 'isEnabled', checked)}
+                                                />
+                                            </div>
                                             <Input 
                                                 placeholder="Label" 
                                                 value={item.label} 
@@ -670,34 +674,38 @@ const AdminDashboard = () => {
                     <CardContent>
                         <ScrollArea className="h-96 custom-scrollbar">
                         <div className="space-y-4">
-                            {Object.entries(localLevels).sort(([a],[b]) => Number(a) - Number(b)).map(([level, details]) => (
+                            {Object.entries(localLevels).sort(([a],[b]) => Number(a) - Number(b)).map(([levelStr, details]) => {
+                                const level = Number(levelStr);
+                                return (
                                 <div key={level} className="bg-black/20 p-4 rounded-lg">
                                     <h4 className="font-bold text-lg text-yellow-300">Level {level}</h4>
                                     <div className="grid grid-cols-2 gap-4 mt-2">
                                         <div>
                                             <Label htmlFor={`level-${level}-minBalance`}>Min Balance</Label>
-                                            <Input id={`level-${level}-minBalance`} type="number" value={details.minBalance} onChange={(e) => handleLevelChange(Number(level), 'minBalance', e.target.value)} />
+                                            <Input id={`level-${level}-minBalance`} type="number" value={details.minBalance} onChange={(e) => handleLevelChange(level, 'minBalance', e.target.value)} />
                                         </div>
                                         <div>
                                             <Label htmlFor={`level-${level}-referrals`}>Referrals</Label>
-                                            <Input id={`level-${level}-referrals`} type="number" value={details.directReferrals} onChange={(e) => handleLevelChange(Number(level), 'directReferrals', e.target.value)} />
+                                            <Input id={`level-${level}-referrals`} type="number" value={details.directReferrals} onChange={(e) => handleLevelChange(level, 'directReferrals', e.target.value)} />
                                         </div>
                                         <div>
                                             <Label htmlFor={`level-${level}-interest`}>Interest (Decimal)</Label>
-                                            <Input id={`level-${level}-interest`} type="number" step="0.001" value={details.interest} onChange={(e) => handleLevelChange(Number(level), 'interest', e.target.value)} />
+                                            <Input id={`level-${level}-interest`} type="number" step="0.001" value={details.interest} onChange={(e) => handleLevelChange(level, 'interest', e.target.value)} />
                                         </div>
                                         <div>
                                             <Label htmlFor={`level-${level}-withdrawalLimit`}>Withdrawal Limit</Label>
-                                            <Input id={`level-${level}-withdrawalLimit`} type="number" value={details.withdrawalLimit} onChange={(e) => handleLevelChange(Number(level), 'withdrawalLimit', e.target.value)} />
+                                            <Input id={`level-${level}-withdrawalLimit`} type="number" value={details.withdrawalLimit} onChange={(e) => handleLevelChange(level, 'withdrawalLimit', e.target.value)} />
                                         </div>
                                     </div>
-                                    <Button onClick={() => deleteLevel(Number(level))} variant="destructive" size="sm" className="mt-4">Delete Level {level}</Button>
+                                    <div className='flex gap-2'>
+                                        <Button onClick={() => handleSaveLevel(level)} className="mt-4">Save Level {level}</Button>
+                                        <Button onClick={() => deleteLevel(level)} variant="destructive" size="sm" className="mt-4">Delete Level {level}</Button>
+                                    </div>
                                 </div>
-                            ))}
+                            )})}
                         </div>
                         </ScrollArea>
                         <div className="mt-4 flex gap-4">
-                            <Button onClick={handleSaveLevels}>Save All Level Changes</Button>
                             <Button onClick={handleAddNewLevel} variant="secondary">Add New Level</Button>
                         </div>
                     </CardContent>

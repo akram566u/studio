@@ -1,4 +1,5 @@
 
+
 "use client";
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '@/components/providers/AppProvider';
@@ -60,7 +61,7 @@ const StakingLevelPanel = ({ currentUser, currentLevelDetails }: { currentUser: 
         </div>
         <div className="flex items-center justify-between">
         <p className="text-xl text-gray-200">Withdrawal Limit:</p>
-        <p className="text-2xl font-bold text-yellow-400">{currentLevelDetails.withdrawalLimit} USDT</p>
+        <p className="text-2xl font-bold text-yellow-400">{currentLevelDetails?.withdrawalLimit || 0} USDT</p>
         </div>
     </Card>
 );
@@ -130,7 +131,7 @@ const TransactionHistoryPanel = ({ currentUser }: { currentUser: any }) => {
             <ScrollArea className="h-96 custom-scrollbar">
                 {currentUser.transactions && currentUser.transactions.length > 0 ? (
                 <div className="space-y-4">
-                    {currentUser.transactions.map((tx: Transaction) => (
+                    {currentUser.transactions.slice().sort((a: Transaction, b: Transaction) => b.timestamp - a.timestamp).map((tx: Transaction) => (
                     <div key={`${tx.id}-${tx.timestamp}`} className="flex items-start gap-3">
                         <div className="mt-1">{getIconForType(tx.type)}</div>
                         <div className="flex-1">
@@ -357,7 +358,7 @@ const WithdrawPanel = () => {
         <Card className="card-gradient-indigo-fuchsia p-6">
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
             <p className="text-lg text-gray-300 mb-1">
-                Your withdrawal limit: <span className="font-bold text-yellow-300">{currentLevelDetails.withdrawalLimit} USDT</span>
+                Your withdrawal limit: <span className="font-bold text-yellow-300">{currentLevelDetails?.withdrawalLimit || 0} USDT</span>
             </p>
             <p className="text-xs text-gray-400 mb-3">
                 Withdrawals are processed once a month and take 3 days to complete after approval.
@@ -585,10 +586,14 @@ const UserDashboard = () => {
     Custom: ({ panel }: { panel: DashboardPanel }) => <CustomPanel panel={panel} />,
   };
   
-  // This creates three arrays of panels for the three columns
   const visiblePanels = dashboardPanels.filter(p => p.isVisible).sort((a, b) => {
     const order = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p10', 'p8', 'p9'];
-    return order.indexOf(a.id) - order.indexOf(b.id);
+    const aIndex = order.indexOf(a.id);
+    const bIndex = order.indexOf(b.id);
+    // If an id is not in the order array, push it to the end.
+    if (aIndex === -1) return 1;
+    if (bIndex === -1) return -1;
+    return aIndex - bIndex;
   });
 
   const leftColumnPanels = visiblePanels.slice(0, 4);
