@@ -73,7 +73,7 @@ export const initialAppSettings: AppSettings = {
             id: 'withdrawal_monthly_1',
             title: 'Monthly Withdrawal Limit',
             type: 'withdrawal_monthly_limit',
-            message: 'You can only make one withdrawal request per month.',
+            message: 'You have reached your monthly withdrawal limit of {limit}.',
             isActive: true,
         },
     ],

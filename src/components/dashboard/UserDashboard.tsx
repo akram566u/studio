@@ -278,24 +278,18 @@ const WithdrawalCountdownInfo = () => {
             return;
         }
         
-        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive && (m.durationDays || 0) > 0);
-        
-        if (!holdMsg) {
+        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
+        if (!holdMsg || !holdMsg.durationDays || holdMsg.durationDays <= 0) {
             setIsWithdrawalLocked(false);
             setWithdrawalCountdown('');
             return;
         }
 
-        const holdDurationDays = holdMsg.durationDays || 0;
+        const holdDurationDays = holdMsg.durationDays;
         
-        if (holdDurationDays === 0) {
-            setIsWithdrawalLocked(false);
-            setWithdrawalCountdown('');
-            return;
-        }
-
         const lastActionTime = currentUser.lastWithdrawalTime || currentUser.firstDepositTime;
         const restrictionEndTime = lastActionTime + (holdDurationDays * 24 * 60 * 60 * 1000);
+
         if (Date.now() < restrictionEndTime) {
             const timer = setInterval(() => {
                 const now = new Date().getTime();
@@ -581,7 +575,7 @@ const NoticesPanel = () => {
     const activeNotices = context.notices.filter(n => n.isActive);
 
     if (activeNotices.length === 0) {
-        return null;
+        return null; // Don't render the panel if there are no active notices
     }
 
     return (
