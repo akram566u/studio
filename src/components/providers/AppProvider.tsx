@@ -8,9 +8,10 @@ import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, g
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification } from "firebase/auth";
 import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem } from '@/lib/types';
-import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels, initialReferralBonusSettings, initialRechargeAddresses, initialAppLinks, initialFloatingActionButtonSettings } from '@/lib/data';
+import { initialLevels, initialRestrictionMessages, initialStartScreen, initialDashboardPanels, initialReferralBonusSettings, initialRechargeAddresses, initialAppLinks, initialFloatingActionButtonSettings, tawkToSrcUrl } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
+import Script from 'next/script';
 
 
 // A version of the User type that is safe to expose to the admin panel
@@ -929,6 +930,21 @@ declineDeposit,
   return (
     <AppContext.Provider value={value}>
       {children}
+      {tawkToSrcUrl && (
+        <Script id="tawk-to-script" strategy="lazyOnload">
+          {`
+            var Tawk_API=Tawk_API||{}, Tawk_LoadStart=new Date();
+            (function(){
+            var s1=document.createElement("script"),s0=document.getElementsByTagName("script")[0];
+            s1.async=true;
+            s1.src='${tawkToSrcUrl}';
+            s1.charset='UTF-8';
+            s1.setAttribute('crossorigin','*');
+            s0.parentNode.insertBefore(s1,s0);
+            })();
+          `}
+        </Script>
+      )}
     </AppContext.Provider>
   );
 };

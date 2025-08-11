@@ -1,6 +1,17 @@
 
 import { RestrictionMessage, Levels, StartScreenSettings, DashboardPanel, ReferralBonusSettings, RechargeAddress, AppLinks, FloatingActionButtonSettings } from '@/lib/types';
 
+// =================================================================================
+// CHAT WIDGET CONFIGURATION
+// =================================================================================
+// To enable the Tawk.to chat widget, paste your full widget source URL here.
+// To disable it, leave the string empty "".
+// Example: 'https://embed.tawk.to/12345abcedf/1a2b3c4d'
+// =================================================================================
+export const tawkToSrcUrl = '';
+// =================================================================================
+
+
 export const initialLevels: Levels = {
     0: { interest: 0, minBalance: 0, directReferrals: 0, withdrawalLimit: 0 },
     1: { interest: 0.018, minBalance: 100, directReferrals: 0, withdrawalLimit: 150 },
