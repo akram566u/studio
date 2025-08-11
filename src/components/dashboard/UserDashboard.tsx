@@ -9,7 +9,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -272,19 +272,31 @@ const WithdrawalCountdownInfo = () => {
     useEffect(() => {
         if (!context) return;
         const { currentUser, restrictionMessages } = context;
-        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
+        if (!currentUser) return;
         
-        if (currentUser && currentUser.firstDepositTime && holdMsg && (holdMsg.durationDays || 0) > 0) {
-            const RESTRICTION_DAYS = holdMsg.durationDays || 0;
-            const restrictionEndTime = currentUser.firstDepositTime + (RESTRICTION_DAYS * 24 * 60 * 60 * 1000);
-            
-            const now = new Date().getTime();
-            if (now >= restrictionEndTime) {
-                 setIsWithdrawalLocked(false);
-                 setWithdrawalCountdown('Withdrawals Unlocked');
-                 return;
-            }
+        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
+        const holdDurationDays = holdMsg?.durationDays || 0;
+        
+        // Base case: Locked if level 0
+        if (currentUser.level === 0) {
+            setIsWithdrawalLocked(true);
+            setWithdrawalCountdown('Reach Level 1 to withdraw.');
+            return;
+        }
 
+        const lastWithdrawalTime = currentUser.lastWithdrawalTime;
+        const firstDepositTime = currentUser.firstDepositTime;
+        
+        // Determine the start time for the hold period.
+        // It's either the last withdrawal or the first deposit, whichever is more recent.
+        const holdStartTime = lastWithdrawalTime && lastWithdrawalTime > (firstDepositTime || 0) 
+            ? lastWithdrawalTime 
+            : firstDepositTime;
+
+        // If a hold is active (duration > 0) and we have a start time
+        if (holdDurationDays > 0 && holdStartTime) {
+            const restrictionEndTime = holdStartTime + (holdDurationDays * 24 * 60 * 60 * 1000);
+            
             const timer = setInterval(() => {
                 const now = new Date().getTime();
                 const distance = restrictionEndTime - now;
@@ -302,11 +314,11 @@ const WithdrawalCountdownInfo = () => {
                 const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((distance % (1000 * 60)) / 1000);
                 setWithdrawalCountdown(`${days}d ${hours}h ${minutes}m ${seconds}s`);
-        
             }, 1000);
             return () => clearInterval(timer);
-        } else if (currentUser) {
-            setIsWithdrawalLocked(currentUser.level === 0);
+        } else {
+            // No hold duration, or no start time.
+            setIsWithdrawalLocked(false);
             setWithdrawalCountdown('');
         }
     }, [context]);
@@ -314,44 +326,44 @@ const WithdrawalCountdownInfo = () => {
     return { isWithdrawalLocked, withdrawalCountdown };
 };
 
-
 const WithdrawPanel = () => {
     const context = useContext(AppContext);
     const { toast } = useToast();
     const [withdrawalAmount, setWithdrawalAmount] = useState('');
     const { isWithdrawalLocked, withdrawalCountdown } = WithdrawalCountdownInfo();
 
-
     if (!context || !context.currentUser) return null;
     const { currentUser, levels, submitWithdrawalRequest, restrictionMessages } = context;
     const currentLevelDetails = levels[currentUser.level];
+    
+    const hasPendingWithdrawal = currentUser.transactions.some(tx => tx.type === 'withdrawal' && tx.status === 'pending');
 
     const handleSubmitWithdrawal = () => {
-        if (isWithdrawalLocked) {
-            // If locked due to level 0
-            if (currentUser.level === 0) {
-                 toast({ 
-                    title: "Withdrawal Locked", 
-                    description: `You must reach level 1 to withdraw.`, 
-                    variant: "destructive" 
-                });
-                return;
-            }
-            // If locked due to time hold
-            const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
-            if(holdMsg && (holdMsg.durationDays || 0) > 0) {
-                const message = holdMsg.message
-                    .replace('{durationDays}', (holdMsg.durationDays || 0).toString())
-                    .replace('{countdown}', withdrawalCountdown);
-                toast({ 
-                    title: "Withdrawal Locked", 
-                    description: message,
-                    variant: "destructive" 
-                });
-            }
+        if (hasPendingWithdrawal) {
+            toast({ title: "Request Pending", description: "You already have a withdrawal request being processed.", variant: "destructive" });
             return;
         }
 
+        if (isWithdrawalLocked) {
+            const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive && (m.durationDays || 0) > 0);
+            const message = holdMsg 
+                ? holdMsg.message.replace('{durationDays}', (holdMsg.durationDays || 0).toString()).replace('{countdown}', withdrawalCountdown)
+                : withdrawalCountdown; // Fallback to countdown message (e.g., for Level 0)
+            
+            toast({ title: "Withdrawal Locked", description: message, variant: "destructive" });
+            return;
+        }
+
+        // Check for 30-day limit if no specific hold is active
+        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive && (m.durationDays || 0) > 0);
+        if (!holdMsg && currentUser.lastWithdrawalTime) {
+            const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+            if (Date.now() - currentUser.lastWithdrawalTime < thirtyDays) {
+                toast({ title: "Withdrawal Limit", description: "You can only make one withdrawal request per month.", variant: "destructive" });
+                return;
+            }
+        }
+        
         const amount = parseFloat(withdrawalAmount);
         if (isNaN(amount) || amount <= 0) {
             toast({ title: "Error", description: "Please enter a valid withdrawal amount.", variant: "destructive" });
@@ -380,10 +392,11 @@ const WithdrawPanel = () => {
                 className="mb-4 text-xl"
                 value={withdrawalAmount}
                 onChange={e => setWithdrawalAmount(e.target.value)}
+                disabled={hasPendingWithdrawal}
             />
             <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-xl bg-gray-800/50" />
-            <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal}>
-                <Send/>Request Withdrawal
+            <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} disabled={hasPendingWithdrawal}>
+                {hasPendingWithdrawal ? <><Ban/>Request Pending</> : <><Send/>Request Withdrawal</>}
             </Button>
         </Card>
     )
@@ -640,3 +653,5 @@ const UserDashboard = () => {
 };
 
 export default UserDashboard;
+
+    

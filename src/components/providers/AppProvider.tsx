@@ -503,10 +503,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
 
+    if (currentUser.transactions.some(tx => tx.type === 'withdrawal' && tx.status === 'pending')) {
+        toast({ title: "Error", description: "You already have a pending withdrawal request.", variant: "destructive" });
+        return;
+    }
+
     if(currentUser.lastWithdrawalTime) {
         const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-        if (Date.now() - currentUser.lastWithdrawalTime < thirtyDays) {
-            toast({ title: "Error", description: "You can only make one withdrawal per month.", variant: "destructive" });
+        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
+        const holdDuration = (holdMsg?.durationDays || 0) * 24 * 60 * 60 * 1000;
+        
+        // If a hold is active, use its duration. Otherwise, use the default 30 days.
+        const coolOffPeriod = holdDuration > 0 ? holdDuration : thirtyDays;
+
+        if (Date.now() - currentUser.lastWithdrawalTime < coolOffPeriod) {
+            const warningMessage = holdDuration > 0 
+                ? `Please wait for the ${holdMsg?.durationDays}-day holding period to end.`
+                : "You can only make one withdrawal per month.";
+            toast({ title: "Error", description: warningMessage, variant: "destructive" });
             return;
         }
     }
@@ -947,3 +961,5 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
+
+    
