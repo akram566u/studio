@@ -163,14 +163,16 @@ const AdminDashboard = () => {
       });
   }
 
-  const handleLevelChange = (level: number, field: keyof Level, value: string) => {
-    const numericValue = Number(value);
-    if (!isNaN(numericValue)) {
-        setLocalLevels(prev => ({
-            ...prev,
-            [level]: { ...prev[level], [field]: numericValue }
-        }));
+  const handleLevelChange = (level: number, field: keyof Level, value: string | number) => {
+    let finalValue = value;
+    if (typeof value === 'string' && ['minBalance', 'directReferrals', 'interest', 'withdrawalLimit', 'monthlyWithdrawals'].includes(field)) {
+        finalValue = Number(value);
     }
+    
+    setLocalLevels(prev => ({
+        ...prev,
+        [level]: { ...prev[level], [field]: finalValue }
+    }));
   };
 
   const handleSaveLevel = (levelKey: number) => {
@@ -719,6 +721,10 @@ const AdminDashboard = () => {
                                     <h4 className="font-bold text-lg text-yellow-300">Level {level}</h4>
                                     <div className="grid grid-cols-2 gap-4 mt-2">
                                         <div>
+                                            <Label htmlFor={`level-${level}-name`}>Level Name</Label>
+                                            <Input id={`level-${level}-name`} type="text" value={details.name} onChange={(e) => handleLevelChange(level, 'name', e.target.value)} />
+                                        </div>
+                                        <div>
                                             <Label htmlFor={`level-${level}-minBalance`}>Min Balance</Label>
                                             <Input id={`level-${level}-minBalance`} type="number" value={details.minBalance} onChange={(e) => handleLevelChange(level, 'minBalance', e.target.value)} />
                                         </div>
@@ -734,7 +740,7 @@ const AdminDashboard = () => {
                                             <Label htmlFor={`level-${level}-withdrawalLimit`}>Withdrawal Limit</Label>
                                             <Input id={`level-${level}-withdrawalLimit`} type="number" value={details.withdrawalLimit} onChange={(e) => handleLevelChange(level, 'withdrawalLimit', e.target.value)} />
                                         </div>
-                                        <div className="col-span-2">
+                                        <div>
                                             <Label htmlFor={`level-${level}-monthlyWithdrawals`}>Monthly Withdrawals</Label>
                                             <Input id={`level-${level}-monthlyWithdrawals`} type="number" value={details.monthlyWithdrawals} onChange={(e) => handleLevelChange(level, 'monthlyWithdrawals', e.target.value)} />
                                         </div>

@@ -52,16 +52,16 @@ const StakingLevelPanel = ({ currentUser, currentLevelDetails }: { currentUser: 
     <Card className="card-gradient-green-cyan p-6">
         <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Staking Level</h3>
         <div className="flex items-center justify-between mb-2">
-        <p className="text-xl text-gray-200">Current Level:</p>
-        <LevelBadge level={currentUser.level} />
+            <p className="text-xl text-gray-200">{currentLevelDetails?.name || `Level ${currentUser.level}`}</p>
+            <LevelBadge level={currentUser.level} />
         </div>
         <div className="flex items-center justify-between mb-2">
-        <p className="text-xl text-gray-200">Active Referrals:</p>
-        <p className="text-2xl font-bold text-yellow-400">{currentUser.directReferrals}</p>
+            <p className="text-xl text-gray-200">Active Referrals:</p>
+            <p className="text-2xl font-bold text-yellow-400">{currentUser.directReferrals}</p>
         </div>
         <div className="flex items-center justify-between">
-        <p className="text-xl text-gray-200">Withdrawal Limit:</p>
-        <p className="text-2xl font-bold text-yellow-400">{currentLevelDetails?.withdrawalLimit || 0} USDT</p>
+            <p className="text-xl text-gray-200">Withdrawal Limit:</p>
+            <p className="text-2xl font-bold text-yellow-400">{currentLevelDetails?.withdrawalLimit || 0} USDT</p>
         </div>
     </Card>
 );
@@ -280,66 +280,12 @@ const RechargePanel = () => {
     )
 };
 
-const WithdrawalCountdownInfo = () => {
-    const context = useContext(AppContext);
-    const [withdrawalCountdown, setWithdrawalCountdown] = useState('');
-    const [isWithdrawalLocked, setIsWithdrawalLocked] = useState(true);
-
-    useEffect(() => {
-        if (!context) return;
-        const { currentUser, restrictionMessages } = context;
-        if (!currentUser) {
-            setIsWithdrawalLocked(false);
-            setWithdrawalCountdown('');
-            return;
-        }
-
-        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
-
-        if (!holdMsg || !holdMsg.durationDays || holdMsg.durationDays <= 0 || !currentUser.lastWithdrawalTime) {
-            setIsWithdrawalLocked(false);
-            setWithdrawalCountdown('');
-            return;
-        }
-
-        const holdDurationDays = holdMsg.durationDays;
-        const restrictionEndTime = currentUser.lastWithdrawalTime + (holdDurationDays * 24 * 60 * 60 * 1000);
-
-        if (Date.now() < restrictionEndTime) {
-            const timer = setInterval(() => {
-                const now = new Date().getTime();
-                const distance = restrictionEndTime - now;
-        
-                if (distance <= 0) {
-                    setIsWithdrawalLocked(false);
-                    setWithdrawalCountdown('Withdrawals Unlocked');
-                    clearInterval(timer);
-                    return;
-                }
-        
-                setIsWithdrawalLocked(true);
-                const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-                const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-                const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-                setWithdrawalCountdown(`${days}d ${hours}h ${minutes}m ${seconds}s`);
-            }, 1000);
-            return () => clearInterval(timer);
-        }
-        
-        setIsWithdrawalLocked(false);
-        setWithdrawalCountdown('');
-
-    }, [context]);
-
-    return { isWithdrawalLocked, withdrawalCountdown };
-};
-
 const WithdrawPanel = () => {
     const context = useContext(AppContext);
     const { toast } = useToast();
     const [withdrawalAmount, setWithdrawalAmount] = useState('');
-    const { isWithdrawalLocked, withdrawalCountdown } = WithdrawalCountdownInfo();
+    const [isAlertOpen, setIsAlertOpen] = useState(false);
+    const [alertMessage, setAlertMessage] = useState('');
 
     if (!context || !context.currentUser) return null;
     const { currentUser, levels, submitWithdrawalRequest, restrictionMessages } = context;
@@ -348,18 +294,32 @@ const WithdrawPanel = () => {
     const hasPendingWithdrawal = currentUser.transactions.some(tx => tx.type === 'withdrawal' && tx.status === 'pending');
 
     const handleSubmitWithdrawal = () => {
+        // Rule 1: Check for pending withdrawal first
         if (hasPendingWithdrawal) {
-            toast({ title: "Request Pending", description: "You already have a withdrawal request being processed.", variant: "destructive" });
+            setAlertMessage("You already have a withdrawal request being processed. Please wait for admin approval.");
+            setIsAlertOpen(true);
             return;
         }
         
+        // Rule 2: Check for withdrawal hold period
         const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
-        if (holdMsg && (holdMsg.durationDays || 0) > 0 && isWithdrawalLocked) {
-             const message = holdMsg.message.replace('{durationDays}', (holdMsg.durationDays || 0).toString()).replace('{countdown}', withdrawalCountdown)
-            toast({ title: "Withdrawal Locked", description: message, variant: "destructive" });
-            return;
-        }
+        if (holdMsg && (holdMsg.durationDays || 0) > 0 && currentUser.lastWithdrawalTime) {
+            const holdDurationMs = (holdMsg.durationDays || 0) * 24 * 60 * 60 * 1000;
+            const timeSinceLastWithdrawal = Date.now() - currentUser.lastWithdrawalTime;
 
+            if (timeSinceLastWithdrawal < holdDurationMs) {
+                const remainingTime = holdDurationMs - timeSinceLastWithdrawal;
+                const days = Math.floor(remainingTime / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((remainingTime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const countdown = `${days}d ${hours}h`;
+                const message = holdMsg.message.replace('{durationDays}', (holdMsg.durationDays || 0).toString()).replace('{countdown}', countdown)
+                setAlertMessage(message);
+                setIsAlertOpen(true);
+                return;
+            }
+        }
+        
+        // Rule 3: Check for monthly withdrawal limit
         const monthlyLimitMsg = restrictionMessages.find(m => m.type === 'withdrawal_monthly_limit' && m.isActive);
         if (monthlyLimitMsg && currentLevelDetails) {
             const monthlyWithdrawalsAllowed = currentLevelDetails.monthlyWithdrawals || 0;
@@ -369,7 +329,8 @@ const WithdrawPanel = () => {
             ).length;
 
             if (recentWithdrawals >= monthlyWithdrawalsAllowed) {
-                toast({ title: "Withdrawal Limit", description: monthlyLimitMsg.message.replace('{limit}', monthlyWithdrawalsAllowed.toString()), variant: "destructive" });
+                setAlertMessage(monthlyLimitMsg.message.replace('{limit}', monthlyWithdrawalsAllowed.toString()));
+                setIsAlertOpen(true);
                 return;
             }
         }
@@ -388,27 +349,42 @@ const WithdrawPanel = () => {
     };
     
     return (
-        <Card className="card-gradient-indigo-fuchsia p-6">
-            <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
-            <p className="text-lg text-gray-300 mb-1">
-                Your withdrawal limit: <span className="font-bold text-yellow-300">{currentLevelDetails?.withdrawalLimit || 0} USDT</span>
-            </p>
-            <p className="text-xs text-gray-400 mb-3">
-                Withdrawals are processed once a month and take 3 days to complete after approval.
-            </p>
-            <Input
-                type="number"
-                placeholder="Amount to withdraw"
-                className="mb-4 text-xl"
-                value={withdrawalAmount}
-                onChange={e => setWithdrawalAmount(e.target.value)}
-                disabled={hasPendingWithdrawal || isWithdrawalLocked}
-            />
-            <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-xl bg-gray-800/50" />
-            <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} disabled={hasPendingWithdrawal || isWithdrawalLocked}>
-                {hasPendingWithdrawal ? <><Ban/>Request Pending</> : isWithdrawalLocked ? <><Ban/> {withdrawalCountdown}</> : <><Send/>Request Withdrawal</>}
-            </Button>
-        </Card>
+        <>
+            <Card className="card-gradient-indigo-fuchsia p-6">
+                <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
+                <p className="text-lg text-gray-300 mb-1">
+                    Your withdrawal limit: <span className="font-bold text-yellow-300">{currentLevelDetails?.withdrawalLimit || 0} USDT</span>
+                </p>
+                <p className="text-xs text-gray-400 mb-3">
+                    You can withdraw {currentLevelDetails?.monthlyWithdrawals || 0} time(s) per month.
+                </p>
+                <Input
+                    type="number"
+                    placeholder="Amount to withdraw"
+                    className="mb-4 text-xl"
+                    value={withdrawalAmount}
+                    onChange={e => setWithdrawalAmount(e.target.value)}
+                    disabled={hasPendingWithdrawal}
+                />
+                <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-xl bg-gray-800/50" />
+                <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} disabled={hasPendingWithdrawal}>
+                    {hasPendingWithdrawal ? <><Ban/>Request Pending</> : <><Send/>Request Withdrawal</>}
+                </Button>
+            </Card>
+            <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Withdrawal Information</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {alertMessage}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogAction onClick={() => setIsAlertOpen(false)}>Close</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
     )
 };
 
@@ -559,6 +535,7 @@ const LevelDetailsPanel = ({ levels }: { levels: { [key: number]: Level } }) => 
             <TableHeader>
             <TableRow>
                 <TableHead className="text-white">Level</TableHead>
+                <TableHead className="text-white">Name</TableHead>
                 <TableHead className="text-white">Min Balance</TableHead>
                 <TableHead className="text-white">Referrals</TableHead>
                 <TableHead className="text-white">Withdraw Limit</TableHead>
@@ -569,12 +546,13 @@ const LevelDetailsPanel = ({ levels }: { levels: { [key: number]: Level } }) => 
             <TableBody>
             {Object.entries(levels).map(([level, details]) => (
                 <TableRow key={level}>
-                <TableCell><LevelBadge level={parseInt(level, 10)} /></TableCell>
-                <TableCell className="font-mono text-green-300">{details.minBalance} USDT</TableCell>
-                <TableCell className="font-mono text-blue-300">{details.directReferrals}</TableCell>
-                <TableCell className="font-mono text-yellow-300">{details.withdrawalLimit} USDT</TableCell>
-                <TableCell className="font-mono text-orange-300">{details.monthlyWithdrawals}</TableCell>
-                <TableCell className="font-mono text-purple-300">{(details.interest * 100).toFixed(2)}%</TableCell>
+                    <TableCell><LevelBadge level={parseInt(level, 10)} /></TableCell>
+                    <TableCell className="font-semibold text-gray-200">{details.name}</TableCell>
+                    <TableCell className="font-mono text-green-300">{details.minBalance} USDT</TableCell>
+                    <TableCell className="font-mono text-blue-300">{details.directReferrals}</TableCell>
+                    <TableCell className="font-mono text-yellow-300">{details.withdrawalLimit} USDT</TableCell>
+                    <TableCell className="font-mono text-orange-300">{details.monthlyWithdrawals}</TableCell>
+                    <TableCell className="font-mono text-purple-300">{(details.interest * 100).toFixed(2)}%</TableCell>
                 </TableRow>
             ))}
             </TableBody>
@@ -706,5 +684,3 @@ const UserDashboard = () => {
 };
 
 export default UserDashboard;
-
-    

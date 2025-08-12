@@ -72,6 +72,7 @@ export interface User {
 }
 
 export interface Level {
+  name: string;
   interest: number;
   minBalance: number;
   directReferrals: number;
