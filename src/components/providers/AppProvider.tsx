@@ -92,6 +92,7 @@ export interface AppContextType {
   deleteStakingPool: (id: string) => void;
   joinStakingPool: (poolId: string, amount: number) => Promise<void>;
   endStakingPool: (poolId: string) => Promise<void>;
+  validateWithdrawal: (amount: number) => string | null;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -531,34 +532,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const approveWithdrawal = (transactionId: string) => processRequest(transactionId, 'approved', 'withdrawal');
     const declineWithdrawal = (transactionId: string) => processRequest(transactionId, 'declined', 'withdrawal');
 
-  const submitWithdrawalRequest = async (amount: number) => {
-    if (!currentUser || !currentUser.primaryWithdrawalAddress) {
-        toast({ title: "Error", description: "Set a withdrawal address first.", variant: "destructive" });
-        return;
-    }
-     if (amount > currentUser.balance) {
-        toast({ title: "Error", description: "Insufficient balance.", variant: "destructive" });
-        return;
-    }
-    
+  const validateWithdrawal = (amount: number): string | null => {
+    if (!currentUser) return "Not logged in.";
+    if (!currentUser.primaryWithdrawalAddress) return "Set a withdrawal address first.";
+    if (amount > currentUser.balance) return "Insufficient balance.";
+
     const currentLevelDetails = levels[currentUser.level];
-    if (!currentLevelDetails) {
-        toast({ title: "Error", description: `Invalid level configuration.`, variant: "destructive" });
-        return;
-    }
+    if (!currentLevelDetails) return `Invalid level configuration.`;
 
     const withdrawalLimit = currentLevelDetails.withdrawalLimit;
-    if (amount > withdrawalLimit) {
-        toast({ title: "Error", description: `Withdrawal amount exceeds your level limit of ${withdrawalLimit} USDT.`, variant: "destructive" });
-        return;
-    }
+    if (amount > withdrawalLimit) return `Withdrawal amount exceeds your level limit of ${withdrawalLimit} USDT.`;
 
     if (currentUser.transactions.some(tx => tx.type === 'withdrawal' && tx.status === 'pending')) {
-        toast({ title: "Error", description: "You already have a pending withdrawal request.", variant: "destructive" });
-        return;
+        return "You already have a pending withdrawal request.";
     }
     
-    // Check for initial deposit restriction
     const initialDepositMsg = restrictionMessages.find(m => m.type === 'withdrawal_initial_deposit' && m.isActive);
     if(initialDepositMsg) {
         const principal = currentUser.totalDeposits || 0;
@@ -567,19 +555,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const maxWithdrawal = Math.max(0, earnings + withdrawablePrincipal);
 
         if (amount > maxWithdrawal) {
-            const message = initialDepositMsg.message.replace('{max_amount}', maxWithdrawal.toFixed(2));
-            toast({ title: "Withdrawal Restricted", description: message, variant: "destructive" });
-            return;
+            return initialDepositMsg.message.replace('{max_amount}', maxWithdrawal.toFixed(2));
         }
     }
-
 
     const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
     if (holdMsg && (holdMsg.durationDays || 0) > 0 && currentUser.lastWithdrawalTime) {
       const holdDuration = (holdMsg.durationDays || 0) * 24 * 60 * 60 * 1000;
       if (Date.now() - currentUser.lastWithdrawalTime < holdDuration) {
-        toast({ title: "Error", description: `Please wait for the ${holdMsg.durationDays}-day withdrawal cooldown period to end.`, variant: "destructive" });
-        return;
+        return `Please wait for the ${holdMsg.durationDays}-day withdrawal cooldown period to end.`;
       }
     }
     
@@ -592,9 +576,20 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         ).length;
 
         if (recentWithdrawals >= monthlyWithdrawalsAllowed) {
-            toast({ title: "Withdrawal Limit", description: monthlyLimitMsg.message.replace('{limit}', monthlyWithdrawalsAllowed.toString()), variant: "destructive" });
-            return;
+            return monthlyLimitMsg.message.replace('{limit}', monthlyWithdrawalsAllowed.toString());
         }
+    }
+
+    return null; // No validation errors
+  }
+
+  const submitWithdrawalRequest = async (amount: number) => {
+    if (!currentUser) return;
+
+    const validationError = validateWithdrawal(amount);
+    if(validationError) {
+        toast({ title: "Withdrawal Error", description: validationError, variant: "destructive" });
+        return;
     }
 
     const newRequest = {
@@ -607,7 +602,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
     
     await addTransaction(currentUser.id, newRequest);
-    // No need for local state update, Firestore listener will handle it.
     toast({ title: "Success", description: "Withdrawal request submitted." });
   };
   
@@ -1300,6 +1294,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     deleteStakingPool,
     joinStakingPool,
     endStakingPool,
+    validateWithdrawal,
   };
 
   return (
