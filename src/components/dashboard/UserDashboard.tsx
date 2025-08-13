@@ -36,6 +36,7 @@ import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Progress } from '../ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 
 
 // Individual Panel Components (for use in Dialogs)
@@ -298,7 +299,7 @@ const WithdrawPanel = () => {
     const [alertMessage, setAlertMessage] = useState('');
 
     if (!context || !context.currentUser || !context.levels) return null;
-    const { currentUser, levels, submitWithdrawalRequest, restrictionMessages } = context;
+    const { currentUser, levels, submitWithdrawalRequest } = context;
     const currentLevelDetails = levels[currentUser.level];
     
     const hasPendingWithdrawal = currentUser.transactions.some(tx => tx.type === 'withdrawal' && tx.status === 'pending');
