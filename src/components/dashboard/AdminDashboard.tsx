@@ -1,5 +1,4 @@
 
-
 "use client";
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext, UserForAdmin } from '@/components/providers/AppProvider';
@@ -163,7 +162,7 @@ const AdminDashboard = () => {
       });
   }
 
-  const handleLevelChange = (level: number, field: keyof Level, value: string | number) => {
+  const handleLevelChange = (level: number, field: keyof Level, value: string | number | boolean) => {
     let finalValue = value;
     if (typeof value === 'string' && ['minBalance', 'directReferrals', 'interest', 'withdrawalLimit', 'monthlyWithdrawals'].includes(field)) {
         finalValue = Number(value);
@@ -718,7 +717,17 @@ const AdminDashboard = () => {
                                 const level = Number(levelStr);
                                 return (
                                 <div key={level} className="bg-black/20 p-4 rounded-lg">
-                                    <h4 className="font-bold text-lg text-yellow-300">Level {level}</h4>
+                                    <div className="flex justify-between items-center">
+                                        <h4 className="font-bold text-lg text-yellow-300">Level {level}</h4>
+                                        <Label htmlFor={`level-enabled-${level}`} className="flex items-center gap-2">
+                                            Enabled
+                                            <Switch
+                                                id={`level-enabled-${level}`}
+                                                checked={details.isEnabled}
+                                                onCheckedChange={(checked) => handleLevelChange(level, 'isEnabled', checked)}
+                                            />
+                                        </Label>
+                                    </div>
                                     <div className="grid grid-cols-2 gap-4 mt-2">
                                         <div>
                                             <Label htmlFor={`level-${level}-name`}>Level Name</Label>
@@ -1058,3 +1067,5 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
+
+    

@@ -1,5 +1,4 @@
 
-
 "use client";
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '@/components/providers/AppProvider';
@@ -287,7 +286,7 @@ const WithdrawPanel = () => {
     const [isAlertOpen, setIsAlertOpen] = useState(false);
     const [alertMessage, setAlertMessage] = useState('');
 
-    if (!context || !context.currentUser) return null;
+    if (!context || !context.currentUser || !context.levels) return null;
     const { currentUser, levels, submitWithdrawalRequest, restrictionMessages } = context;
     const currentLevelDetails = levels[currentUser.level];
     
@@ -364,11 +363,10 @@ const WithdrawPanel = () => {
                     className="mb-4 text-xl"
                     value={withdrawalAmount}
                     onChange={e => setWithdrawalAmount(e.target.value)}
-                    disabled={hasPendingWithdrawal}
                 />
                 <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-xl bg-gray-800/50" />
-                <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} disabled={hasPendingWithdrawal}>
-                    {hasPendingWithdrawal ? <><Ban/>Request Pending</> : <><Send/>Request Withdrawal</>}
+                <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} >
+                     <Send/>Request Withdrawal
                 </Button>
             </Card>
             <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
@@ -544,7 +542,7 @@ const LevelDetailsPanel = ({ levels }: { levels: { [key: number]: Level } }) => 
             </TableRow>
             </TableHeader>
             <TableBody>
-            {Object.entries(levels).map(([level, details]) => (
+            {Object.entries(levels).filter(([,details]) => details.isEnabled).map(([level, details]) => (
                 <TableRow key={level}>
                     <TableCell><LevelBadge level={parseInt(level, 10)} /></TableCell>
                     <TableCell className="font-semibold text-gray-200">{details.name}</TableCell>

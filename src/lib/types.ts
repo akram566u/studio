@@ -1,5 +1,4 @@
 
-
 export type BackgroundTheme = 'FloatingCrystals' | 'CosmicNebula' | 'DigitalMatrix' | 'AbstractParticles' | 'SynthwaveSunset';
 
 export interface RechargeAddress {
@@ -78,6 +77,7 @@ export interface Level {
   directReferrals: number;
   withdrawalLimit: number;
   monthlyWithdrawals: number;
+  isEnabled: boolean;
 }
 
 export interface Levels {
@@ -147,3 +147,5 @@ export interface AppSettings {
     themeColors: { primary: string; accent: string };
     notices: Notice[];
 }
+
+    
