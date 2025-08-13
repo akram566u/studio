@@ -36,7 +36,7 @@ import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Progress } from '../ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 // Individual Panel Components (for use in Dialogs)
@@ -388,8 +388,8 @@ const ManageAddressPanel = () => {
 
     return (
         <>
-            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Manage Withdrawal Address</h3>
-            <p className="text-lg text-gray-200 mb-3">Current Address:</p>
+            <h3 className="text-xl font-semibold mb-4 text-purple-300">Manage Withdrawal Address</h3>
+            <p className="text-gray-200 mb-3">Current Address:</p>
             <div className="bg-gray-900/50 p-3 rounded-lg flex items-center justify-between mb-4">
                 <span className="font-mono text-sm break-all text-green-300">{currentUser.primaryWithdrawalAddress || 'Not set'}</span>
                 {currentUser.primaryWithdrawalAddress && (
@@ -440,7 +440,7 @@ const ChangePasswordPanel = () => {
 
     return (
         <>
-        <h3 className="text-2xl font-semibold mb-4 text-blue-300">Change Password</h3>
+        <h3 className="text-xl font-semibold mb-4 text-purple-300">Change Password</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                     <Label htmlFor="currentPassword">Current Password</Label>
@@ -459,6 +459,23 @@ const ChangePasswordPanel = () => {
         </>
     );
 };
+
+const SettingsPanel = () => {
+    return (
+        <Tabs defaultValue="address" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="address">Manage Address</TabsTrigger>
+                <TabsTrigger value="password">Change Password</TabsTrigger>
+            </TabsList>
+            <TabsContent value="address" className="mt-6">
+                <ManageAddressPanel />
+            </TabsContent>
+            <TabsContent value="password" className="mt-6">
+                <ChangePasswordPanel />
+            </TabsContent>
+        </Tabs>
+    )
+}
 
 
 const ReferralNetworkPanel = ({ currentUser }: { currentUser: any }) => {
@@ -785,7 +802,7 @@ const UserDashboard = () => {
         case 'history': return <TransactionHistoryPanel />;
         case 'referrals': return <ReferralNetworkPanel currentUser={currentUser} />;
         case 'levels': return <LevelDetailsPanel levels={levels} />;
-        case 'settings': return <ChangePasswordPanel />;
+        case 'settings': return <SettingsPanel />;
         case 'notices': return <NoticesPanel />;
         case 'boosters': return <BoosterStorePanel />;
         case 'pools': return <StakingPoolsPanel />;
@@ -919,3 +936,5 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
+
+    
