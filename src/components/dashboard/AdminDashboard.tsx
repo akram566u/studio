@@ -12,7 +12,7 @@ import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AppLinks, BackgroundTheme, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, Transaction } from '@/lib/types';
+import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, Transaction } from '@/lib/types';
 import { Textarea } from '../ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, ShieldCheck, ShieldX, Trash2, UserCog, Users } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users } from 'lucide-react';
 
 const AdminDashboard = () => {
   const context = useContext(AppContext);
@@ -47,6 +47,8 @@ const AdminDashboard = () => {
   const [localAppLinks, setLocalAppLinks] = useState<AppLinks>({ downloadUrl: '', supportUrl: '' });
   const [localFabSettings, setLocalFabSettings] = useState<FloatingActionButtonSettings>({ isEnabled: true, items: [] });
   const [localNotices, setLocalNotices] = useState<Notice[]>([]);
+  const [localBoosterPacks, setLocalBoosterPacks] = useState<BoosterPack[]>([]);
+  const [localStakingPools, setLocalStakingPools] = useState<StakingPool[]>([]);
 
   
   // State for editing a user
@@ -70,6 +72,8 @@ const AdminDashboard = () => {
     if(context?.appLinks) setLocalAppLinks(context.appLinks);
     if(context?.floatingActionButtonSettings) setLocalFabSettings(context.floatingActionButtonSettings);
     if(context?.notices) setLocalNotices(context.notices);
+    if(context?.boosterPacks) setLocalBoosterPacks(context.boosterPacks);
+    if(context?.stakingPools) setLocalStakingPools(context.stakingPools);
 
   }, [
     context?.websiteTitle, 
@@ -81,7 +85,9 @@ const AdminDashboard = () => {
     context?.rechargeAddresses, 
     context?.appLinks, 
     context?.floatingActionButtonSettings,
-    context?.notices
+    context?.notices,
+    context?.boosterPacks,
+    context?.stakingPools
   ]);
   
   useEffect(() => {
@@ -139,6 +145,13 @@ const AdminDashboard = () => {
       totalWithdrawalAmount,
       totalReferralBonusPaid,
       allUsersForAdmin,
+      addBoosterPack,
+      updateBoosterPack,
+      deleteBoosterPack,
+      addStakingPool,
+      updateStakingPool,
+      deleteStakingPool,
+      endStakingPool,
   } = context;
 
   const handleUserSearch = async (e: React.FormEvent) => {
@@ -329,6 +342,22 @@ const AdminDashboard = () => {
             updateNotice(id, noticeToUpdate);
         }
     };
+    
+    const handleBoosterChange = (id: string, field: keyof BoosterPack, value: any) => {
+        setLocalBoosterPacks(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
+    };
+    const handleSaveBooster = (id: string) => {
+        const packToUpdate = localBoosterPacks.find(p => p.id === id);
+        if (packToUpdate) updateBoosterPack(id, packToUpdate);
+    };
+
+    const handlePoolChange = (id: string, field: keyof StakingPool, value: any) => {
+        setLocalStakingPools(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
+    };
+    const handleSavePool = (id: string) => {
+        const poolToUpdate = localStakingPools.find(p => p.id === id);
+        if (poolToUpdate) updateStakingPool(id, poolToUpdate);
+    };
 
   const firebaseProjectId = "staking-hub-3";
 
@@ -338,7 +367,7 @@ const AdminDashboard = () => {
         <p className="text-center text-gray-400 mb-6">Manage all user deposit, withdrawal, and referral bonus requests.</p>
         
         <Tabs defaultValue="dashboard" className="w-full">
-            <TabsList className="grid w-full grid-cols-8">
+            <TabsList className="grid w-full grid-cols-10">
                 <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                 <TabsTrigger value="history">Activity Log</TabsTrigger>
                 <TabsTrigger value="users">User Management</TabsTrigger>
@@ -346,6 +375,8 @@ const AdminDashboard = () => {
                 <TabsTrigger value="system">System Settings</TabsTrigger>
                 <TabsTrigger value="panels">User Panels</TabsTrigger>
                 <TabsTrigger value="notices">Notices</TabsTrigger>
+                <TabsTrigger value="boosters">Boosters</TabsTrigger>
+                <TabsTrigger value="pools">Pools</TabsTrigger>
                 <TabsTrigger value="view_examples">View Examples</TabsTrigger>
             </TabsList>
             
@@ -1089,6 +1120,98 @@ const AdminDashboard = () => {
                 </Card>
             </TabsContent>
 
+            <TabsContent value="boosters" className="mt-6 space-y-6">
+                <Card className="card-gradient-green-cyan p-6">
+                    <CardHeader>
+                        <CardTitle>Manage Booster Packs</CardTitle>
+                        <CardDescription>Create items for users to purchase to enhance their experience.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ScrollArea className="h-[70vh] custom-scrollbar">
+                            <div className="space-y-4">
+                                {localBoosterPacks.map(pack => (
+                                    <div key={pack.id} className="bg-black/20 p-4 rounded-lg space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <Label htmlFor={`booster-active-${pack.id}`} className="flex items-center gap-2 text-base font-bold text-yellow-300">
+                                                <Switch id={`booster-active-${pack.id}`} checked={pack.isActive} onCheckedChange={c => handleBoosterChange(pack.id, 'isActive', c)} />
+                                                Active
+                                            </Label>
+                                            <Button variant="destructive" size="sm" onClick={() => deleteBoosterPack(pack.id)}>Delete</Button>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div><Label>Name</Label><Input value={pack.name} onChange={e => handleBoosterChange(pack.id, 'name', e.target.value)} /></div>
+                                            <div><Label>Type</Label>
+                                                <Select value={pack.type} onValueChange={(v: BoosterPack['type']) => handleBoosterChange(pack.id, 'type', v)}>
+                                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="referral_points">Referral Points</SelectItem>
+                                                        <SelectItem value="interest_boost">Interest Boost</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="col-span-2"><Label>Description</Label><Textarea value={pack.description} onChange={e => handleBoosterChange(pack.id, 'description', e.target.value)} /></div>
+                                            <div><Label>Cost (USDT)</Label><Input type="number" value={pack.cost} onChange={e => handleBoosterChange(pack.id, 'cost', Number(e.target.value))} /></div>
+                                            <div><Label>Effect Value</Label><Input type="number" value={pack.effectValue} onChange={e => handleBoosterChange(pack.id, 'effectValue', Number(e.target.value))} /></div>
+                                            {pack.type === 'interest_boost' && <div><Label>Duration (Hours)</Label><Input type="number" value={pack.durationHours || 0} onChange={e => handleBoosterChange(pack.id, 'durationHours', Number(e.target.value))} /></div>}
+                                        </div>
+                                        <Button size="sm" onClick={() => handleSaveBooster(pack.id)}>Save Booster</Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                        <div className="mt-4"><Button onClick={addBoosterPack} variant="secondary">Add New Booster</Button></div>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+
+            <TabsContent value="pools" className="mt-6 space-y-6">
+                <Card className="card-gradient-yellow-pink p-6">
+                    <CardHeader>
+                        <CardTitle>Manage Staking Pools</CardTitle>
+                        <CardDescription>Create high-reward, limited-time staking events.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                         <ScrollArea className="h-[70vh] custom-scrollbar">
+                            <div className="space-y-4">
+                                {localStakingPools.map(pool => (
+                                    <div key={pool.id} className="bg-black/20 p-4 rounded-lg space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <Label htmlFor={`pool-active-${pool.id}`} className="flex items-center gap-2 text-base font-bold text-yellow-300">
+                                                <Switch id={`pool-active-${pool.id}`} checked={pool.isActive} onCheckedChange={c => handlePoolChange(pool.id, 'isActive', c)} />
+                                                Active
+                                            </Label>
+                                            <div className="flex gap-2">
+                                                <Button variant="destructive" size="sm" onClick={() => deleteStakingPool(pool.id)}>Delete</Button>
+                                                {pool.status === 'active' && <Button size="sm" variant="outline" onClick={() => endStakingPool(pool.id)}>End Pool & Pay Winner</Button>}
+                                            </div>
+                                        </div>
+                                        <div><Label>Name</Label><Input value={pool.name} onChange={e => handlePoolChange(pool.id, 'name', e.target.value)} /></div>
+                                        <div><Label>Description</Label><Textarea value={pool.description} onChange={e => handlePoolChange(pool.id, 'description', e.target.value)} /></div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div><Label>Min Contribution</Label><Input type="number" value={pool.minContribution} onChange={e => handlePoolChange(pool.id, 'minContribution', Number(e.target.value))} /></div>
+                                            <div><Label>Max Contribution</Label><Input type="number" value={pool.maxContribution} onChange={e => handlePoolChange(pool.id, 'maxContribution', Number(e.target.value))} /></div>
+                                            <div><Label>Pool Interest Rate</Label><Input type="number" step="0.01" value={pool.interestRate} onChange={e => handlePoolChange(pool.id, 'interestRate', Number(e.target.value))} /></div>
+                                            <div><Label>End Date</Label><Input type="datetime-local" value={format(new Date(pool.endsAt), "yyyy-MM-dd'T'HH:mm")} onChange={e => handlePoolChange(pool.id, 'endsAt', new Date(e.target.value).getTime())} /></div>
+                                        </div>
+                                        <Button size="sm" onClick={() => handleSavePool(pool.id)}>Save Pool</Button>
+
+                                        <div className="mt-4 pt-4 border-t border-white/10">
+                                            <h5 className="font-bold">Pool Status: {pool.status}</h5>
+                                            <p>Total Staked: {pool.totalStaked.toFixed(2)} USDT</p>
+                                            <p>Participants: {pool.participants.length}</p>
+                                            {pool.status === 'completed' && pool.winners && (
+                                                <p className="text-green-400">Winner: {pool.winners[0].email} won {pool.winners[0].prize.toFixed(2)} USDT</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                        <div className="mt-4"><Button onClick={addStakingPool} variant="secondary">Add New Pool</Button></div>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+
             <TabsContent value="view_examples" className="mt-6 space-y-6">
                 <RequestViewExamples />
             </TabsContent>
@@ -1099,5 +1222,3 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
-
-    

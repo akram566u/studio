@@ -52,6 +52,12 @@ export interface AugmentedTransaction extends Transaction {
     directReferrals?: number;
 }
 
+export interface ActiveBooster {
+    boosterId: string;
+    type: 'interest_boost';
+    expiresAt: number;
+    effectValue: number;
+}
 
 export interface User {
   id: string;
@@ -70,6 +76,7 @@ export interface User {
   firstDepositTime: number | null;
   registrationTime: number;
   lastWithdrawalTime: number | null; // To track monthly withdrawal limit
+  activeBoosters?: ActiveBooster[];
 }
 
 export interface Level {
@@ -144,7 +151,7 @@ export interface StartScreenSettings {
 export interface DashboardPanel {
   id: string;
   title: string;
-  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices';
+  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices' | 'BoosterStore' | 'StakingPools';
   isVisible: boolean;
   isDeletable: boolean;
   isEditable: boolean;
@@ -169,5 +176,3 @@ export interface AppSettings {
     boosterPacks: BoosterPack[];
     stakingPools: StakingPool[];
 }
-
-    

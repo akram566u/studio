@@ -8,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -29,7 +29,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, Transaction } from '@/lib/types';
 import { Label } from '../ui/label';
@@ -58,7 +58,7 @@ const StakingLevelPanel = ({ currentUser, currentLevelDetails }: { currentUser: 
         </div>
         <div className="flex items-center justify-between mb-2">
             <p className="text-xl text-gray-200">Active Referrals:</p>
-            <p className="text-2xl font-bold text-yellow-400">{currentUser.directReferrals}</p>
+            <p className="text-2xl font-bold text-yellow-400">{currentUser.directReferrals + currentUser.purchasedReferralPoints}</p>
         </div>
         <div className="flex items-center justify-between">
             <p className="text-xl text-gray-200">Withdrawal Limit:</p>
@@ -143,6 +143,9 @@ const TransactionHistoryPanel = () => {
             case 'interest_credit': return <TrendingUp className="text-purple-400" />;
             case 'level_up': return <TrendingUp className="text-blue-400" />;
             case 'new_referral': return <UserCheck className="text-yellow-400" />;
+            case 'booster_purchase': return <Rocket className="text-orange-400" />;
+            case 'pool_join': return <Users className="text-cyan-400" />;
+            case 'pool_payout': return <Star className="text-yellow-300" />;
             default: return <CheckCircle className="text-gray-400" />;
         }
     }
@@ -596,25 +599,94 @@ const NoticesPanel = () => {
 
 const BoosterStorePanel = () => {
     const context = useContext(AppContext);
-    if(!context) return null;
-    return(
+    if (!context || !context.boosterPacks) return null;
+    const { boosterPacks, purchaseBooster } = context;
+    const activePacks = boosterPacks.filter(p => p.isActive);
+
+    return (
         <>
             <h3 className="text-2xl font-semibold mb-4 text-blue-300">Booster Store</h3>
-            <p className="text-gray-400">Coming soon! Purchase packs to boost your earnings.</p>
+            <ScrollArea className="h-96 custom-scrollbar">
+                <div className="space-y-4">
+                    {activePacks.length > 0 ? activePacks.map(pack => (
+                        <Card key={pack.id} className="card-gradient-yellow-pink p-4 flex justify-between items-center">
+                            <div>
+                                <CardTitle className="text-lg text-yellow-200">{pack.name}</CardTitle>
+                                <CardDescription className="text-gray-300">{pack.description}</CardDescription>
+                            </div>
+                            <Button onClick={() => purchaseBooster(pack.id)}>
+                                <Rocket className="mr-2" /> Buy for {pack.cost} USDT
+                            </Button>
+                        </Card>
+                    )) : (
+                        <p className="text-gray-400 text-center">No booster packs are available right now.</p>
+                    )}
+                </div>
+            </ScrollArea>
         </>
-    )
-}
+    );
+};
+
 
 const StakingPoolsPanel = () => {
     const context = useContext(AppContext);
-    if(!context) return null;
-    return(
+    const { toast } = useToast();
+    const [contributionAmounts, setContributionAmounts] = useState<Record<string, string>>({});
+
+    if (!context) return null;
+    const { stakingPools, joinStakingPool, currentUser } = context;
+    const activePools = stakingPools.filter(p => p.isActive && p.status === 'active');
+    
+    const handleJoin = (poolId: string) => {
+        const amount = parseFloat(contributionAmounts[poolId] || '0');
+        if (isNaN(amount) || amount <= 0) {
+            toast({ title: "Error", description: "Please enter a valid amount.", variant: "destructive" });
+            return;
+        }
+        joinStakingPool(poolId, amount);
+    };
+
+    return (
         <>
             <h3 className="text-2xl font-semibold mb-4 text-blue-300">Global Staking Pools</h3>
-            <p className="text-gray-400">Coming soon! Join global pools for a chance at huge rewards.</p>
+            <ScrollArea className="h-96 custom-scrollbar">
+                <div className="space-y-4">
+                    {activePools.length > 0 ? activePools.map(pool => {
+                        const userHasJoined = pool.participants.some(p => p.userId === currentUser?.id);
+                        return (
+                        <Card key={pool.id} className="card-gradient-indigo-fuchsia p-4">
+                            <CardTitle className="text-lg text-purple-300">{pool.name}</CardTitle>
+                            <CardDescription className="text-gray-300 mb-2">{pool.description}</CardDescription>
+                            
+                            <div className="grid grid-cols-2 gap-2 text-sm mb-4">
+                                <div><p className="text-gray-400">Total Staked</p><p className="font-bold text-green-400">{pool.totalStaked.toFixed(2)} USDT</p></div>
+                                <div><p className="text-gray-400">Ends In</p><p className="font-bold text-red-400">{formatDistanceToNow(new Date(pool.endsAt), { addSuffix: true })}</p></div>
+                                <div><p className="text-gray-400">Contribution</p><p className="font-bold text-yellow-400">{pool.minContribution} - {pool.maxContribution} USDT</p></div>
+                                <div><p className="text-gray-400">Participants</p><p className="font-bold text-blue-400">{pool.participants.length}</p></div>
+                            </div>
+
+                            {userHasJoined ? (
+                                <p className='text-center text-green-400 font-bold'>You have joined this pool!</p>
+                            ) : (
+                                <div className="flex gap-2">
+                                    <Input 
+                                        type="number" 
+                                        placeholder="Amount" 
+                                        value={contributionAmounts[pool.id] || ''}
+                                        onChange={e => setContributionAmounts(prev => ({...prev, [pool.id]: e.target.value}))}
+                                    />
+                                    <Button onClick={() => handleJoin(pool.id)}><Users className="mr-2"/> Join Pool</Button>
+                                </div>
+                            )}
+                        </Card>
+                    )}) : (
+                        <p className="text-gray-400 text-center">No active staking pools right now.</p>
+                    )}
+                </div>
+            </ScrollArea>
         </>
-    )
-}
+    );
+};
 
 const CustomPanel = ({ panel }: { panel: DashboardPanel }) => (
     <>
@@ -789,5 +861,3 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
-
-    

@@ -82,7 +82,16 @@ export interface AppContextType {
   totalReferralBonusPaid: number;
   allUsersForAdmin: UserForAdmin[];
   boosterPacks: BoosterPack[];
+  addBoosterPack: () => void;
+  updateBoosterPack: (id: string, updates: Partial<BoosterPack>) => void;
+  deleteBoosterPack: (id: string) => void;
+  purchaseBooster: (boosterId: string) => Promise<void>;
   stakingPools: StakingPool[];
+  addStakingPool: () => void;
+  updateStakingPool: (id: string, updates: Partial<StakingPool>) => void;
+  deleteStakingPool: (id: string) => void;
+  joinStakingPool: (poolId: string, amount: number) => Promise<void>;
+  endStakingPool: (poolId: string) => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -305,6 +314,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             firstDepositTime: null,
             registrationTime: Date.now(),
             lastWithdrawalTime: null,
+            activeBoosters: [],
         };
 
         // Create user document in Firestore
@@ -947,23 +957,29 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             const twentyFourHours = 24 * 60 * 60 * 1000;
 
             if (timeSinceLastCredit >= twentyFourHours) {
-                const interestRate = levels[currentUser.level].interest;
+                let interestRate = levels[currentUser.level].interest;
+                
+                // Check for active interest boosters
+                const activeBoosters = (currentUser.activeBoosters || []).filter(b => b.expiresAt > now);
+                const boostAmount = activeBoosters.reduce((acc, b) => acc + b.effectValue, 0);
+                interestRate += boostAmount;
+                
                 const interestAmount = currentUser.balance * interestRate;
                 
                 const userDocRef = doc(db, "users", currentUser.id);
                 await updateDoc(userDocRef, {
                     balance: currentUser.balance + interestAmount,
-                    lastInterestCreditTime: now
+                    lastInterestCreditTime: now,
+                    activeBoosters: activeBoosters // Clean out expired boosters
                 });
                 await addTransaction(currentUser.id, {
                     id: generateTxnId(),
                     type: 'interest_credit',
                     amount: interestAmount,
                     status: 'credited',
-                    description: `Daily interest of ${interestAmount.toFixed(4)} USDT credited.`
+                    description: `Daily interest of ${interestAmount.toFixed(4)} USDT credited ${boostAmount > 0 ? '(Boosted!)' : ''}.`
                 });
                 
-                // No manual refetch needed due to onSnapshot listener.
                 toast({ title: "Interest Claimed!", description: `You earned ${interestAmount.toFixed(4)} USDT.`});
             } else {
                 toast({ title: "Not Yet", description: `You can claim your next interest in some time.`});
@@ -971,6 +987,215 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         } else {
             toast({ title: "Ineligible", description: "You must make a deposit and be at least Level 1 to earn interest.", variant: "destructive" });
         }
+    };
+    
+    // Booster and Pool Management
+    const addBoosterPack = () => {
+        const newBooster: BoosterPack = {
+            id: `bp_${Date.now()}`,
+            name: 'New Booster Pack',
+            description: 'Edit this description.',
+            cost: 10,
+            type: 'referral_points',
+            effectValue: 1,
+            durationHours: 0,
+            isActive: false,
+        };
+        updateFirestoreSettings({ boosterPacks: [...(boosterPacks || []), newBooster] });
+    };
+    const updateBoosterPack = (id: string, updates: Partial<BoosterPack>) => {
+        const newPacks = (boosterPacks || []).map(p => p.id === id ? { ...p, ...updates } : p);
+        updateFirestoreSettings({ boosterPacks: newPacks });
+    };
+    const deleteBoosterPack = (id: string) => {
+        updateFirestoreSettings({ boosterPacks: (boosterPacks || []).filter(p => p.id !== id) });
+    };
+
+    const addStakingPool = () => {
+        const newPool: StakingPool = {
+            id: `sp_${Date.now()}`,
+            name: 'New Staking Pool',
+            description: 'Edit this description.',
+            endsAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days from now
+            interestRate: 0.1,
+            totalStaked: 0,
+            minContribution: 10,
+            maxContribution: 1000,
+            participants: [],
+            status: 'active',
+            isActive: false,
+        };
+        updateFirestoreSettings({ stakingPools: [...(stakingPools || []), newPool] });
+    };
+    const updateStakingPool = (id: string, updates: Partial<StakingPool>) => {
+        const newPools = (stakingPools || []).map(p => p.id === id ? { ...p, ...updates } : p);
+        updateFirestoreSettings({ stakingPools: newPools });
+    };
+    const deleteStakingPool = (id: string) => {
+        updateFirestoreSettings({ stakingPools: (stakingPools || []).filter(p => p.id !== id) });
+    };
+
+    const purchaseBooster = async (boosterId: string) => {
+        if (!currentUser) return;
+        const booster = boosterPacks.find(b => b.id === boosterId);
+        if (!booster) {
+            toast({ title: "Error", description: "Booster pack not found.", variant: "destructive" });
+            return;
+        }
+        if (currentUser.balance < booster.cost) {
+            toast({ title: "Error", description: "Insufficient balance to purchase.", variant: "destructive" });
+            return;
+        }
+
+        const userDocRef = doc(db, "users", currentUser.id);
+        const updates: any = {
+            balance: currentUser.balance - booster.cost,
+        };
+
+        if (booster.type === 'referral_points') {
+            updates.purchasedReferralPoints = (currentUser.purchasedReferralPoints || 0) + booster.effectValue;
+        } else if (booster.type === 'interest_boost') {
+            const newBooster = {
+                boosterId: booster.id,
+                type: booster.type,
+                expiresAt: Date.now() + (booster.durationHours || 0) * 60 * 60 * 1000,
+                effectValue: booster.effectValue,
+            };
+            updates.activeBoosters = arrayUnion(newBooster);
+        }
+
+        await updateDoc(userDocRef, updates);
+        await addTransaction(currentUser.id, {
+            id: generateTxnId(),
+            type: 'booster_purchase',
+            amount: booster.cost,
+            status: 'completed',
+            description: `Purchased '${booster.name}' for ${booster.cost} USDT.`
+        });
+        toast({ title: "Success", description: `'${booster.name}' purchased and activated!` });
+    };
+    
+    const joinStakingPool = async (poolId: string, amount: number) => {
+        if (!currentUser) return;
+        const pool = stakingPools.find(p => p.id === poolId);
+        if (!pool || !pool.isActive || pool.status !== 'active') {
+            toast({ title: "Error", description: "This pool is not active.", variant: "destructive" });
+            return;
+        }
+        if (amount < pool.minContribution || amount > pool.maxContribution) {
+            toast({ title: "Error", description: `Contribution must be between ${pool.minContribution} and ${pool.maxContribution} USDT.`, variant: "destructive" });
+            return;
+        }
+        if (currentUser.balance < amount) {
+            toast({ title: "Error", description: "Insufficient balance.", variant: "destructive" });
+            return;
+        }
+        if (pool.participants.some(p => p.userId === currentUser.id)) {
+            toast({ title: "Error", description: "You have already joined this pool.", variant: "destructive" });
+            return;
+        }
+
+        // User-side update
+        const userDocRef = doc(db, "users", currentUser.id);
+        await updateDoc(userDocRef, { balance: currentUser.balance - amount });
+        await addTransaction(currentUser.id, {
+            id: generateTxnId(),
+            type: 'pool_join',
+            amount,
+            status: 'completed',
+            description: `Joined '${pool.name}' with ${amount} USDT.`
+        });
+        
+        // Pool-side update
+        const settingsDocRef = doc(db, 'settings', 'global');
+        const updatedPools = stakingPools.map(p => {
+            if (p.id === poolId) {
+                return {
+                    ...p,
+                    totalStaked: p.totalStaked + amount,
+                    participants: [...p.participants, { userId: currentUser.id, email: currentUser.email, amount }]
+                }
+            }
+            return p;
+        });
+        await updateDoc(settingsDocRef, { stakingPools: updatedPools });
+        
+        toast({ title: "Success", description: `You have joined '${pool.name}'!` });
+    };
+
+    const endStakingPool = async (poolId: string) => {
+        const pool = stakingPools.find(p => p.id === poolId);
+        if (!pool || pool.status === 'completed') {
+            toast({ title: "Error", description: "Pool already completed or does not exist.", variant: "destructive" });
+            return;
+        }
+        if (pool.participants.length === 0) {
+            toast({ title: "Pool Ended", description: "Pool had no participants. No payouts made."});
+            const updatedPools = stakingPools.map(p => p.id === poolId ? { ...p, status: 'completed' as 'completed', isActive: false } : p);
+            await updateFirestoreSettings({ stakingPools: updatedPools });
+            return;
+        }
+
+        const totalInterest = pool.totalStaked * pool.interestRate;
+        
+        // Select a winner
+        const winner = pool.participants[Math.floor(Math.random() * pool.participants.length)];
+
+        const batch = writeBatch(db);
+
+        // Refund all participants and give winner the prize
+        for (const participant of pool.participants) {
+            const userRef = doc(db, "users", participant.userId);
+            const userSnap = await getDoc(userRef);
+            if(userSnap.exists()) {
+                const userData = userSnap.data() as User;
+                let newBalance = userData.balance + participant.amount;
+                let description = `Staking pool '${pool.name}' ended. Your contribution of ${participant.amount} USDT has been returned.`;
+                
+                if (participant.userId === winner.userId) {
+                    newBalance += totalInterest;
+                    description = `Congratulations! You won the '${pool.name}' jackpot of ${totalInterest.toFixed(2)} USDT! Your contribution has also been returned.`;
+                }
+
+                batch.update(userRef, { balance: newBalance });
+                // We add the transaction record outside the batch for simplicity here.
+            }
+        }
+        
+        // Update pool status in settings
+        const settingsDocRef = doc(db, 'settings', 'global');
+        const updatedPools = stakingPools.map(p => {
+            if (p.id === poolId) {
+                return {
+                    ...p,
+                    status: 'completed' as 'completed',
+                    winners: [{ userId: winner.userId, email: winner.email, prize: totalInterest }]
+                }
+            }
+            return p;
+        });
+        batch.update(settingsDocRef, { stakingPools: updatedPools });
+        
+        await batch.commit();
+
+        // Add transaction logs after commit
+        for (const participant of pool.participants) {
+            let amount = participant.amount;
+            let description = `Staking pool '${pool.name}' ended. Contribution returned.`;
+            if (participant.userId === winner.userId) {
+                amount += totalInterest;
+                description = `Won staking pool '${pool.name}'! Prize: ${totalInterest.toFixed(2)} USDT.`;
+            }
+            await addTransaction(participant.userId, {
+                id: generateTxnId(),
+                type: 'pool_payout',
+                amount: amount,
+                status: 'credited',
+                description,
+            });
+        }
+        
+        toast({ title: "Pool Ended", description: `Winner ${winner.email} has been paid ${totalInterest.toFixed(2)} USDT.`});
     };
 
 
@@ -1047,7 +1272,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     totalReferralBonusPaid,
     allUsersForAdmin,
     boosterPacks,
+    addBoosterPack,
+    updateBoosterPack,
+    deleteBoosterPack,
+    purchaseBooster,
     stakingPools,
+    addStakingPool,
+    updateStakingPool,
+    deleteStakingPool,
+    joinStakingPool,
+    endStakingPool,
   };
 
   return (
@@ -1071,5 +1305,3 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
-
-    
