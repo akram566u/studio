@@ -58,7 +58,7 @@ const StakingLevelPanel = ({ currentUser, currentLevelDetails }: { currentUser: 
         </div>
         <div className="flex items-center justify-between mb-2">
             <p className="text-xl text-gray-200">Active Referrals:</p>
-            <p className="text-2xl font-bold text-yellow-400">{currentUser.directReferrals + currentUser.purchasedReferralPoints}</p>
+            <p className="text-2xl font-bold text-yellow-400">{(currentUser.directReferrals || 0) + (currentUser.purchasedReferralPoints || 0)}</p>
         </div>
         <div className="flex items-center justify-between">
             <p className="text-xl text-gray-200">Withdrawal Limit:</p>
