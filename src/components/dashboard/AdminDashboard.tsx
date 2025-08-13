@@ -28,8 +28,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight } from 'lucide-react';
-import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, Transaction } from '@/lib/types';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank } from 'lucide-react';
+import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction } from '@/lib/types';
 
 
 type AdminModalView =
@@ -41,6 +41,7 @@ type AdminModalView =
     | 'notices'
     | 'boosters'
     | 'pools'
+    | 'vaults'
     | 'view_examples';
 
 // Main Dashboard Component
@@ -67,6 +68,7 @@ const AdminDashboard = () => {
         case 'notices': return <NoticesPanel />;
         case 'boosters': return <BoostersPanel />;
         case 'pools': return <PoolsPanel />;
+        case 'vaults': return <VaultsPanel />;
         case 'view_examples': return <RequestViewExamples />;
         default: return null;
     }
@@ -82,6 +84,7 @@ const AdminDashboard = () => {
         notices: 'Manage Notices & Events',
         boosters: 'Manage Booster Packs',
         pools: 'Manage Staking Pools',
+        vaults: 'Manage Staking Vaults',
         view_examples: 'Request View Examples',
     };
     return titles[view];
@@ -96,6 +99,7 @@ const AdminDashboard = () => {
       { view: 'notices', label: 'Notices', icon: Megaphone },
       { view: 'boosters', label: 'Boosters', icon: Gift },
       { view: 'pools', label: 'Pools', icon: Layers },
+      { view: 'vaults', label: 'Vaults', icon: PiggyBank },
       { view: 'view_examples', label: 'View Examples', icon: BarChart },
   ];
 
@@ -792,7 +796,7 @@ const SystemSettingsPanel = () => {
                                     </div>
                                     <div><Label htmlFor={`restriction-${r.id}-message`}>Message</Label><Textarea id={`restriction-${r.id}-message`} value={r.message} onChange={e => handleRestrictionChange(r.id, 'message', e.target.value)} /></div>
                                     {r.type === 'withdrawal_hold' && (<div><Label htmlFor={`restriction-${r.id}-duration`}>Duration (Days)</Label><Input id={`restriction-${r.id}-duration`} type="number" value={r.durationDays || 0} onChange={e => handleRestrictionChange(r.id, 'durationDays', Number(e.target.value))} /></div>)}
-                                    {r.type === 'withdrawal_initial_deposit' && (<div><Label htmlFor={`restriction-${r.id}-percentage`}>Withdrawable Principal (%)</Label><Input id={`restriction-${r.id}-percentage`} type="number" value={r.withdrawalPercentage || 0} onChange={e => handleRestrictionChange(r.id, 'withdrawalPercentage', Number(e.target.value))} /></div>)}
+                                    {r.type === 'withdrawal_initial_deposit' && (<div><Label htmlFor={`restriction-${r.id}-percentage`}>Withdrawable Principal (%)</Label><Input id={`restriction-${r.id}-percentage`} type="number" value={r.withdrawalPercentage ?? 0} onChange={e => handleRestrictionChange(r.id, 'withdrawalPercentage', Number(e.target.value))} /></div>)}
                                 </div>
                             ))}
                        </div>
@@ -1028,6 +1032,59 @@ const PoolsPanel = () => {
         </Card>
     );
 };
+
+const VaultsPanel = () => {
+    const context = useContext(AppContext);
+    const [localStakingVaults, setLocalStakingVaults] = useState<StakingVault[]>([]);
+    
+    useEffect(() => {
+        if(context?.stakingVaults) setLocalStakingVaults(context.stakingVaults);
+    }, [context?.stakingVaults]);
+
+    if(!context) return null;
+    const { addStakingVault, updateStakingVault, deleteStakingVault } = context;
+
+    const handleVaultChange = (id: string, field: keyof StakingVault, value: any) => {
+        setLocalStakingVaults(prev => prev.map(v => v.id === id ? { ...v, [field]: value } : v));
+    };
+    const handleSaveVault = (id: string) => { const vaultToUpdate = localStakingVaults.find(v => v.id === id); if (vaultToUpdate) updateStakingVault(id, vaultToUpdate); };
+
+    return (
+        <Card className="card-gradient-indigo-fuchsia p-6">
+            <CardHeader><CardTitle>Manage Staking Vaults</CardTitle><CardDescription>Create fixed-term, high-reward investment opportunities.</CardDescription></CardHeader>
+            <CardContent>
+                 <ScrollArea className="h-[70vh] custom-scrollbar">
+                    <div className="space-y-4">
+                        {localStakingVaults.map(vault => (
+                            <div key={vault.id} className="bg-black/20 p-4 rounded-lg space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <Label htmlFor={`vault-active-${vault.id}`} className="flex items-center gap-2 text-base font-bold text-yellow-300"><Switch id={`vault-active-${vault.id}`} checked={vault.isActive} onCheckedChange={c => handleVaultChange(vault.id, 'isActive', c)} />Active</Label>
+                                    <Button variant="destructive" size="sm" onClick={() => deleteStakingVault(vault.id)}>Delete</Button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div><Label>Name</Label><Input value={vault.name} onChange={e => handleVaultChange(vault.id, 'name', e.target.value)} /></div>
+                                    <div><Label>Term (Days)</Label><Input type="number" value={vault.termDays} onChange={e => handleVaultChange(vault.id, 'termDays', Number(e.target.value))} /></div>
+                                    <div><Label>Interest Rate (Annual)</Label><Input type="number" step="0.001" value={vault.interestRate} onChange={e => handleVaultChange(vault.id, 'interestRate', Number(e.target.value))} /></div>
+                                    <div><Label>Min Investment</Label><Input type="number" value={vault.minInvestment} onChange={e => handleVaultChange(vault.id, 'minInvestment', Number(e.target.value))} /></div>
+                                    <div><Label>Max Investment</Label><Input type="number" value={vault.maxInvestment} onChange={e => handleVaultChange(vault.id, 'maxInvestment', Number(e.target.value))} /></div>
+                                </div>
+                                <Button size="sm" onClick={() => handleSaveVault(vault.id)}>Save Vault</Button>
+
+                                <div className="mt-4 pt-4 border-t border-white/10 text-sm">
+                                    <h5 className="font-bold">Vault Stats</h5>
+                                    <p>Total Invested: {vault.totalInvested.toFixed(2)} USDT</p>
+                                    <p>Total Investors: {vault.totalInvestors}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </ScrollArea>
+                <div className="mt-4"><Button onClick={addStakingVault} variant="secondary">Add New Vault</Button></div>
+            </CardContent>
+        </Card>
+    );
+};
+
 
 const FloatingMenu = ({ items, onSelect }: { items: { view: AdminModalView, label: string, icon: React.ElementType }[], onSelect: (view: AdminModalView) => void }) => {
     const [isOpen, setIsOpen] = useState(false);

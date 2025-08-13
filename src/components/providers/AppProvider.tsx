@@ -7,11 +7,14 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
 import Script from 'next/script';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Progress } from '../ui/progress';
+import { formatDistanceToNow } from 'date-fns';
 
 
 // A version of the User type that is safe to expose to the admin panel
@@ -93,6 +96,11 @@ export interface AppContextType {
   joinStakingPool: (poolId: string, amount: number) => Promise<void>;
   endStakingPool: (poolId: string) => Promise<void>;
   validateWithdrawal: (amount: number) => string | null;
+  stakingVaults: StakingVault[];
+  addStakingVault: () => void;
+  updateStakingVault: (id: string, updates: Partial<StakingVault>) => void;
+  deleteStakingVault: (id: string) => void;
+  investInVault: (vaultId: string, amount: number) => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -140,6 +148,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     notices,
     boosterPacks,
     stakingPools,
+    stakingVaults,
   } = appSettings;
 
   // Effect to fetch and listen for real-time AppSettings from Firestore
@@ -156,6 +165,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             notices: data.notices || [],
             boosterPacks: data.boosterPacks || [],
             stakingPools: data.stakingPools || [],
+            stakingVaults: data.stakingVaults || [],
         };
         setAppSettings(sanitizedData);
       } else {
@@ -174,6 +184,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const fetchUserData = useCallback(async (firebaseUser: FirebaseUser) => {
     if (!firebaseUser) return;
     const userDocRef = doc(db, "users", firebaseUser.uid);
+    
+    // Check for matured vaults before setting up the listener
+    const initialUserDoc = await getDoc(userDocRef);
+    if (initialUserDoc.exists()) {
+        await processMaturedVaults(initialUserDoc.id, initialUserDoc.data() as User);
+    }
     
     const unsubscribe = onSnapshot(userDocRef, (userDocSnap) => {
         if (userDocSnap.exists()) {
@@ -317,6 +333,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             registrationTime: Date.now(),
             lastWithdrawalTime: null,
             activeBoosters: [],
+            vaultInvestments: [],
         };
 
         // Create user document in Firestore
@@ -720,6 +737,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             message: '',
             isActive: true,
             durationDays: 0,
+            withdrawalPercentage: 0,
         };
         updateFirestoreSettings({ restrictionMessages: [...restrictionMessages, newRestriction] });
         toast({ title: 'New restriction added', description: 'Please edit and save the details.'});
@@ -1162,15 +1180,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             if(userSnap.exists()) {
                 const userData = userSnap.data() as User;
                 let newBalance = userData.balance + participant.amount;
-                let description = `Staking pool '${pool.name}' ended. Your contribution of ${participant.amount} USDT has been returned.`;
                 
                 if (participant.userId === winner.userId) {
                     newBalance += totalInterest;
-                    description = `Congratulations! You won the '${pool.name}' jackpot of ${totalInterest.toFixed(2)} USDT! Your contribution has also been returned.`;
                 }
 
                 batch.update(userRef, { balance: newBalance });
-                // We add the transaction record outside the batch for simplicity here.
             }
         }
         
@@ -1208,6 +1223,122 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
         
         toast({ title: "Pool Ended", description: `Winner ${winner.email} has been paid ${totalInterest.toFixed(2)} USDT.`});
+    };
+    
+    // Staking Vaults Management
+    const addStakingVault = () => {
+        const newVault: StakingVault = {
+            id: `sv_${Date.now()}`,
+            name: 'New Vault',
+            termDays: 30,
+            interestRate: 0.15,
+            minInvestment: 100,
+            maxInvestment: 1000,
+            totalInvested: 0,
+            totalInvestors: 0,
+            isActive: false,
+        };
+        updateFirestoreSettings({ stakingVaults: [...(stakingVaults || []), newVault] });
+    };
+    const updateStakingVault = (id: string, updates: Partial<StakingVault>) => {
+        const newVaults = (stakingVaults || []).map(v => v.id === id ? { ...v, ...updates } : v);
+        updateFirestoreSettings({ stakingVaults: newVaults });
+    };
+    const deleteStakingVault = (id: string) => {
+        updateFirestoreSettings({ stakingVaults: (stakingVaults || []).filter(v => v.id !== id) });
+    };
+
+    const investInVault = async (vaultId: string, amount: number) => {
+        if (!currentUser) return;
+        const vault = stakingVaults.find(v => v.id === vaultId);
+        if (!vault || !vault.isActive) {
+            toast({ title: "Error", description: "This vault is not available.", variant: "destructive" });
+            return;
+        }
+        if (amount < vault.minInvestment || amount > vault.maxInvestment) {
+            toast({ title: "Error", description: `Investment must be between ${vault.minInvestment} and ${vault.maxInvestment} USDT.`, variant: "destructive" });
+            return;
+        }
+        if (currentUser.balance < amount) {
+            toast({ title: "Error", description: "Insufficient balance.", variant: "destructive" });
+            return;
+        }
+        
+        const now = Date.now();
+        const newInvestment: UserVaultInvestment = {
+            investmentId: `inv_${now}`,
+            vaultId: vault.id,
+            vaultName: vault.name,
+            amount: amount,
+            interestRate: vault.interestRate,
+            startedAt: now,
+            maturesAt: now + vault.termDays * 24 * 60 * 60 * 1000,
+        };
+
+        const batch = writeBatch(db);
+
+        // Update user
+        const userRef = doc(db, "users", currentUser.id);
+        batch.update(userRef, {
+            balance: currentUser.balance - amount,
+            vaultInvestments: arrayUnion(newInvestment)
+        });
+
+        // Update vault stats in settings
+        const settingsRef = doc(db, "settings", "global");
+        const updatedVaults = stakingVaults.map(v => v.id === vaultId ? {
+            ...v,
+            totalInvested: v.totalInvested + amount,
+            totalInvestors: v.totalInvestors + 1,
+        } : v);
+        batch.update(settingsRef, { stakingVaults: updatedVaults });
+
+        await batch.commit();
+
+        await addTransaction(currentUser.id, {
+            id: generateTxnId(),
+            type: 'vault_investment',
+            amount: amount,
+            status: 'active',
+            description: `Invested ${amount} USDT in '${vault.name}' for ${vault.termDays} days.`
+        });
+        
+        toast({ title: "Success!", description: `Your investment in '${vault.name}' is now active.` });
+    };
+
+    const processMaturedVaults = async (userId: string, userData: User) => {
+        const now = Date.now();
+        const maturedInvestments = (userData.vaultInvestments || []).filter(inv => now >= inv.maturesAt);
+        if (maturedInvestments.length === 0) return;
+
+        let totalPayout = 0;
+        const batch = writeBatch(db);
+
+        for (const inv of maturedInvestments) {
+            const interest = inv.amount * inv.interestRate * (inv.maturesAt - inv.startedAt) / (365 * 24 * 60 * 60 * 1000);
+            const payout = inv.amount + interest;
+            totalPayout += payout;
+            
+            // Add a payout transaction record
+            await addTransaction(userId, {
+                id: generateTxnId(),
+                type: 'vault_payout',
+                amount: payout,
+                status: 'credited',
+                description: `Vault '${inv.vaultName}' matured. Payout of ${payout.toFixed(2)} USDT credited.`
+            });
+        }
+        
+        const userRef = doc(db, "users", userId);
+        const remainingInvestments = (userData.vaultInvestments || []).filter(inv => now < inv.maturesAt);
+        
+        batch.update(userRef, {
+            balance: userData.balance + totalPayout,
+            vaultInvestments: remainingInvestments
+        });
+
+        await batch.commit();
+        toast({ title: "Vault Matured!", description: `A total of ${totalPayout.toFixed(2)} USDT has been credited to your balance.` });
     };
 
 
@@ -1295,6 +1426,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     joinStakingPool,
     endStakingPool,
     validateWithdrawal,
+    stakingVaults,
+    addStakingVault,
+    updateStakingVault,
+    deleteStakingVault,
+    investInVault,
   };
 
   return (

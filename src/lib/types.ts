@@ -31,9 +31,9 @@ export interface AppLinks {
 export interface Transaction {
   id: string;
   userId: string;
-  type: 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created' | 'info' | 'booster_purchase' | 'pool_join' | 'pool_payout';
+  type: 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created' | 'info' | 'booster_purchase' | 'pool_join' | 'pool_payout' | 'vault_investment' | 'vault_payout';
   amount: number;
-  status: 'pending' | 'approved' | 'declined' | 'credited' | 'completed' | 'info';
+  status: 'pending' | 'approved' | 'declined' | 'credited' | 'completed' | 'info' | 'active';
   timestamp: number;
   walletAddress?: string;
   completionTime?: number | null;
@@ -59,6 +59,16 @@ export interface ActiveBooster {
     effectValue: number;
 }
 
+export interface UserVaultInvestment {
+    investmentId: string;
+    vaultId: string;
+    vaultName: string;
+    amount: number;
+    interestRate: number;
+    startedAt: number;
+    maturesAt: number;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -78,6 +88,7 @@ export interface User {
   registrationTime: number;
   lastWithdrawalTime: number | null; // To track monthly withdrawal limit
   activeBoosters?: ActiveBooster[];
+  vaultInvestments?: UserVaultInvestment[];
 }
 
 export interface Level {
@@ -129,6 +140,18 @@ export interface StakingPool {
     isActive: boolean;
 }
 
+export interface StakingVault {
+    id: string;
+    name: string;
+    termDays: number;
+    interestRate: number; // Annualized rate
+    minInvestment: number;
+    maxInvestment: number;
+    totalInvested: number;
+    totalInvestors: number;
+    isActive: boolean;
+}
+
 export interface RestrictionMessage {
   id:string;
   title: string;
@@ -153,7 +176,7 @@ export interface StartScreenSettings {
 export interface DashboardPanel {
   id: string;
   title: string;
-  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices' | 'BoosterStore' | 'StakingPools';
+  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices' | 'BoosterStore' | 'StakingPools' | 'StakingVaults';
   isVisible: boolean;
   isDeletable: boolean;
   isEditable: boolean;
@@ -177,4 +200,5 @@ export interface AppSettings {
     notices: Notice[];
     boosterPacks: BoosterPack[];
     stakingPools: StakingPool[];
+    stakingVaults: StakingVault[];
 }

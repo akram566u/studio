@@ -8,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -31,10 +31,11 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format, formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, Transaction } from '@/lib/types';
+import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, StakingVault, Transaction } from '@/lib/types';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Progress } from '../ui/progress';
 
 
 // Individual Panel Components (for use in Dialogs)
@@ -133,6 +134,7 @@ const TransactionHistoryPanel = () => {
             case 'pending': return <Badge variant="secondary" className="bg-yellow-700">Pending</Badge>;
             case 'declined': return <Badge variant="destructive">Declined</Badge>;
             case 'info': return <Badge variant="default">Info</Badge>;
+            case 'active': return <Badge variant="secondary" className="bg-blue-700">Active</Badge>;
             default: return <Badge>{status}</Badge>;
         }
     };
@@ -146,6 +148,8 @@ const TransactionHistoryPanel = () => {
             case 'booster_purchase': return <Rocket className="text-orange-400" />;
             case 'pool_join': return <Users className="text-cyan-400" />;
             case 'pool_payout': return <Star className="text-yellow-300" />;
+            case 'vault_investment': return <Lock className="text-indigo-400" />;
+            case 'vault_payout': return <PiggyBank className="text-pink-400" />;
             default: return <CheckCircle className="text-gray-400" />;
         }
     }
@@ -652,6 +656,91 @@ const StakingPoolsPanel = () => {
     );
 };
 
+const StakingVaultsPanel = () => {
+    const context = useContext(AppContext);
+    const { toast } = useToast();
+    const [investmentAmounts, setInvestmentAmounts] = useState<Record<string, string>>({});
+    
+    if (!context) return null;
+    const { stakingVaults, investInVault, currentUser } = context;
+
+    const activeVaults = stakingVaults.filter(v => v.isActive);
+    const userInvestments = currentUser?.vaultInvestments || [];
+    
+    const handleInvest = (vaultId: string) => {
+        const amount = parseFloat(investmentAmounts[vaultId] || '0');
+        if (isNaN(amount) || amount <= 0) {
+            toast({ title: "Error", description: "Please enter a valid investment amount.", variant: "destructive"});
+            return;
+        }
+        investInVault(vaultId, amount);
+    };
+
+    return (
+      <>
+        <h3 className="text-2xl font-semibold mb-4 text-blue-300">Fixed-Term Staking Vaults</h3>
+        <p className="text-gray-400 mb-4">Lock your USDT for a fixed term to earn higher, guaranteed interest rates.</p>
+
+        <Tabs defaultValue="available" className="w-full">
+            <TabsList>
+                <TabsTrigger value="available">Available Vaults</TabsTrigger>
+                <TabsTrigger value="my_investments">My Investments ({userInvestments.length})</TabsTrigger>
+            </TabsList>
+            <TabsContent value="available" className="mt-4">
+                <ScrollArea className="h-80 custom-scrollbar pr-2">
+                    <div className="space-y-4">
+                    {activeVaults.length > 0 ? activeVaults.map(vault => (
+                        <Card key={vault.id} className="card-gradient-blue-purple p-4">
+                            <CardTitle className="text-lg text-purple-300">{vault.name}</CardTitle>
+                            <CardDescription className="text-gray-300 mb-2">{vault.termDays}-Day Term</CardDescription>
+
+                            <div className="grid grid-cols-2 gap-2 text-sm mb-4">
+                                <div><p className="text-gray-400">Annual Interest</p><p className="font-bold text-green-400">{(vault.interestRate * 100).toFixed(2)}%</p></div>
+                                <div><p className="text-gray-400">Investment Range</p><p className="font-bold text-yellow-400">{vault.minInvestment} - {vault.maxInvestment} USDT</p></div>
+                            </div>
+                            
+                            <div className="flex gap-2">
+                                <Input 
+                                    type="number"
+                                    placeholder={`Amount (Min ${vault.minInvestment})`}
+                                    value={investmentAmounts[vault.id] || ''}
+                                    onChange={e => setInvestmentAmounts(prev => ({...prev, [vault.id]: e.target.value}))}
+                                />
+                                <Button onClick={() => handleInvest(vault.id)}><Lock className="mr-2" />Invest</Button>
+                            </div>
+                        </Card>
+                    )) : (
+                         <p className="text-gray-400 text-center py-8">No staking vaults are available at the moment.</p>
+                    )}
+                    </div>
+                </ScrollArea>
+            </TabsContent>
+            <TabsContent value="my_investments" className="mt-4">
+                <ScrollArea className="h-80 custom-scrollbar pr-2">
+                    <div className="space-y-4">
+                        {userInvestments.length > 0 ? userInvestments.map(inv => {
+                            const progress = (Date.now() - inv.startedAt) / (inv.maturesAt - inv.startedAt) * 100;
+                            return (
+                                <Card key={inv.investmentId} className="card-gradient-green-cyan p-4">
+                                    <CardTitle className="text-lg text-cyan-300">{inv.vaultName}</CardTitle>
+                                    <div className="flex justify-between items-end text-sm">
+                                        <p className="text-gray-300">Invested: <span className="font-bold text-green-400">{inv.amount.toFixed(2)} USDT</span></p>
+                                        <p className="text-gray-400">Matures in {formatDistanceToNow(new Date(inv.maturesAt), { addSuffix: true })}</p>
+                                    </div>
+                                    <Progress value={Math.min(100, progress)} className="mt-2" />
+                                </Card>
+                            )
+                        }) : (
+                             <p className="text-gray-400 text-center py-8">You have no active investments in staking vaults.</p>
+                        )}
+                    </div>
+                </ScrollArea>
+            </TabsContent>
+        </Tabs>
+      </>  
+    );
+};
+
 const CustomPanel = ({ panel }: { panel: DashboardPanel }) => (
     <>
         <h3 className="text-2xl font-semibold mb-4 text-blue-300">{panel.title}</h3>
@@ -670,7 +759,8 @@ type ModalView =
     | 'settings' 
     | 'notices'
     | 'boosters'
-    | 'pools';
+    | 'pools'
+    | 'vaults';
 
 // Main Dashboard Component
 const UserDashboard = () => {
@@ -698,6 +788,7 @@ const UserDashboard = () => {
         case 'notices': return <NoticesPanel />;
         case 'boosters': return <BoosterStorePanel />;
         case 'pools': return <StakingPoolsPanel />;
+        case 'vaults': return <StakingVaultsPanel />;
         default: return null;
     }
   };
@@ -714,6 +805,7 @@ const UserDashboard = () => {
         notices: 'Notices',
         boosters: 'Booster Store',
         pools: 'Staking Pools',
+        vaults: 'Staking Vaults',
     };
     return titles[modalView];
   };
@@ -724,6 +816,7 @@ const UserDashboard = () => {
     { view: 'history', label: 'History', icon: BarChart },
     { view: 'referrals', label: 'Referrals', icon: UserCheck },
     { view: 'levels', label: 'Levels', icon: Layers },
+    { view: 'vaults', label: 'Vaults', icon: PiggyBank },
     { view: 'boosters', label: 'Boosters', icon: Gift },
     { view: 'pools', label: 'Pools', icon: Star },
     { view: 'notices', label: 'Notices', icon: Megaphone },

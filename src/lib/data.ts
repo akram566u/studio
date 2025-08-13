@@ -110,6 +110,7 @@ export const initialAppSettings: AppSettings = {
         { id: 'p11', title: 'Notices', componentKey: 'Notices', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p12', title: 'Booster Store', componentKey: 'BoosterStore', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p13', title: 'Staking Pools', componentKey: 'StakingPools', isVisible: true, isDeletable: false, isEditable: true },
+        { id: 'p14', title: 'Staking Vaults', componentKey: 'StakingVaults', isVisible: true, isDeletable: false, isEditable: true },
     ],
 
     notices: [
@@ -124,6 +125,11 @@ export const initialAppSettings: AppSettings = {
     
     stakingPools: [
         { id: 'sp_1', name: 'Weekend Jackpot', description: 'Contribute to the pool for a chance to win the entire interest pot!', endsAt: Date.now() + 3 * 24 * 60 * 60 * 1000, interestRate: 0.25, totalStaked: 0, minContribution: 10, maxContribution: 500, participants: [], status: 'active', isActive: true }
+    ],
+    
+    stakingVaults: [
+        { id: 'sv_1', name: '7-Day Sprint', termDays: 7, interestRate: 0.10, minInvestment: 50, maxInvestment: 1000, totalInvested: 0, totalInvestors: 0, isActive: true },
+        { id: 'sv_2', name: '30-Day Marathon', termDays: 30, interestRate: 0.15, minInvestment: 100, maxInvestment: 5000, totalInvested: 0, totalInvestors: 0, isActive: true },
     ],
 
     active3DTheme: 'FloatingCrystals',
