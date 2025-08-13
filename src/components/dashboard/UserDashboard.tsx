@@ -300,56 +300,20 @@ const WithdrawPanel = () => {
     const hasPendingWithdrawal = currentUser.transactions.some(tx => tx.type === 'withdrawal' && tx.status === 'pending');
 
     const handleSubmitWithdrawal = () => {
-        // Rule 1: Check for pending withdrawal first
-        if (hasPendingWithdrawal) {
-            setAlertMessage("You already have a withdrawal request being processed. Please wait for admin approval.");
-            setIsAlertOpen(true);
-            return;
-        }
-        
-        // Rule 2: Check for withdrawal hold period
-        const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
-        if (holdMsg && (holdMsg.durationDays || 0) > 0 && currentUser.lastWithdrawalTime) {
-            const holdDurationMs = (holdMsg.durationDays || 0) * 24 * 60 * 60 * 1000;
-            const timeSinceLastWithdrawal = Date.now() - currentUser.lastWithdrawalTime;
-
-            if (timeSinceLastWithdrawal < holdDurationMs) {
-                const remainingTime = holdDurationMs - timeSinceLastWithdrawal;
-                const days = Math.floor(remainingTime / (1000 * 60 * 60 * 24));
-                const hours = Math.floor((remainingTime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                const countdown = `${days}d ${hours}h`;
-                const message = holdMsg.message.replace('{durationDays}', (holdMsg.durationDays || 0).toString()).replace('{countdown}', countdown)
-                setAlertMessage(message);
-                setIsAlertOpen(true);
-                return;
-            }
-        }
-        
-        // Rule 3: Check for monthly withdrawal limit
-        const monthlyLimitMsg = restrictionMessages.find(m => m.type === 'withdrawal_monthly_limit' && m.isActive);
-        if (monthlyLimitMsg && currentLevelDetails) {
-            const monthlyWithdrawalsAllowed = currentLevelDetails.monthlyWithdrawals || 0;
-            const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-            const recentWithdrawals = currentUser.transactions.filter(
-                (tx): tx is Transaction & { type: 'withdrawal', status: 'approved' } => tx.type === 'withdrawal' && tx.status === 'approved' && tx.timestamp > thirtyDaysAgo
-            ).length;
-
-            if (recentWithdrawals >= monthlyWithdrawalsAllowed) {
-                setAlertMessage(monthlyLimitMsg.message.replace('{limit}', monthlyWithdrawalsAllowed.toString()));
-                setIsAlertOpen(true);
-                return;
-            }
-        }
-        
         const amount = parseFloat(withdrawalAmount);
         if (isNaN(amount) || amount <= 0) {
             toast({ title: "Error", description: "Please enter a valid withdrawal amount.", variant: "destructive" });
             return;
         }
-        if (amount > currentUser.balance) {
-            toast({ title: "Error", description: "Insufficient balance.", variant: "destructive" });
+
+        // Rule 0: Check against all restrictions
+        const validationError = context.validateWithdrawal(amount);
+        if (validationError) {
+            setAlertMessage(validationError);
+            setIsAlertOpen(true);
             return;
         }
+
         submitWithdrawalRequest(amount);
         setWithdrawalAmount('');
     };

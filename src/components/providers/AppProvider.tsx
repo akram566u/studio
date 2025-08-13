@@ -302,6 +302,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             id: newUserAuth.uid,
             email: email,
             balance: 0,
+            totalDeposits: 0,
             level: 0,
             userReferralCode: generateReferralCode(),
             referredBy: referrerDoc ? referrerDoc.id : ADMIN_REFERRAL_CODE,
@@ -448,6 +449,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (newStatus === 'approved') {
         if (type === 'deposit') {
             updates.balance = userFound.balance + originalRequest.amount;
+            updates.totalDeposits = (userFound.totalDeposits || 0) + originalRequest.amount;
             if (!userFound.firstDepositTime) {
                 updates.firstDepositTime = Date.now();
                  // On first deposit, set lastInterestCreditTime to now to start the first 24h cycle
@@ -555,6 +557,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: "Error", description: "You already have a pending withdrawal request.", variant: "destructive" });
         return;
     }
+    
+    // Check for initial deposit restriction
+    const initialDepositMsg = restrictionMessages.find(m => m.type === 'withdrawal_initial_deposit' && m.isActive);
+    if(initialDepositMsg) {
+        const principal = currentUser.totalDeposits || 0;
+        const earnings = currentUser.balance - principal;
+        const withdrawablePrincipal = principal * ((initialDepositMsg.withdrawalPercentage || 0) / 100);
+        const maxWithdrawal = Math.max(0, earnings + withdrawablePrincipal);
+
+        if (amount > maxWithdrawal) {
+            const message = initialDepositMsg.message.replace('{max_amount}', maxWithdrawal.toFixed(2));
+            toast({ title: "Withdrawal Restricted", description: message, variant: "destructive" });
+            return;
+        }
+    }
+
 
     const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
     if (holdMsg && (holdMsg.durationDays || 0) > 0 && currentUser.lastWithdrawalTime) {

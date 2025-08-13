@@ -10,7 +10,7 @@ export interface RechargeAddress {
 }
 
 export interface FloatingActionItem {
-  id: string;
+  id:string;
   label: string;
   icon: string; // lucide-react icon name
   action: 'switch_view_desktop' | 'switch_view_mobile' | 'forgot_password' | 'download_app' | 'customer_support' | 'custom_link';
@@ -66,6 +66,7 @@ export interface User {
   userReferralCode: string;
   referredBy: string | null; // Can be null if no referrer
   balance: number;
+  totalDeposits: number; // New field
   level: number;
   directReferrals: number;
   purchasedReferralPoints: number;
@@ -131,9 +132,10 @@ export interface StakingPool {
 export interface RestrictionMessage {
   id:string;
   title: string;
-  type: 'deposit_no_address' | 'deposit_confirm' | 'withdrawal_hold' | 'withdrawal_monthly_limit';
+  type: 'deposit_no_address' | 'deposit_confirm' | 'withdrawal_hold' | 'withdrawal_monthly_limit' | 'withdrawal_initial_deposit';
   message: string;
   durationDays?: number; // Optional duration for time-based restrictions
+  withdrawalPercentage?: number; // Optional percentage for initial deposit withdrawal
   isActive: boolean;
 }
 

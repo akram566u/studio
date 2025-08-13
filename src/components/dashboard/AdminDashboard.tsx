@@ -933,6 +933,7 @@ const AdminDashboard = () => {
                                                     <SelectItem value="deposit_confirm">Deposit - Confirmation</SelectItem>
                                                     <SelectItem value="withdrawal_hold">Withdrawal - Hold Period</SelectItem>
                                                     <SelectItem value="withdrawal_monthly_limit">Withdrawal - Monthly Limit</SelectItem>
+                                                    <SelectItem value="withdrawal_initial_deposit">Withdrawal - Initial Deposit</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>
@@ -944,6 +945,12 @@ const AdminDashboard = () => {
                                             <div>
                                                 <Label htmlFor={`restriction-${r.id}-duration`}>Duration (Days)</Label>
                                                 <Input id={`restriction-${r.id}-duration`} type="number" value={r.durationDays || 0} onChange={e => handleRestrictionChange(r.id, 'durationDays', Number(e.target.value))} />
+                                            </div>
+                                        )}
+                                        {r.type === 'withdrawal_initial_deposit' && (
+                                            <div>
+                                                <Label htmlFor={`restriction-${r.id}-percentage`}>Withdrawable Principal (%)</Label>
+                                                <Input id={`restriction-${r.id}-percentage`} type="number" value={r.withdrawalPercentage || 0} onChange={e => handleRestrictionChange(r.id, 'withdrawalPercentage', Number(e.target.value))} />
                                             </div>
                                         )}
                                     </div>

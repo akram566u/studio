@@ -75,6 +75,14 @@ export const initialAppSettings: AppSettings = {
             message: 'You have reached your monthly withdrawal limit of {limit}. Please try again next month.',
             isActive: true,
         },
+        {
+            id: 'withdrawal_initial_deposit_1',
+            title: 'Initial Deposit Withdrawal Rule',
+            type: 'withdrawal_initial_deposit',
+            message: 'You can only withdraw your earnings. To withdraw a portion of your principal, please contact support. You can currently withdraw up to {max_amount} USDT.',
+            withdrawalPercentage: 0,
+            isActive: true,
+        }
     ],
 
     referralBonusSettings: {
