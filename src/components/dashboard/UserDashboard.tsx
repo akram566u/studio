@@ -561,12 +561,17 @@ const LevelDetailsPanel = ({ levels }: { levels: { [key: number]: Level } }) => 
 
 const NoticesPanel = () => {
     const context = useContext(AppContext);
-    if (!context || !context.notices) return null;
+    
+    // Ensure context and notices exist before proceeding
+    if (!context || !context.notices) {
+        return null;
+    }
 
     const activeNotices = context.notices.filter(n => n.isActive);
 
+    // Don't render the panel if there are no active notices
     if (activeNotices.length === 0) {
-        return null; // Don't render the panel if there are no active notices
+        return null; 
     }
 
     return (
