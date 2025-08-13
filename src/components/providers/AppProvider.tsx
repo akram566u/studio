@@ -77,7 +77,10 @@ export interface AppContextType {
   deleteNotice: (id: string) => void;
   claimDailyInterest: () => Promise<void>;
   totalUsers: number;
-  totalDeposits: number;
+  totalDepositAmount: number;
+  totalWithdrawalAmount: number;
+  totalReferralBonusPaid: number;
+  allUsersForAdmin: UserForAdmin[];
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -98,8 +101,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [adminReferrals, setAdminReferrals] = useState<UserForAdmin[]>([]);
   const [adminHistory, setAdminHistory] = useState<AugmentedTransaction[]>([]);
   const [totalUsers, setTotalUsers] = useState(0);
-  const [totalDeposits, setTotalDeposits] = useState(0);
-
+  const [totalDepositAmount, setTotalDepositAmount] = useState(0);
+  const [totalWithdrawalAmount, setTotalWithdrawalAmount] = useState(0);
+  const [totalReferralBonusPaid, setTotalReferralBonusPaid] = useState(0);
+  const [allUsersForAdmin, setAllUsersForAdmin] = useState<UserForAdmin[]>([]);
   
   const { toast } = useToast();
   
@@ -838,12 +843,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         // Set total users
         setTotalUsers(allUsers.length);
         
-        // Calculate total deposits
-        let depositCount = 0;
+        let totalDeposits = 0;
+        let totalWithdrawals = 0;
+        let totalBonuses = 0;
+
         allUsers.forEach(user => {
-            depositCount += user.transactions.filter(tx => tx.type === 'deposit' && tx.status === 'approved').length;
+            user.transactions.forEach(tx => {
+                if(tx.status === 'approved' || tx.status === 'credited') {
+                    if (tx.type === 'deposit') totalDeposits += tx.amount;
+                    if (tx.type === 'withdrawal') totalWithdrawals += tx.amount;
+                    if (tx.type === 'referral_bonus') totalBonuses += tx.amount;
+                }
+            });
         });
-        setTotalDeposits(depositCount);
+        setTotalDepositAmount(totalDeposits);
+        setTotalWithdrawalAmount(totalWithdrawals);
+        setTotalReferralBonusPaid(totalBonuses);
+
 
         // Process for pending requests
         const allRequests: AugmentedTransaction[] = [];
@@ -874,6 +890,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             })
         });
         setAdminHistory(allHistory.sort((a,b) => b.timestamp - a.timestamp));
+        
+        const allUsersAdminView: UserForAdmin[] = allUsers.map(u => ({
+            id: u.id,
+            email: u.email,
+            balance: u.balance,
+            level: u.level,
+            primaryWithdrawalAddress: u.primaryWithdrawalAddress,
+            directReferrals: u.directReferrals,
+        }));
+        setAllUsersForAdmin(allUsersAdminView);
         
         // Process admin referrals
         const referredUsers: UserForAdmin[] = [];
@@ -1005,7 +1031,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     deleteNotice,
     claimDailyInterest,
     totalUsers,
-    totalDeposits,
+    totalDepositAmount,
+    totalWithdrawalAmount,
+    totalReferralBonusPaid,
+    allUsersForAdmin,
   };
 
   return (
@@ -1029,7 +1058,5 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
-
-
 
     

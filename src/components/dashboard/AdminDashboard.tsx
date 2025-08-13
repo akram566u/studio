@@ -135,7 +135,10 @@ const AdminDashboard = () => {
       updateNotice,
       deleteNotice,
       totalUsers,
-      totalDeposits,
+      totalDepositAmount,
+      totalWithdrawalAmount,
+      totalReferralBonusPaid,
+      allUsersForAdmin,
   } = context;
 
   const handleUserSearch = async (e: React.FormEvent) => {
@@ -359,15 +362,15 @@ const AdminDashboard = () => {
                             </div>
                             <div>
                                 <p className="text-sm text-gray-300">Total Deposits</p>
-                                <p className="text-xl font-bold text-green-400">{totalDeposits}</p>
+                                <p className="text-xl font-bold text-green-400">{totalDepositAmount.toFixed(2)} USDT</p>
                             </div>
                             <div>
-                                <p className="text-sm text-gray-300">Admin Referral Code</p>
-                                <p className="text-xl font-bold text-yellow-400">ADMINREF</p>
+                                <p className="text-sm text-gray-300">Total Withdrawals</p>
+                                <p className="text-xl font-bold text-red-400">{totalWithdrawalAmount.toFixed(2)} USDT</p>
                             </div>
                             <div>
                                 <p className="text-sm text-gray-300">Total Referral Bonuses Paid</p>
-                                <p className="text-xl font-bold text-orange-400">0.00 USDT</p>
+                                <p className="text-xl font-bold text-orange-400">{totalReferralBonusPaid.toFixed(2)} USDT</p>
                             </div>
                         </div>
                     </CardContent>
@@ -505,7 +508,7 @@ const AdminDashboard = () => {
                 <Card className="card-gradient-indigo-fuchsia p-6">
                     <CardHeader>
                         <CardTitle className="text-purple-300">User Management</CardTitle>
-                        <CardDescription>Search for a user to view and manage their details.</CardDescription>
+                        <CardDescription>Search for a user to view and manage their details or browse all users.</CardDescription>
                     </CardHeader>
                     <CardContent>
                          <form onSubmit={handleUserSearch} className="flex gap-2 mb-4">
@@ -519,9 +522,12 @@ const AdminDashboard = () => {
                         </form>
                         {searchedUser && (
                            <div className="bg-black/20 p-6 rounded-lg space-y-4">
-                                <div>
-                                    <h4 className="text-lg font-bold">{searchedUser.email}</h4>
-                                    <p className="text-xs text-gray-400">ID: {searchedUser.id}</p>
+                                <div className='flex justify-between items-start'>
+                                    <div>
+                                        <h4 className="text-lg font-bold">{searchedUser.email}</h4>
+                                        <p className="text-xs text-gray-400">ID: {searchedUser.id}</p>
+                                    </div>
+                                    <Button size="sm" variant="outline" onClick={() => setSearchedUser(null)}>Clear Search</Button>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
@@ -563,6 +569,30 @@ const AdminDashboard = () => {
                                     <p className="text-xs text-gray-400">This will send a secure link to the user's email for them to reset their own password.</p>
                                 </div>
                            </div>
+                        )}
+                        {!searchedUser && (
+                            <ScrollArea className="h-[70vh] custom-scrollbar">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Email</TableHead>
+                                            <TableHead>Withdrawal Address</TableHead>
+                                            <TableHead className='text-right'>Balance</TableHead>
+                                            <TableHead className='text-right'>Level</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {allUsersForAdmin.map(user => (
+                                            <TableRow key={user.id} onClick={() => findUser(user.email).then(setSearchedUser)} className="cursor-pointer">
+                                                <TableCell className='font-mono'>{user.email}</TableCell>
+                                                <TableCell className='font-mono break-all'>{user.primaryWithdrawalAddress || 'Not set'}</TableCell>
+                                                <TableCell className='font-mono text-right'>{user.balance.toFixed(2)}</TableCell>
+                                                <TableCell className='font-mono text-right'>{user.level}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </ScrollArea>
                         )}
                     </CardContent>
                 </Card>
@@ -1069,7 +1099,5 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
-
-    
 
     
