@@ -31,7 +31,7 @@ export interface AppLinks {
 export interface Transaction {
   id: string;
   userId: string;
-  type: 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created' | 'info';
+  type: 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created' | 'info' | 'booster_purchase' | 'pool_join' | 'pool_payout';
   amount: number;
   status: 'pending' | 'approved' | 'declined' | 'credited' | 'completed' | 'info';
   timestamp: number;
@@ -62,6 +62,7 @@ export interface User {
   balance: number;
   level: number;
   directReferrals: number;
+  purchasedReferralPoints: number;
   transactions: Transaction[];
   referredUsers: { email: string, isActivated: boolean }[];
   lastInterestCreditTime: number;
@@ -92,14 +93,32 @@ export interface Notice {
   isActive: boolean;
 }
 
-export interface AdminContent {
-  id: string;
-  title: string;
-  body: string;
-  type: 'Announcement' | 'Action Item' | 'Information';
-  global: boolean;
-  targetUserId: string;
-  isActive: boolean;
+export interface BoosterPack {
+    id: string;
+    name: string;
+    description: string;
+    cost: number;
+    type: 'interest_boost' | 'referral_points';
+    // The value of the boost (e.g., 0.01 for 1% interest, or 2 for 2 points)
+    effectValue: number; 
+    // Optional: duration in hours for temporary boosts
+    durationHours?: number;
+    isActive: boolean;
+}
+
+export interface StakingPool {
+    id: string;
+    name: string;
+    description: string;
+    endsAt: number; // Timestamp
+    interestRate: number; // Special, high rate for the pool
+    totalStaked: number;
+    minContribution: number;
+    maxContribution: number;
+    participants: { userId: string; amount: number; email: string; }[];
+    status: 'active' | 'completed';
+    winners?: { userId: string; prize: number; email: string; }[];
+    isActive: boolean;
 }
 
 export interface RestrictionMessage {
@@ -147,6 +166,8 @@ export interface AppSettings {
     tawkToSrcUrl: string;
     themeColors: { primary: string; accent: string };
     notices: Notice[];
+    boosterPacks: BoosterPack[];
+    stakingPools: StakingPool[];
 }
 
     

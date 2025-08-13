@@ -8,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -31,11 +31,13 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { DashboardPanel, Level, Notice, Transaction } from '@/lib/types';
+import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, Transaction } from '@/lib/types';
 import { Label } from '../ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
+import { AnimatePresence, motion } from 'framer-motion';
 
 
-// Individual Panel Components
+// Individual Panel Components (for use in Dialogs)
 const UserOverviewPanel = ({ currentUser }: { currentUser: any }) => (
     <Card className="card-gradient-blue-purple p-6">
         <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Staking Overview</h3>
@@ -120,7 +122,11 @@ const InterestCountdownPanel = () => {
     );
 }
 
-const TransactionHistoryPanel = ({ currentUser }: { currentUser: any }) => {
+const TransactionHistoryPanel = () => {
+    const context = useContext(AppContext);
+    if (!context || !context.currentUser) return null;
+    const { currentUser } = context;
+
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'completed': case 'credited': case 'approved': return <Badge variant="secondary" className="bg-green-700">Completed</Badge>;
@@ -141,8 +147,8 @@ const TransactionHistoryPanel = ({ currentUser }: { currentUser: any }) => {
         }
     }
     return (
-        <Card className="card-gradient-indigo-fuchsia p-6">
-            <h3 className="text-xl font-semibold mb-3 text-blue-300">Transaction History</h3>
+        <>
+            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Transaction History</h3>
             <ScrollArea className="h-96 custom-scrollbar">
                 {currentUser.transactions && currentUser.transactions.length > 0 ? (
                 <div className="space-y-4">
@@ -163,7 +169,7 @@ const TransactionHistoryPanel = ({ currentUser }: { currentUser: any }) => {
                 <p className="text-gray-400">No transactions yet.</p>
                 )}
             </ScrollArea>
-        </Card>
+        </>
     );
 };
 
@@ -222,33 +228,31 @@ const RechargePanel = () => {
     
     return (
         <>
-            <Card className="card-gradient-yellow-pink p-6">
-                <h3 className="text-xl font-semibold mb-3 text-blue-300">Recharge USDT ({activeAddress?.network || '...'})</h3>
-                <p className="text-xl text-gray-200 mb-3">Copy this address to deposit:</p>
-                {activeAddress ? (
-                    <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
-                        <span className="font-mono text-sm break-all text-green-300">{activeAddress.address}</span>
-                        <Button size="icon" variant="ghost" onClick={() => copyToClipboard(activeAddress.address)}>
-                            <Copy className="size-4" />
-                        </Button>
-                    </div>
-                ) : (
-                    <div className="bg-gray-700 p-3 rounded-lg text-center text-yellow-400">
-                        No active deposit address.
-                    </div>
-                )}
-                <Input 
-                    type="number" 
-                    placeholder="Amount in USDT" 
-                    className="mb-4 text-xl" 
-                    value={depositAmount}
-                    onChange={(e) => setDepositAmount(e.target.value)}
-                    disabled={!activeAddress}
-                />
-                <Button className="w-full py-3 text-lg" onClick={handleDepositRequest} disabled={!activeAddress}>
-                    Submit Recharge Request
-                </Button>
-            </Card>
+            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Recharge USDT ({activeAddress?.network || '...'})</h3>
+            <p className="text-gray-200 mb-3">Copy this address to deposit:</p>
+            {activeAddress ? (
+                <div className="bg-gray-900/50 p-3 rounded-lg flex items-center justify-between mb-4">
+                    <span className="font-mono text-sm break-all text-green-300">{activeAddress.address}</span>
+                    <Button size="icon" variant="ghost" onClick={() => copyToClipboard(activeAddress.address)}>
+                        <Copy className="size-4" />
+                    </Button>
+                </div>
+            ) : (
+                <div className="bg-gray-900/50 p-3 rounded-lg text-center text-yellow-400">
+                    No active deposit address.
+                </div>
+            )}
+            <Input 
+                type="number" 
+                placeholder="Amount in USDT" 
+                className="mb-4 text-lg" 
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                disabled={!activeAddress}
+            />
+            <Button className="w-full py-3 text-lg" onClick={handleDepositRequest} disabled={!activeAddress}>
+                Submit Recharge Request
+            </Button>
 
             <AlertDialog open={isDepositAlertOpen} onOpenChange={setIsDepositAlertOpen}>
                 <AlertDialogContent>
@@ -324,7 +328,7 @@ const WithdrawPanel = () => {
             const monthlyWithdrawalsAllowed = currentLevelDetails.monthlyWithdrawals || 0;
             const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
             const recentWithdrawals = currentUser.transactions.filter(
-                tx => tx.type === 'withdrawal' && tx.status === 'approved' && tx.timestamp > thirtyDaysAgo
+                (tx): tx is Transaction & { type: 'withdrawal', status: 'approved' } => tx.type === 'withdrawal' && tx.status === 'approved' && tx.timestamp > thirtyDaysAgo
             ).length;
 
             if (recentWithdrawals >= monthlyWithdrawalsAllowed) {
@@ -349,26 +353,24 @@ const WithdrawPanel = () => {
     
     return (
         <>
-            <Card className="card-gradient-indigo-fuchsia p-6">
-                <h3 className="text-xl font-semibold mb-3 text-blue-300">Withdraw USDT</h3>
-                <p className="text-lg text-gray-300 mb-1">
-                    Your withdrawal limit: <span className="font-bold text-yellow-300">{currentLevelDetails?.withdrawalLimit || 0} USDT</span>
-                </p>
-                <p className="text-xs text-gray-400 mb-3">
-                    You can withdraw {currentLevelDetails?.monthlyWithdrawals || 0} time(s) per month.
-                </p>
-                <Input
-                    type="number"
-                    placeholder="Amount to withdraw"
-                    className="mb-4 text-xl"
-                    value={withdrawalAmount}
-                    onChange={e => setWithdrawalAmount(e.target.value)}
-                />
-                <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-xl bg-gray-800/50" />
-                <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} >
-                     <Send/>Request Withdrawal
-                </Button>
-            </Card>
+            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Withdraw USDT</h3>
+            <p className="text-lg text-gray-300 mb-1">
+                Your withdrawal limit: <span className="font-bold text-yellow-300">{currentLevelDetails?.withdrawalLimit || 0} USDT</span>
+            </p>
+            <p className="text-xs text-gray-400 mb-3">
+                You can withdraw {currentLevelDetails?.monthlyWithdrawals || 0} time(s) per month.
+            </p>
+            <Input
+                type="number"
+                placeholder="Amount to withdraw"
+                className="mb-4 text-lg"
+                value={withdrawalAmount}
+                onChange={e => setWithdrawalAmount(e.target.value)}
+            />
+            <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-lg bg-gray-800/50" />
+            <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} >
+                 <Send/>Request Withdrawal
+            </Button>
             <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
@@ -413,10 +415,10 @@ const ManageAddressPanel = () => {
     };
 
     return (
-        <Card className="card-gradient-orange-red p-6">
-            <h3 className="text-xl font-semibold mb-3 text-blue-300">Manage Withdrawal Address</h3>
-            <p className="text-xl text-gray-200 mb-3">Current Address:</p>
-            <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
+        <>
+            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Manage Withdrawal Address</h3>
+            <p className="text-lg text-gray-200 mb-3">Current Address:</p>
+            <div className="bg-gray-900/50 p-3 rounded-lg flex items-center justify-between mb-4">
                 <span className="font-mono text-sm break-all text-green-300">{currentUser.primaryWithdrawalAddress || 'Not set'}</span>
                 {currentUser.primaryWithdrawalAddress && (
                     <Button size="icon" variant="ghost" onClick={() => copyToClipboard(currentUser.primaryWithdrawalAddress || '')}>
@@ -427,7 +429,7 @@ const ManageAddressPanel = () => {
             <Input 
             type="text" 
             placeholder="Enter new BEP-20 Address" 
-            className="mb-4 text-xl" 
+            className="mb-4 text-lg" 
             value={newWithdrawalAddress}
             onChange={(e) => setNewWithdrawalAddress(e.target.value)}
             />
@@ -435,7 +437,7 @@ const ManageAddressPanel = () => {
                 <Button className="w-full py-3 text-lg" onClick={handleUpdateAddress}><Edit />Change</Button>
                 <Button variant="destructive" className="w-full py-3 text-lg" onClick={handleDeleteAddress}><Trash2 />Delete</Button>
             </div>
-        </Card>
+        </>
     );
 }
 
@@ -465,8 +467,8 @@ const ChangePasswordPanel = () => {
     };
 
     return (
-        <Card className="card-gradient-yellow-pink p-6">
-            <h3 className="text-xl font-semibold mb-3 text-blue-300">Change Password</h3>
+        <>
+        <h3 className="text-2xl font-semibold mb-4 text-blue-300">Change Password</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                     <Label htmlFor="currentPassword">Current Password</Label>
@@ -482,7 +484,7 @@ const ChangePasswordPanel = () => {
                 </div>
                 <Button type="submit" className="w-full"><KeyRound /> Update Password</Button>
             </form>
-        </Card>
+        </>
     );
 };
 
@@ -495,39 +497,39 @@ const ReferralNetworkPanel = ({ currentUser }: { currentUser: any }) => {
     };
 
     return (
-        <Card className="card-gradient-blue-purple p-6">
-            <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Referral Network</h3>
-            <h4 className="text-lg font-semibold mb-2 text-blue-300 mt-4">Your Referral Code:</h4>
-            <div className="bg-gray-700 p-3 rounded-lg flex items-center justify-between mb-4">
+        <>
+        <h3 className="text-2xl font-semibold mb-4 text-blue-300">Your Referral Network</h3>
+        <h4 className="text-lg font-semibold mb-2 text-blue-300 mt-4">Your Referral Code:</h4>
+        <div className="bg-gray-900/50 p-3 rounded-lg flex items-center justify-between mb-4">
             <span className="font-mono text-base break-all text-yellow-300">{currentUser.userReferralCode}</span>
             <Button size="icon" variant="ghost" onClick={() => copyToClipboard(currentUser.userReferralCode)}>
                 <Copy className="size-4" />
             </Button>
-            </div>
-            <h4 className="text-lg font-semibold mb-2 text-blue-300">Referred Users:</h4>
-            <ScrollArea className="h-40">
-                <ul className="list-none space-y-2">
-                {currentUser.referredUsers.length > 0 ? (
-                    currentUser.referredUsers.map((user: any, index: number) => (
-                    <li key={index} className="flex items-center gap-2 text-gray-300">
-                        {user.isActivated 
-                        ? <UserCheck className="text-green-400 size-4" /> 
-                        : <UserX className="text-red-400 size-4" />}
-                        {user.email} {user.isActivated ? '(Active)' : '(Inactive)'}
-                    </li>
-                    ))
-                ) : (
-                    <li className="text-gray-500">No referrals yet.</li>
-                )}
-                </ul>
-            </ScrollArea>
-        </Card>
+        </div>
+        <h4 className="text-lg font-semibold mb-2 text-blue-300">Referred Users:</h4>
+        <ScrollArea className="h-40">
+            <ul className="list-none space-y-2">
+            {currentUser.referredUsers.length > 0 ? (
+                currentUser.referredUsers.map((user: any, index: number) => (
+                <li key={index} className="flex items-center gap-2 text-gray-300">
+                    {user.isActivated 
+                    ? <UserCheck className="text-green-400 size-4" /> 
+                    : <UserX className="text-red-400 size-4" />}
+                    {user.email} {user.isActivated ? '(Active)' : '(Inactive)'}
+                </li>
+                ))
+            ) : (
+                <li className="text-gray-500">No referrals yet.</li>
+            )}
+            </ul>
+        </ScrollArea>
+        </>
     );
 }
 
 const LevelDetailsPanel = ({ levels }: { levels: { [key: number]: Level } }) => (
-    <Card className="card-gradient-green-cyan p-6">
-        <h3 className="text-xl font-semibold mb-4 text-blue-300">Staking Level Details</h3>
+    <>
+        <h3 className="text-2xl font-semibold mb-4 text-blue-300">Staking Level Details</h3>
         <ScrollArea className="h-96 custom-scrollbar">
         <Table>
             <TableHeader>
@@ -542,7 +544,7 @@ const LevelDetailsPanel = ({ levels }: { levels: { [key: number]: Level } }) => 
             </TableRow>
             </TableHeader>
             <TableBody>
-            {Object.entries(levels).filter(([,details]) => details.isEnabled).map(([level, details]) => (
+            {Object.entries(levels).filter(([,details]) => details.isEnabled).sort(([a], [b]) => Number(a) - Number(b)).map(([level, details]) => (
                 <TableRow key={level}>
                     <TableCell><LevelBadge level={parseInt(level, 10)} /></TableCell>
                     <TableCell className="font-semibold text-gray-200">{details.name}</TableCell>
@@ -556,113 +558,141 @@ const LevelDetailsPanel = ({ levels }: { levels: { [key: number]: Level } }) => 
             </TableBody>
         </Table>
         </ScrollArea>
-    </Card>
+    </>
 );
 
 const NoticesPanel = () => {
     const context = useContext(AppContext);
     
-    // Ensure context and notices exist before proceeding
-    if (!context || !context.notices) {
-        return null;
-    }
+    if (!context || !context.notices) return null;
 
     const activeNotices = context.notices.filter(n => n.isActive);
 
-    // Don't render the panel if there are no active notices
     if (activeNotices.length === 0) {
-        return null; 
+        return (
+            <>
+                <h3 className="text-2xl font-semibold mb-4 text-blue-300">Notices & Events</h3>
+                <p className="text-gray-400">No active notices right now.</p>
+            </>
+        );
     }
 
     return (
-        <Card className="card-gradient-blue-purple p-6">
-            <CardHeader className="p-0 mb-4">
-                <CardTitle className="flex items-center gap-2 text-blue-300"><Megaphone /> Notices & Events</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-                <ScrollArea className="h-60 custom-scrollbar pr-4">
-                    <div className="space-y-4">
-                        {activeNotices.map((notice: Notice) => (
-                            <div key={notice.id} className="bg-black/20 p-3 rounded-lg">
-                                <h4 className="font-bold text-yellow-300">{notice.title}</h4>
-                                <p className="text-sm text-gray-300 whitespace-pre-wrap">{notice.content}</p>
-                            </div>
-                        ))}
-                    </div>
-                </ScrollArea>
-            </CardContent>
-        </Card>
+        <>
+            <h3 className="text-2xl font-semibold mb-4 text-blue-300"><Megaphone className='inline-block mr-2' />Notices & Events</h3>
+            <ScrollArea className="h-96 custom-scrollbar pr-4">
+                <div className="space-y-4">
+                    {activeNotices.map((notice: Notice) => (
+                        <div key={notice.id} className="bg-black/20 p-3 rounded-lg">
+                            <h4 className="font-bold text-yellow-300">{notice.title}</h4>
+                            <p className="text-sm text-gray-300 whitespace-pre-wrap">{notice.content}</p>
+                        </div>
+                    ))}
+                </div>
+            </ScrollArea>
+        </>
     );
 };
 
+const BoosterStorePanel = () => {
+    const context = useContext(AppContext);
+    if(!context) return null;
+    return(
+        <>
+            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Booster Store</h3>
+            <p className="text-gray-400">Coming soon! Purchase packs to boost your earnings.</p>
+        </>
+    )
+}
+
+const StakingPoolsPanel = () => {
+    const context = useContext(AppContext);
+    if(!context) return null;
+    return(
+        <>
+            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Global Staking Pools</h3>
+            <p className="text-gray-400">Coming soon! Join global pools for a chance at huge rewards.</p>
+        </>
+    )
+}
+
 const CustomPanel = ({ panel }: { panel: DashboardPanel }) => (
-    <Card className="card-gradient-yellow-pink p-6">
-        <CardHeader>
-            <CardTitle>{panel.title}</CardTitle>
-        </CardHeader>
-        <CardContent>
-            {/* A simple markdown renderer could be added here */}
-            <p>{panel.content}</p>
-        </CardContent>
-    </Card>
+    <>
+        <h3 className="text-2xl font-semibold mb-4 text-blue-300">{panel.title}</h3>
+        {/* A simple markdown renderer could be added here */}
+        <p>{panel.content}</p>
+    </>
 );
 
+
+type ModalView = 
+    | 'recharge' 
+    | 'withdraw' 
+    | 'history' 
+    | 'referrals' 
+    | 'levels' 
+    | 'settings' 
+    | 'notices'
+    | 'boosters'
+    | 'pools';
 
 // Main Dashboard Component
 const UserDashboard = () => {
   const context = useContext(AppContext);
+  const [modalView, setModalView] = useState<ModalView | null>(null);
 
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;
   }
-  const { currentUser, levels, dashboardPanels } = context;
+  const { currentUser, levels } = context;
   
   const hasPendingRequests = currentUser.transactions.some(tx => tx.status === 'pending');
   const currentLevelDetails = levels[currentUser.level];
 
-  const panelComponentMap: { [key: string]: React.ComponentType<any> } = {
-    UserOverview: () => <UserOverviewPanel currentUser={currentUser} />,
-    StakingLevel: () => <StakingLevelPanel currentUser={currentUser} currentLevelDetails={currentLevelDetails} />,
-    InterestCredit: () => <InterestCountdownPanel />,
-    TransactionHistory: () => <TransactionHistoryPanel currentUser={currentUser} />,
-    Recharge: () => <RechargePanel />,
-    Withdraw: () => <WithdrawPanel />,
-    ManageAddress: () => <ManageAddressPanel />,
-    ReferralNetwork: () => <ReferralNetworkPanel currentUser={currentUser} />,
-    LevelDetails: () => <LevelDetailsPanel levels={levels} />,
-    ChangePassword: () => <ChangePasswordPanel />,
-    Notices: () => <NoticesPanel />,
-    Custom: ({ panel }: { panel: DashboardPanel }) => <CustomPanel panel={panel} />,
-  };
-  
-  const visiblePanels = dashboardPanels.filter(p => p.isVisible);
+  const renderModalContent = () => {
+    if (!modalView) return null;
 
-    const getPanelsForColumn = (column: 'left' | 'middle' | 'right') => {
-        const panelIds = {
-            left: ['p1', 'p2', 'p3', 'p4'],
-            middle: ['p5', 'p6', 'p7'],
-            right: ['p10', 'p8', 'p9', 'p11'],
-        };
-        const columnPanelIds = panelIds[column];
-        return visiblePanels
-            .filter(p => columnPanelIds.includes(p.id))
-            .sort((a, b) => columnPanelIds.indexOf(a.id) - columnPanelIds.indexOf(b.id));
-    };
-
-  const leftColumnPanels = getPanelsForColumn('left');
-  const middleColumnPanels = getPanelsForColumn('middle');
-  const rightColumnPanels = getPanelsForColumn('right');
-
-
-  const renderPanel = (panel: DashboardPanel) => {
-    const Component = panelComponentMap[panel.componentKey];
-    if (!Component) return null;
-    // For custom panels, we need to pass the panel data itself
-    if (panel.componentKey === 'Custom') {
-        return <Component key={panel.id} panel={panel} />;
+    switch(modalView) {
+        case 'recharge': return <RechargePanel />;
+        case 'withdraw': return <WithdrawPanel />;
+        case 'history': return <TransactionHistoryPanel />;
+        case 'referrals': return <ReferralNetworkPanel currentUser={currentUser} />;
+        case 'levels': return <LevelDetailsPanel levels={levels} />;
+        case 'settings': return <ChangePasswordPanel />;
+        case 'notices': return <NoticesPanel />;
+        case 'boosters': return <BoosterStorePanel />;
+        case 'pools': return <StakingPoolsPanel />;
+        default: return null;
     }
-    return <Component key={panel.id} />;
   };
+
+  const getModalTitle = () => {
+    if (!modalView) return '';
+    const titles: Record<ModalView, string> = {
+        recharge: 'Recharge',
+        withdraw: 'Withdraw',
+        history: 'History',
+        referrals: 'Referral Network',
+        levels: 'Level Details',
+        settings: 'Settings',
+        notices: 'Notices',
+        boosters: 'Booster Store',
+        pools: 'Staking Pools',
+    };
+    return titles[modalView];
+  };
+
+  const dashboardItems: { view: ModalView, label: string, icon: React.ElementType }[] = [
+    { view: 'recharge', label: 'Recharge', icon: Briefcase },
+    { view: 'withdraw', label: 'Withdraw', icon: Send },
+    { view: 'history', label: 'History', icon: BarChart },
+    { view: 'referrals', label: 'Referrals', icon: UserCheck },
+    { view: 'levels', label: 'Levels', icon: Layers },
+    { view: 'boosters', label: 'Boosters', icon: Gift },
+    { view: 'pools', label: 'Pools', icon: Star },
+    { view: 'notices', label: 'Notices', icon: Megaphone },
+    { view: 'settings', label: 'Settings', icon: Settings },
+  ];
 
   return (
     <>
@@ -676,14 +706,88 @@ const UserDashboard = () => {
                 </AlertDescription>
             </Alert>
         )}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1 space-y-8">{leftColumnPanels.map(renderPanel)}</div>
-          <div className="lg:col-span-1 space-y-8">{middleColumnPanels.map(renderPanel)}</div>
-          <div className="lg:col-span-1 space-y-8">{rightColumnPanels.map(renderPanel)}</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <UserOverviewPanel currentUser={currentUser} />
+            <StakingLevelPanel currentUser={currentUser} currentLevelDetails={currentLevelDetails} />
+            <div className='md:col-span-2'>
+                <InterestCountdownPanel/>
+            </div>
         </div>
       </GlassPanel>
+
+      <FloatingMenu items={dashboardItems} onSelect={setModalView} />
+
+      <Dialog open={!!modalView} onOpenChange={(isOpen) => !isOpen && setModalView(null)}>
+        <DialogContent className='max-w-2xl'>
+            <DialogHeader>
+                <DialogTitle className='text-2xl text-purple-400'>{getModalTitle()}</DialogTitle>
+            </DialogHeader>
+            <div className='py-4'>
+                {renderModalContent()}
+            </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
 
+
+const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: string, icon: React.ElementType }[], onSelect: (view: ModalView) => void }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    return (
+        <div className="fixed bottom-8 right-8 z-50">
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        className="mb-4 flex flex-col items-end gap-3"
+                    >
+                        {items.map((item) => (
+                             <div key={item.view} className="flex items-center gap-3">
+                                <span className="bg-card/50 backdrop-blur-md text-white px-3 py-1 rounded-md shadow-lg text-sm">
+                                    {item.label}
+                                 </span>
+                                <Button
+                                    size="icon"
+                                    className="rounded-full size-12 bg-secondary/80 hover:bg-secondary"
+                                    onClick={() => {
+                                        onSelect(item.view);
+                                        setIsOpen(false);
+                                    }}
+                                >
+                                    <item.icon className="size-6" />
+                                </Button>
+                            </div>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <Button 
+                size="icon" 
+                className="rounded-full size-20 shadow-2xl bg-gradient-to-br from-blue-500 to-purple-600 hover:scale-110 active:scale-105 transition-transform duration-200"
+                onClick={() => setIsOpen(!isOpen)}
+            >
+                <AnimatePresence initial={false}>
+                    <motion.div
+                        key={isOpen ? 'close' : 'open'}
+                        initial={{ rotate: -90, opacity: 0, scale: 0.5 }}
+                        animate={{ rotate: 0, opacity: 1, scale: 1 }}
+                        exit={{ rotate: 90, opacity: 0, scale: 0.5 }}
+                        transition={{ duration: 0.2 }}
+                        className="absolute inset-0 flex items-center justify-center"
+                    >
+                        {isOpen ? <X className="size-10" /> : <ChevronRight className="size-10" />}
+                    </motion.div>
+                </AnimatePresence>
+            </Button>
+        </div>
+    );
+}
+
 export default UserDashboard;
+
+    

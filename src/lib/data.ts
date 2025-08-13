@@ -106,6 +106,15 @@ export const initialAppSettings: AppSettings = {
         { id: 'notice_1', title: 'Welcome to Staking Hub!', content: 'We are excited to have you here. Start staking today to earn daily rewards.', isActive: true },
         { id: 'notice_2', title: 'Scheduled Maintenance', content: 'The platform will be undergoing scheduled maintenance on Saturday at 11 PM UTC. The service might be temporarily unavailable.', isActive: false },
     ],
+    
+    boosterPacks: [
+        { id: 'bp_1', name: 'Referral Point Pack', description: 'Get 2 referral points to help you level up faster.', cost: 10, type: 'referral_points', effectValue: 2, isActive: true },
+        { id: 'bp_2', name: '24hr Interest Boost', description: 'Increase your daily interest by 1% for 24 hours.', cost: 5, type: 'interest_boost', effectValue: 0.01, durationHours: 24, isActive: true },
+    ],
+    
+    stakingPools: [
+        { id: 'sp_1', name: 'Weekend Jackpot', description: 'Contribute to the pool for a chance to win the entire interest pot!', endsAt: 0, interestRate: 0.25, totalStaked: 0, minContribution: 10, maxContribution: 500, participants: [], status: 'active', isActive: true }
+    ],
 
     active3DTheme: 'FloatingCrystals',
 

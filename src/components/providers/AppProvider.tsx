@@ -7,7 +7,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
@@ -81,6 +81,8 @@ export interface AppContextType {
   totalWithdrawalAmount: number;
   totalReferralBonusPaid: number;
   allUsersForAdmin: UserForAdmin[];
+  boosterPacks: BoosterPack[];
+  stakingPools: StakingPool[];
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -126,6 +128,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     floatingActionButtonSettings,
     tawkToSrcUrl,
     notices,
+    boosterPacks,
+    stakingPools,
   } = appSettings;
 
   // Effect to fetch and listen for real-time AppSettings from Firestore
@@ -134,12 +138,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     const unsubscribe = onSnapshot(settingsDocRef, (docSnap) => {
       if (docSnap.exists()) {
-        const data = docSnap.data();
-        // Ensure notices is an array to prevent crashes
-        if (!data.notices) {
-          data.notices = [];
-        }
-        setAppSettings(data as AppSettings);
+        const data = docSnap.data() as AppSettings;
+        // Ensure arrays exist to prevent crashes
+        const sanitizedData = {
+            ...initialAppSettings, // Start with defaults
+            ...data, // Override with DB data
+            notices: data.notices || [],
+            boosterPacks: data.boosterPacks || [],
+            stakingPools: data.stakingPools || [],
+        };
+        setAppSettings(sanitizedData);
       } else {
         // If no settings doc, create one from initial data
         console.log("No settings document found, creating one from initial data.");
@@ -289,6 +297,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             userReferralCode: generateReferralCode(),
             referredBy: referrerDoc ? referrerDoc.id : ADMIN_REFERRAL_CODE,
             directReferrals: 0,
+            purchasedReferralPoints: 0,
             transactions: [],
             referredUsers: [],
             lastInterestCreditTime: 0,
@@ -464,7 +473,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         for (const levelKey of sortedLevels) {
             if (levelKey > newLevel) { // Only check for promotion
                 const levelDetails = levels[levelKey];
-                if (postApprovalUserData.balance >= levelDetails.minBalance && postApprovalUserData.directReferrals >= levelDetails.directReferrals) {
+                const totalReferrals = postApprovalUserData.directReferrals + (postApprovalUserData.purchasedReferralPoints || 0);
+                if (postApprovalUserData.balance >= levelDetails.minBalance && totalReferrals >= levelDetails.directReferrals) {
                     newLevel = levelKey;
                     break;
                 }
@@ -550,7 +560,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const monthlyWithdrawalsAllowed = currentLevelDetails?.monthlyWithdrawals || 0;
         const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
         const recentWithdrawals = currentUser.transactions.filter(
-            tx => tx.type === 'withdrawal' && tx.status === 'approved' && tx.timestamp > thirtyDaysAgo
+            (tx): tx is Transaction & { type: 'withdrawal', status: 'approved' } => tx.type === 'withdrawal' && tx.status === 'approved' && tx.timestamp > thirtyDaysAgo
         ).length;
 
         if (recentWithdrawals >= monthlyWithdrawalsAllowed) {
@@ -609,7 +619,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       });
       
       toast({ title: "Success", description: "User balance adjusted." });
-      return findUser(userDoc.data().email);
+      const updatedUserDoc = await getDoc(userDocRef);
+      return findUser(updatedUserDoc.data()?.email);
   };
 
   const adjustUserLevel = async (userId: string, level: number): Promise<UserForAdmin | null> => {
@@ -1035,6 +1046,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     totalWithdrawalAmount,
     totalReferralBonusPaid,
     allUsersForAdmin,
+    boosterPacks,
+    stakingPools,
   };
 
   return (
