@@ -133,7 +133,9 @@ const AdminDashboard = () => {
       updateFloatingActionButtonSettings,
       addNotice,
       updateNotice,
-      deleteNotice
+      deleteNotice,
+      totalUsers,
+      totalDeposits,
   } = context;
 
   const handleUserSearch = async (e: React.FormEvent) => {
@@ -352,16 +354,16 @@ const AdminDashboard = () => {
                     <CardContent>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-left">
                             <div>
+                                <p className="text-sm text-gray-300">Total Registered Users</p>
+                                <p className="text-xl font-bold text-blue-400">{totalUsers}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm text-gray-300">Total Deposits</p>
+                                <p className="text-xl font-bold text-green-400">{totalDeposits}</p>
+                            </div>
+                            <div>
                                 <p className="text-sm text-gray-300">Admin Referral Code</p>
                                 <p className="text-xl font-bold text-yellow-400">ADMINREF</p>
-                            </div>
-                            <div>
-                                <p className="text-sm text-gray-300">Admin Level</p>
-                                <p className="text-xl font-bold text-blue-400">5</p>
-                            </div>
-                            <div>
-                                <p className="text-sm text-gray-300">System Funds (Admin Balance)</p>
-                                <p className="text-xl font-bold text-green-400">1000205.00 USDT</p>
                             </div>
                             <div>
                                 <p className="text-sm text-gray-300">Total Referral Bonuses Paid</p>
@@ -1067,5 +1069,7 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
+
+    
 
     

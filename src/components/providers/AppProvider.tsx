@@ -76,6 +76,8 @@ export interface AppContextType {
   updateNotice: (id: string, updates: Partial<Notice>) => void;
   deleteNotice: (id: string) => void;
   claimDailyInterest: () => Promise<void>;
+  totalUsers: number;
+  totalDeposits: number;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -95,6 +97,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [allPendingRequests, setAllPendingRequests] = useState<AugmentedTransaction[]>([]);
   const [adminReferrals, setAdminReferrals] = useState<UserForAdmin[]>([]);
   const [adminHistory, setAdminHistory] = useState<AugmentedTransaction[]>([]);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [totalDeposits, setTotalDeposits] = useState(0);
 
   
   const { toast } = useToast();
@@ -692,11 +696,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const addLevel = () => {
         const newLevelKey = Object.keys(levels).length;
         const newLevelData: Level = {
+            name: 'New Level',
             interest: 0.1,
             minBalance: 20000,
             directReferrals: 60,
             withdrawalLimit: 1500,
             monthlyWithdrawals: 2,
+            isEnabled: true,
         };
         const updatedLevels = { ...levels, [newLevelKey]: newLevelData };
         updateFirestoreSettings({ levels: updatedLevels });
@@ -828,6 +834,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const usersRef = collection(db, "users");
         const allUsersSnap = await getDocs(usersRef);
         const allUsers: User[] = allUsersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+
+        // Set total users
+        setTotalUsers(allUsers.length);
+        
+        // Calculate total deposits
+        let depositCount = 0;
+        allUsers.forEach(user => {
+            depositCount += user.transactions.filter(tx => tx.type === 'deposit' && tx.status === 'approved').length;
+        });
+        setTotalDeposits(depositCount);
 
         // Process for pending requests
         const allRequests: AugmentedTransaction[] = [];
@@ -988,6 +1004,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateNotice,
     deleteNotice,
     claimDailyInterest,
+    totalUsers,
+    totalDeposits,
   };
 
   return (
@@ -1012,3 +1030,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
+
+
+    
