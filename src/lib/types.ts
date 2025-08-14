@@ -54,9 +54,10 @@ export interface AugmentedTransaction extends Transaction {
 
 export interface ActiveBooster {
     boosterId: string;
-    type: 'interest_boost' | 'referral_bonus_boost';
+    type: 'interest_boost' | 'referral_bonus_boost' | 'referral_points';
     expiresAt: number;
     effectValue: number; // e.g., 0.01 for interest, 1.5 for 1.5x bonus
+    cost: number;
 }
 
 export interface UserVaultInvestment {

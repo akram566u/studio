@@ -307,6 +307,7 @@ const UserManagementPanel = () => {
     const [editingAddress, setEditingAddress] = useState('');
     const [editingBalance, setEditingBalance] = useState(0);
     const [editingLevel, setEditingLevel] = useState(0);
+    const [editingReferrals, setEditingReferrals] = useState(0);
 
     useEffect(() => {
         if (searchedUser) {
@@ -314,11 +315,12 @@ const UserManagementPanel = () => {
             setEditingAddress(searchedUser.primaryWithdrawalAddress || '');
             setEditingBalance(searchedUser.balance);
             setEditingLevel(searchedUser.level);
+            setEditingReferrals(searchedUser.directReferrals);
         }
     }, [searchedUser]);
 
     if (!context) return null;
-    const { findUser, allUsersForAdmin, adminUpdateUserEmail, adminUpdateUserWithdrawalAddress, adjustUserBalance, adjustUserLevel, forgotPassword } = context;
+    const { findUser, allUsersForAdmin, adminUpdateUserEmail, adminUpdateUserWithdrawalAddress, adjustUserBalance, adjustUserLevel, forgotPassword, adjustUserDirectReferrals } = context;
 
     const handleUserSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -335,7 +337,7 @@ const UserManagementPanel = () => {
         }
     };
 
-    const handleUserUpdate = async (field: 'email' | 'address' | 'balance' | 'level') => {
+    const handleUserUpdate = async (field: 'email' | 'address' | 'balance' | 'level' | 'referrals') => {
         if (!searchedUser) return;
         let updatedUser: UserForAdmin | null = null;
         switch (field) {
@@ -350,6 +352,9 @@ const UserManagementPanel = () => {
                 break;
             case 'level':
                 updatedUser = await adjustUserLevel(searchedUser.id, editingLevel);
+                break;
+            case 'referrals':
+                updatedUser = await adjustUserDirectReferrals(searchedUser.id, editingReferrals);
                 break;
         }
         if (updatedUser) {
@@ -396,6 +401,13 @@ const UserManagementPanel = () => {
                                  <div className="flex gap-2">
                                     <Input id="edit-level" type="number" value={editingLevel} onChange={e => setEditingLevel(Number(e.target.value))} />
                                     <Button onClick={() => handleUserUpdate('level')}>Save</Button>
+                                </div>
+                            </div>
+                             <div className="space-y-2">
+                                <Label htmlFor="edit-referrals">Direct Referrals</Label>
+                                <div className="flex gap-2">
+                                    <Input id="edit-referrals" type="number" value={editingReferrals} onChange={e => setEditingReferrals(Number(e.target.value))} />
+                                    <Button onClick={() => handleUserUpdate('referrals')}>Save</Button>
                                 </div>
                             </div>
                             <div className="space-y-2 col-span-1 md:col-span-2">
@@ -905,7 +917,7 @@ const NoticesPanel = () => {
             <CardContent>
                 <ScrollArea className="h-[70vh] custom-scrollbar">
                     <div className="space-y-4">
-                        {(localNotices || []).map(notice => (
+                        {(notices || []).map(notice => (
                             <div key={notice.id} className="bg-black/20 p-4 rounded-lg space-y-3">
                                 <div className="flex justify-between items-center">
                                     <Label htmlFor={`notice-active-${notice.id}`} className="flex items-center gap-2 text-base font-bold text-yellow-300"><Switch id={`notice-active-${notice.id}`} checked={notice.isActive} onCheckedChange={checked => handleNoticeChange(notice.id, 'isActive', checked)} />Active</Label>
@@ -1167,7 +1179,7 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: AdminModalView, labe
                         exit={{ opacity: 0, y: 10 }}
                         className="mb-4 flex flex-col items-end"
                     >
-                        <ScrollArea className="h-auto max-h-96 pr-4 -mr-4">
+                        <ScrollArea className="h-auto max-h-[60vh] pr-4 -mr-4">
                             <div className="flex flex-col items-end gap-3">
                                 {items.map((item) => (
                                     <div key={item.view} className="flex items-center gap-3">
@@ -1215,5 +1227,3 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: AdminModalView, labe
 }
 
 export default AdminDashboard;
-
-    

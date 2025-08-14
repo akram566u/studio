@@ -536,7 +536,7 @@ const ReferralNetworkPanel = ({ currentUser }: { currentUser: any }) => {
 const LevelDetailsPanel = ({ levels }: { levels: { [key: number]: Level } }) => (
     <>
         <h3 className="text-2xl font-semibold mb-4 text-blue-300">Staking Level Details</h3>
-        <ScrollArea className="h-96 custom-scrollbar" orientation="horizontal">
+        <ScrollArea className="h-auto" orientation="horizontal">
         <Table className="min-w-max">
             <TableHeader>
             <TableRow>
@@ -913,7 +913,7 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
                         exit={{ opacity: 0, y: 10 }}
                         className="mb-4 flex flex-col items-end"
                     >
-                        <ScrollArea className="h-auto max-h-96 pr-4 -mr-4">
+                        <ScrollArea className="h-auto max-h-[60vh] pr-4 -mr-4">
                             <div className="flex flex-col items-end gap-3">
                                 {items.map((item) => (
                                     <div key={item.view} className="flex items-center gap-3">
@@ -961,5 +961,3 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
-
-    

@@ -134,7 +134,7 @@ const DraggableFloatingActionButton = ({ onOpenChange, setMockupView }: { onOpen
                             Select an option below.
                         </p>
                     </div>
-                    <ScrollArea className="max-h-80">
+                    <ScrollArea className="max-h-[60vh]">
                         <div className="grid gap-2 p-2">
                             {visibleItems.map(item => {
                                 const ItemIcon = (LucideIcons as any)[item.icon] || LucideIcons.AlertCircle;
@@ -185,5 +185,3 @@ const StartScreen: React.FC<StartScreenProps> = ({ setView }) => {
 };
 
 export default StartScreen;
-
-    

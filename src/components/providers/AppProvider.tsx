@@ -45,6 +45,7 @@ export interface AppContextType {
   findUser: (email: string) => Promise<UserForAdmin | null>;
   adjustUserBalance: (userId: string, amount: number) => Promise<UserForAdmin | null>;
   adjustUserLevel: (userId: string, level: number) => Promise<UserForAdmin | null>;
+  adjustUserDirectReferrals: (userId: string, count: number) => Promise<UserForAdmin | null>;
   adminUpdateUserEmail: (userId: string, newEmail: string) => Promise<UserForAdmin | null>;
   adminUpdateUserWithdrawalAddress: (userId: string, newAddress: string) => Promise<UserForAdmin | null>;
   restrictionMessages: RestrictionMessage[];
@@ -708,6 +709,29 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return findUser(userDoc.data().email);
   };
   
+  const adjustUserDirectReferrals = async (userId: string, count: number): Promise<UserForAdmin | null> => {
+      if (count < 0) {
+        toast({ title: "Error", description: "Referral count cannot be negative.", variant: "destructive" });
+        return null;
+      }
+      const userDocRef = doc(db, "users", userId);
+      await updateDoc(userDocRef, { directReferrals: count });
+      await addTransaction(userId, {
+          id: generateTxnId(),
+          type: 'admin_adjusted',
+          amount: count,
+          status: 'info',
+          description: `Admin set direct referrals to ${count}.`
+      });
+
+      await checkAndApplyLevelUp(userId);
+
+      toast({ title: "Success", description: "User referral count updated." });
+      const userDoc = await getDoc(userDocRef);
+      if (!userDoc.exists()) return null;
+      return findUser(userDoc.data().email);
+  };
+
   const adminUpdateUserEmail = async (userId: string, newEmail: string): Promise<UserForAdmin | null> => {
       const userDocRef = doc(db, "users", userId);
       const emailQuery = query(collection(db, "users"), where("email", "==", newEmail));
@@ -1059,36 +1083,70 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         };
         updateFirestoreSettings({ boosterPacks: [...(boosterPacks || []), newBooster] });
     };
-    const updateBoosterPack = (id: string, updates: Partial<BoosterPack>) => {
+
+    const updateBoosterPack = async (id: string, updates: Partial<BoosterPack>) => {
+        const oldPack = boosterPacks.find(p => p.id === id);
         const newPacks = (boosterPacks || []).map(p => p.id === id ? { ...p, ...updates } : p);
-        updateFirestoreSettings({ boosterPacks: newPacks });
+        await updateFirestoreSettings({ boosterPacks: newPacks });
+    
+        // Refund logic: if the pack is being deactivated
+        if (oldPack && oldPack.isActive && !updates.isActive) {
+            await refundBooster(id, oldPack.cost);
+        }
     };
-    const deleteBoosterPack = (id: string) => {
-        updateFirestoreSettings({ boosterPacks: (boosterPacks || []).filter(p => p.id !== id) });
+    
+    const deleteBoosterPack = async (id: string) => {
+        const packToDelete = boosterPacks.find(p => p.id === id);
+        if (!packToDelete) return;
+    
+        await updateFirestoreSettings({ boosterPacks: (boosterPacks || []).filter(p => p.id !== id) });
+        
+        // Refund logic: if the deleted pack was active
+        if (packToDelete.isActive) {
+            await refundBooster(id, packToDelete.cost);
+        }
     };
 
-    const addStakingPool = () => {
-        const newPool: StakingPool = {
-            id: `sp_${Date.now()}`,
-            name: 'New Staking Pool',
-            description: 'Edit this description.',
-            endsAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days from now
-            interestRate: 0.1,
-            totalStaked: 0,
-            minContribution: 10,
-            maxContribution: 1000,
-            participants: [],
-            status: 'active',
-            isActive: false,
-        };
-        updateFirestoreSettings({ stakingPools: [...(stakingPools || []), newPool] });
-    };
-    const updateStakingPool = (id: string, updates: Partial<StakingPool>) => {
-        const newPools = (stakingPools || []).map(p => p.id === id ? { ...p, ...updates } : p);
-        updateFirestoreSettings({ stakingPools: newPools });
-    };
-    const deleteStakingPool = (id: string) => {
-        updateFirestoreSettings({ stakingPools: (stakingPools || []).filter(p => p.id !== id) });
+    const refundBooster = async (boosterId: string, cost: number) => {
+        const usersRef = collection(db, "users");
+        const allUsersSnap = await getDocs(usersRef);
+        const batch = writeBatch(db);
+
+        for (const userDoc of allUsersSnap.docs) {
+            const userData = userDoc.data() as User;
+            const activeBoosters = userData.activeBoosters || [];
+            
+            if (activeBoosters.some(b => b.boosterId === boosterId)) {
+                const userRef = doc(db, "users", userDoc.id);
+                
+                // Remove the booster and refund the cost
+                const updatedBoosters = activeBoosters.filter(b => b.boosterId !== boosterId);
+                batch.update(userRef, {
+                    activeBoosters: updatedBoosters,
+                    balance: userData.balance + cost
+                });
+
+                // Add a transaction log for the refund
+                const refundTx: Transaction = {
+                    userId: userDoc.id,
+                    timestamp: Date.now(),
+                    id: generateTxnId(),
+                    type: 'admin_adjusted',
+                    amount: cost,
+                    status: 'credited',
+                    description: `Refund for disabled booster pack.`
+                };
+                 batch.update(userRef, { transactions: arrayUnion(refundTx) });
+            }
+        }
+
+        try {
+            await batch.commit();
+            toast({ title: 'Booster Disabled', description: `Refunds have been processed for all affected users.` });
+        } catch(e) {
+            console.error("Error during booster refund batch commit:", e);
+            toast({ title: 'Error', description: 'Failed to process booster refunds.', variant: 'destructive' });
+        }
     };
 
     const purchaseBooster = async (boosterId: string) => {
@@ -1117,6 +1175,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 type: booster.type,
                 expiresAt: Date.now() + durationMillis,
                 effectValue: booster.effectValue,
+                cost: booster.cost,
             };
             updates.activeBoosters = arrayUnion(newBooster);
         }
@@ -1409,6 +1468,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     findUser,
     adjustUserBalance,
     adjustUserLevel,
+    adjustUserDirectReferrals,
     adminUpdateUserEmail,
     adminUpdateUserWithdrawalAddress,
     restrictionMessages,
