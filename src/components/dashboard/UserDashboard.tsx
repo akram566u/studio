@@ -318,7 +318,7 @@ const WithdrawPanel = () => {
     const [alertMessage, setAlertMessage] = useState('');
 
     if (!context || !context.currentUser || !context.levels) return null;
-    const { currentUser, levels, submitWithdrawalRequest } = context;
+    const { currentUser, levels, submitWithdrawalRequest, validateWithdrawal } = context;
     const currentLevelDetails = levels[currentUser.level];
     
     const handleSubmitWithdrawal = () => {
@@ -329,7 +329,7 @@ const WithdrawPanel = () => {
         }
 
         // Rule 0: Check against all restrictions
-        const validationError = context.validateWithdrawal(amount);
+        const validationError = validateWithdrawal(amount);
         if (validationError) {
             setAlertMessage(validationError);
             setIsAlertOpen(true);
@@ -961,3 +961,5 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
+
+    

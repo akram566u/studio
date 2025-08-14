@@ -185,3 +185,5 @@ const StartScreen: React.FC<StartScreenProps> = ({ setView }) => {
 };
 
 export default StartScreen;
+
+    
