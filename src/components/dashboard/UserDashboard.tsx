@@ -8,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent, MessageSquare } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -31,7 +31,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format, formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward } from '@/lib/types';
+import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, User } from '@/lib/types';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -59,13 +59,22 @@ const UserOverviewPanel = ({ currentUser, levels }: { currentUser: any, levels: 
             <p className="text-xl text-gray-200">Total USDT Balance:</p>
             <p className="text-4xl font-bold text-green-400">{currentUser.balance.toFixed(2)}</p>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-2">
                 <p className="text-lg text-gray-200">Daily Interest Rate:</p>
                 <p className="text-2xl font-bold text-purple-400 flex items-center gap-2">
                     {(totalInterest * 100).toFixed(3)}%
                     {interestBoost > 0 && <Rocket className="text-orange-400" />}
                 </p>
             </div>
+            {activeBoosters.length > 0 && (
+                <div className="mt-2 text-xs text-orange-300 space-y-1">
+                    {activeBoosters.map((b: ActiveBooster) => (
+                        <p key={b.boosterId}>
+                           +{(b.effectValue * 100).toFixed(2)}% boost expires in {formatDistanceToNow(b.expiresAt, { addSuffix: true })}
+                        </p>
+                    ))}
+                </div>
+            )}
         </Card>
     );
 }
@@ -907,14 +916,37 @@ type ModalView =
 const UserDashboard = () => {
   const context = useContext(AppContext);
   const [modalView, setModalView] = useState<ModalView | null>(null);
+  const [showBoosterPopup, setShowBoosterPopup] = useState(false);
+  const [prioritizedMessage, setPrioritizedMessage] = useState<PrioritizeMessageOutput | null>(null);
+
+  useEffect(() => {
+    if (context?.currentUser) {
+        // Show booster popup only once per session
+        const hasSeenPopup = sessionStorage.getItem('hasSeenBoosterPopup');
+        if (!hasSeenPopup && context.boosterPacks.some(p => p.isActive)) {
+            setShowBoosterPopup(true);
+            sessionStorage.setItem('hasSeenBoosterPopup', 'true');
+        }
+
+        // Fetch prioritized message
+        context.getPrioritizedMessage().then(setPrioritizedMessage);
+    }
+  }, [context?.currentUser?.id]);
 
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;
   }
-  const { currentUser, levels } = context;
+  const { currentUser, levels, markAnnouncementAsRead } = context;
   
   const hasPendingRequests = currentUser.transactions.some(tx => tx.status === 'pending');
   const currentLevelDetails = levels[currentUser.level];
+
+  const handleMessageDismiss = () => {
+    if (prioritizedMessage?.announcementId) {
+        markAnnouncementAsRead(prioritizedMessage.announcementId);
+    }
+    setPrioritizedMessage(null); // Dismiss from view
+  }
 
   const renderModalContent = () => {
     if (!modalView) return null;
@@ -970,6 +1002,18 @@ const UserDashboard = () => {
   return (
     <>
       <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
+        {prioritizedMessage?.message && (
+            <Alert className="mb-6 bg-blue-900/50 border-blue-700 text-blue-200">
+                {prioritizedMessage.source === 'admin' ? <MessageSquare className="h-4 w-4 !text-blue-200" /> : <Star className="h-4 w-4 !text-blue-200" />}
+                <AlertTitle>For You</AlertTitle>
+                <AlertDescription>
+                    {prioritizedMessage.message}
+                </AlertDescription>
+                <button onClick={handleMessageDismiss} className="absolute top-2 right-2 p-1">
+                    <X className="h-4 w-4" />
+                </button>
+            </Alert>
+        )}
         {hasPendingRequests && (
             <Alert className="mb-6 bg-yellow-900/50 border-yellow-700 text-yellow-200">
                 <Info className="h-4 w-4 !text-yellow-200" />
@@ -1000,6 +1044,25 @@ const UserDashboard = () => {
             </div>
         </DialogContent>
       </Dialog>
+      <AlertDialog open={showBoosterPopup} onOpenChange={setShowBoosterPopup}>
+          <AlertDialogContent>
+              <AlertDialogHeader>
+                  <AlertDialogTitle className="flex items-center gap-2"><Rocket /> New Boosters Available!</AlertDialogTitle>
+                  <AlertDialogDescription>
+                      Check out the Booster Store to enhance your earnings and level up faster. New packs are available now!
+                  </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                  <AlertDialogCancel>Maybe Later</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => {
+                      setModalView('boosters');
+                      setShowBoosterPopup(false);
+                  }}>
+                      Go to Store
+                  </AlertDialogAction>
+              </AlertDialogFooter>
+          </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };

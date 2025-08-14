@@ -74,6 +74,15 @@ export interface UserVaultInvestment {
     maturesAt: number;
 }
 
+export interface UserAnnouncement {
+  id: string;
+  message: string;
+  createdAt: number;
+  createdBy: 'admin' | 'ai';
+  read: boolean;
+  priority: number; // e.g., 1 for high, 10 for low
+}
+
 export interface User {
   id: string;
   email: string;
@@ -99,6 +108,7 @@ export interface User {
   teamBusiness?: number; // Total deposits made by the entire downline
   claimedTeamSizeRewards?: string[]; // Array of claimed reward IDs
   claimedTeamBusinessRewards?: string[]; // Array of claimed reward IDs
+  announcements?: UserAnnouncement[];
 }
 
 export interface Level {
@@ -256,3 +266,40 @@ export const AnalyzeTeamOutputSchema = z.object({
   rewardAnalysis: z.string().describe("An analysis of the user's proximity to earning team-based rewards."),
 });
 export type AnalyzeTeamOutput = z.infer<typeof AnalyzeTeamOutputSchema>;
+
+
+// Zod schemas and types for prioritizeMessage AI flow
+const userSchemaForPrioritization = z.object({
+    balance: z.number(),
+    level: z.number(),
+    teamSize: z.number(),
+    teamBusiness: z.number(),
+    announcements: z.array(z.object({
+        message: z.string(),
+        createdAt: z.number(),
+    })),
+});
+
+export const PrioritizeMessageInputSchema = z.object({
+    user: userSchemaForPrioritization,
+    nextLevel: z.object({
+        minBalance: z.number(),
+        directReferrals: z.number(),
+    }),
+    nextTeamSizeReward: z.object({
+        teamSize: z.number(),
+        rewardAmount: z.number(),
+    }),
+    nextTeamBusinessReward: z.object({
+        businessAmount: z.number(),
+        rewardAmount: z.number(),
+    }),
+});
+export type PrioritizeMessageInput = z.infer<typeof PrioritizeMessageInputSchema>;
+
+export const PrioritizeMessageOutputSchema = z.object({
+    source: z.enum(['admin', 'ai']).describe("The source of the message."),
+    message: z.string().describe("The prioritized message to display to the user."),
+    announcementId: z.string().optional().describe("The ID of the admin announcement, if applicable."),
+});
+export type PrioritizeMessageOutput = z.infer<typeof PrioritizeMessageOutputSchema>;

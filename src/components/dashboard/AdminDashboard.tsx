@@ -30,7 +30,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2 } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send } from 'lucide-react';
 import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { analyzeTeam } from '@/ai/flows/analyze-team-flow';
@@ -46,6 +46,7 @@ type AdminModalView =
     | 'boosters'
     | 'pools'
     | 'vaults'
+    | 'booster_analytics'
     | 'view_examples';
 
 // Main Dashboard Component
@@ -71,6 +72,7 @@ const AdminDashboard = () => {
         case 'panels': return <UserPanelsPanel />;
         case 'notices': return <NoticesPanel />;
         case 'boosters': return <BoostersPanel />;
+        case 'booster_analytics': return <BoosterAnalyticsPanel />;
         case 'pools': return <PoolsPanel />;
         case 'vaults': return <VaultsPanel />;
         case 'view_examples': return <RequestViewExamples />;
@@ -87,6 +89,7 @@ const AdminDashboard = () => {
         panels: 'User Dashboard Panels',
         notices: 'Manage Notices & Events',
         boosters: 'Manage Booster Packs',
+        booster_analytics: 'Booster Pack Analytics',
         pools: 'Manage Staking Pools',
         vaults: 'Manage Staking Vaults',
         view_examples: 'Request View Examples',
@@ -102,6 +105,7 @@ const AdminDashboard = () => {
       { view: 'panels', label: 'User Panels', icon: PanelTop },
       { view: 'notices', label: 'Notices', icon: Megaphone },
       { view: 'boosters', label: 'Boosters', icon: Gift },
+      { view: 'booster_analytics', label: 'Booster Analytics', icon: BarChart },
       { view: 'pools', label: 'Pools', icon: Layers },
       { view: 'vaults', label: 'Vaults', icon: PiggyBank },
       { view: 'view_examples', label: 'View Examples', icon: BarChart },
@@ -390,6 +394,7 @@ const UserManagementPanel = () => {
     const [editingLevel, setEditingLevel] = useState(0);
     const [editingReferrals, setEditingReferrals] = useState(0);
     const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
+    const [announcement, setAnnouncement] = useState('');
 
 
     useEffect(() => {
@@ -399,11 +404,12 @@ const UserManagementPanel = () => {
             setEditingBalance(searchedUser.balance);
             setEditingLevel(searchedUser.level);
             setEditingReferrals(searchedUser.directReferrals);
+            setAnnouncement(''); // Clear announcement on new user search
         }
     }, [searchedUser]);
 
     if (!context) return null;
-    const { findUser, allUsersForAdmin, adminUpdateUserEmail, adminUpdateUserWithdrawalAddress, adjustUserBalance, adjustUserLevel, forgotPassword, adjustUserDirectReferrals } = context;
+    const { findUser, allUsersForAdmin, adminUpdateUserEmail, adminUpdateUserWithdrawalAddress, adjustUserBalance, adjustUserLevel, forgotPassword, adjustUserDirectReferrals, sendAnnouncement } = context;
 
     const handleUserSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -448,6 +454,15 @@ const UserManagementPanel = () => {
     const handlePasswordReset = () => {
         if (!searchedUser?.email) return;
         forgotPassword(searchedUser.email);
+    };
+
+    const handleSendAnnouncement = () => {
+        if (!searchedUser || !announcement.trim()) {
+            toast({ title: "Error", description: "Please select a user and write a message.", variant: "destructive" });
+            return;
+        }
+        sendAnnouncement(searchedUser.id, announcement);
+        setAnnouncement(''); // Clear after sending
     };
 
     return (
@@ -509,6 +524,17 @@ const UserManagementPanel = () => {
                                 </div>
                                 <p className="text-xs text-gray-400">Sets the user's balance to this exact amount.</p>
                             </div>
+                        </div>
+                        <hr className="border-white/10" />
+                        <div className="space-y-2">
+                            <Label htmlFor="announcement-text">Personalized Announcement</Label>
+                            <Textarea 
+                                id="announcement-text" 
+                                placeholder={`Write a specific message for ${searchedUser.email}...`}
+                                value={announcement}
+                                onChange={e => setAnnouncement(e.target.value)}
+                            />
+                            <Button onClick={handleSendAnnouncement}><Send className="mr-2"/> Send Message</Button>
                         </div>
                         <hr className="border-white/10" />
                         <div className="flex flex-col md:flex-row gap-2">
@@ -1229,6 +1255,49 @@ const BoostersPanel = () => {
                     </div>
                 </ScrollArea>
                 <div className="mt-4"><Button onClick={addBoosterPack} variant="secondary">Add New Booster</Button></div>
+            </CardContent>
+        </Card>
+    );
+};
+
+const BoosterAnalyticsPanel = () => {
+    const context = useContext(AppContext);
+    if (!context) return null;
+    const { boosterPurchaseHistory } = context;
+
+    return (
+        <Card className="card-gradient-yellow-pink p-6">
+            <CardHeader>
+                <CardTitle>Booster Pack Purchase Analytics</CardTitle>
+                <CardDescription>Review which boosters are most popular among users.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <ScrollArea className="h-[70vh] custom-scrollbar">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Booster Name</TableHead>
+                                <TableHead>User Email</TableHead>
+                                <TableHead>Cost</TableHead>
+                                <TableHead>Date</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {boosterPurchaseHistory.length > 0 ? boosterPurchaseHistory.map(tx => (
+                                <TableRow key={tx.id}>
+                                    <TableCell className="font-medium">{tx.note}</TableCell>
+                                    <TableCell>{tx.email}</TableCell>
+                                    <TableCell>{tx.amount.toFixed(2)} USDT</TableCell>
+                                    <TableCell>{format(new Date(tx.timestamp), 'PPp')}</TableCell>
+                                </TableRow>
+                            )) : (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="text-center">No booster packs have been purchased yet.</TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </ScrollArea>
             </CardContent>
         </Card>
     );
