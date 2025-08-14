@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
@@ -99,7 +98,7 @@ export interface AppContextType {
   boosterPurchaseHistory: AugmentedTransaction[];
   addBoosterPack: () => void;
   updateBoosterPack: (id: string, updates: Partial<BoosterPack>) => void;
-  deleteBoosterPack: () => void;
+  deleteBoosterPack: (id: string) => void;
   purchaseBooster: (boosterId: string) => Promise<void>;
   stakingPools: StakingPool[];
   addStakingPool: () => void;
@@ -1107,7 +1106,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const boosterHistory: AugmentedTransaction[] = [];
 
         allUsers.forEach(user => {
-            user.transactions.forEach(tx => {
+            (user.transactions || []).forEach(tx => {
                 if(tx.status === 'approved' || tx.status === 'credited' || tx.status === 'completed') {
                     if (tx.type === 'deposit') totalDeposits += tx.amount;
                     if (tx.type === 'withdrawal') totalWithdrawals += tx.amount;
@@ -1124,14 +1123,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         // Process for pending requests
         const allRequests: AugmentedTransaction[] = [];
         allUsers.forEach(userData => {
-            const pending = userData.transactions.filter(tx => tx.status === 'pending');
+            const pending = (userData.transactions || []).filter(tx => tx.status === 'pending');
             pending.forEach(p => {
                 allRequests.push({
                     ...p,
                     email: userData.email,
                     userLevel: userData.level,
-                    userDepositCount: userData.transactions.filter(tx => tx.type === 'deposit' && tx.status === 'approved').length,
-                    userWithdrawalCount: userData.transactions.filter(tx => tx.type === 'withdrawal' && tx.status === 'approved').length,
+                    userDepositCount: (userData.transactions || []).filter(tx => tx.type === 'deposit' && tx.status === 'approved').length,
+                    userWithdrawalCount: (userData.transactions || []).filter(tx => tx.type === 'withdrawal' && tx.status === 'approved').length,
                     userWithdrawalAddress: userData.primaryWithdrawalAddress,
                     directReferrals: userData.directReferrals,
                 })
@@ -1142,7 +1141,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         // Process for admin history
         const allHistory: AugmentedTransaction[] = [];
         allUsers.forEach(userData => {
-            const completed = userData.transactions.filter(tx => 
+            const completed = (userData.transactions || []).filter(tx => 
                 tx.status === 'approved' || tx.status === 'declined' || tx.type === 'admin_adjusted'
             );
             completed.forEach(c => {
@@ -1686,13 +1685,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const nextLevelKey = currentUser.level + 1;
         const nextLevel = levels[nextLevelKey] || { minBalance: Infinity, directReferrals: Infinity };
     
-        const nextTeamSizeReward = [...teamSizeRewards]
+        const nextTeamSizeReward = [...(teamSizeRewards || [])]
             .filter(r => r.isEnabled && !(currentUser.claimedTeamSizeRewards || []).includes(r.id))
             .sort((a, b) => a.teamSize - b.teamSize)
             .find(r => r.teamSize > (currentUser.teamSize || 0)) 
             || { teamSize: Infinity, rewardAmount: 0 };
     
-        const nextTeamBusinessReward = [...teamBusinessRewards]
+        const nextTeamBusinessReward = [...(teamBusinessRewards || [])]
             .filter(r => r.isEnabled && !(currentUser.claimedTeamBusinessRewards || []).includes(r.id))
             .sort((a, b) => a.businessAmount - b.businessAmount)
             .find(r => r.businessAmount > (currentUser.teamBusiness || 0))
@@ -1866,3 +1865,5 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
+
+    
