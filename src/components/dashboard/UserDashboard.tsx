@@ -31,7 +31,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format, formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, StakingVault, Transaction } from '@/lib/types';
+import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster } from '@/lib/types';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -40,16 +40,35 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 // Individual Panel Components (for use in Dialogs)
-const UserOverviewPanel = ({ currentUser }: { currentUser: any }) => (
-    <Card className="card-gradient-blue-purple p-6">
-        <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Staking Overview</h3>
-        <p className="text-gray-200 text-base mb-2">User ID: <span className="font-mono text-sm break-all text-blue-200">{currentUser.id}</span></p>
-        <div className="flex items-center justify-between mb-4">
-        <p className="text-xl text-gray-200">Total USDT Balance:</p>
-        <p className="text-4xl font-bold text-green-400">{currentUser.balance.toFixed(2)}</p>
-        </div>
-    </Card>
-);
+const UserOverviewPanel = ({ currentUser, levels }: { currentUser: any, levels: { [key: number]: Level } }) => {
+    const context = useContext(AppContext);
+    if (!context) return null;
+
+    const baseInterest = levels[currentUser.level]?.interest || 0;
+
+    // Calculate boosted interest
+    const now = Date.now();
+    const activeBoosters = (currentUser.activeBoosters || []).filter((b: ActiveBooster) => b.type === 'interest_boost' && b.expiresAt > now);
+    const interestBoost = activeBoosters.reduce((acc: number, b: ActiveBooster) => acc + b.effectValue, 0);
+    const totalInterest = baseInterest + interestBoost;
+
+    return (
+        <Card className="card-gradient-blue-purple p-6">
+            <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Staking Overview</h3>
+            <div className="flex items-center justify-between mb-4">
+            <p className="text-xl text-gray-200">Total USDT Balance:</p>
+            <p className="text-4xl font-bold text-green-400">{currentUser.balance.toFixed(2)}</p>
+            </div>
+            <div className="flex items-center justify-between">
+                <p className="text-lg text-gray-200">Daily Interest Rate:</p>
+                <p className="text-2xl font-bold text-purple-400 flex items-center gap-2">
+                    {(totalInterest * 100).toFixed(3)}%
+                    {interestBoost > 0 && <Rocket className="text-orange-400" />}
+                </p>
+            </div>
+        </Card>
+    );
+}
 
 const StakingLevelPanel = ({ currentUser, currentLevelDetails }: { currentUser: any, currentLevelDetails: any }) => (
     <Card className="card-gradient-green-cyan p-6">
@@ -302,8 +321,6 @@ const WithdrawPanel = () => {
     const { currentUser, levels, submitWithdrawalRequest } = context;
     const currentLevelDetails = levels[currentUser.level];
     
-    const hasPendingWithdrawal = currentUser.transactions.some(tx => tx.type === 'withdrawal' && tx.status === 'pending');
-
     const handleSubmitWithdrawal = () => {
         const amount = parseFloat(withdrawalAmount);
         if (isNaN(amount) || amount <= 0) {
@@ -519,8 +536,8 @@ const ReferralNetworkPanel = ({ currentUser }: { currentUser: any }) => {
 const LevelDetailsPanel = ({ levels }: { levels: { [key: number]: Level } }) => (
     <>
         <h3 className="text-2xl font-semibold mb-4 text-blue-300">Staking Level Details</h3>
-        <ScrollArea className="h-96 custom-scrollbar">
-        <Table>
+        <ScrollArea className="h-96 custom-scrollbar" orientation="horizontal">
+        <Table className="min-w-max">
             <TableHeader>
             <TableRow>
                 <TableHead className="text-white">Level</TableHead>
@@ -585,9 +602,13 @@ const NoticesPanel = () => {
 
 const BoosterStorePanel = () => {
     const context = useContext(AppContext);
-    if (!context || !context.boosterPacks) return null;
-    const { boosterPacks, purchaseBooster } = context;
-    const activePacks = boosterPacks.filter(p => p.isActive);
+    if (!context || !context.boosterPacks || !context.currentUser) return null;
+    const { boosterPacks, purchaseBooster, currentUser } = context;
+
+    const activePacks = boosterPacks.filter(p => 
+        p.isActive && 
+        (!p.applicableLevels || p.applicableLevels.length === 0 || p.applicableLevels.includes(currentUser.level))
+    );
 
     return (
         <>
@@ -605,7 +626,7 @@ const BoosterStorePanel = () => {
                             </Button>
                         </Card>
                     )) : (
-                        <p className="text-gray-400 text-center">No booster packs are available right now.</p>
+                        <p className="text-gray-400 text-center">No booster packs are available for your level right now.</p>
                     )}
                 </div>
             </ScrollArea>
@@ -854,7 +875,7 @@ const UserDashboard = () => {
             </Alert>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <UserOverviewPanel currentUser={currentUser} />
+            <UserOverviewPanel currentUser={currentUser} levels={levels} />
             <StakingLevelPanel currentUser={currentUser} currentLevelDetails={currentLevelDetails} />
             <div className='md:col-span-2'>
                 <InterestCountdownPanel/>
@@ -890,25 +911,29 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        className="mb-4 flex flex-col items-end gap-3"
+                        className="mb-4 flex flex-col items-end"
                     >
-                        {items.map((item) => (
-                             <div key={item.view} className="flex items-center gap-3">
-                                <span className="bg-card/50 backdrop-blur-md text-white px-3 py-1 rounded-md shadow-lg text-sm">
-                                    {item.label}
-                                 </span>
-                                <Button
-                                    size="icon"
-                                    className="rounded-full size-12 bg-secondary/80 hover:bg-secondary"
-                                    onClick={() => {
-                                        onSelect(item.view);
-                                        setIsOpen(false);
-                                    }}
-                                >
-                                    <item.icon className="size-6" />
-                                </Button>
+                        <ScrollArea className="h-auto max-h-96 pr-4 -mr-4">
+                            <div className="flex flex-col items-end gap-3">
+                                {items.map((item) => (
+                                    <div key={item.view} className="flex items-center gap-3">
+                                        <span className="bg-card/50 backdrop-blur-md text-white px-3 py-1 rounded-md shadow-lg text-sm">
+                                            {item.label}
+                                        </span>
+                                        <Button
+                                            size="icon"
+                                            className="rounded-full size-12 bg-secondary/80 hover:bg-secondary"
+                                            onClick={() => {
+                                                onSelect(item.view);
+                                                setIsOpen(false);
+                                            }}
+                                        >
+                                            <item.icon className="size-6" />
+                                        </Button>
+                                    </div>
+                                ))}
                             </div>
-                        ))}
+                        </ScrollArea>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -936,5 +961,3 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
-
-    

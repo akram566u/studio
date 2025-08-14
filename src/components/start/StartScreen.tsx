@@ -5,14 +5,14 @@ import { GlassPanel } from '@/components/ui/GlassPanel';
 import { Button } from '@/components/ui/button';
 import type { View } from '@/components/StakingApp';
 import { AppContext } from '../providers/AppProvider';
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '../ui/popover';
 import * as LucideIcons from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { FloatingActionItem } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { ScrollArea } from '../ui/scroll-area';
 
 interface StartScreenProps {
   setView: React.Dispatch<React.SetStateAction<View>>;
@@ -63,62 +63,7 @@ const ForgotPasswordDialog = ({ open, onOpenChange }: { open: boolean, onOpenCha
 const DraggableFloatingActionButton = ({ onOpenChange, setMockupView }: { onOpenChange: (open: boolean) => void, setMockupView: (view: 'desktop' | 'mobile') => void }) => {
     const context = useContext(AppContext);
     const { toast } = useToast();
-    const fabRef = useRef<HTMLDivElement>(null);
-    const [position, setPosition] = useState({ x: window.innerWidth - 100, y: window.innerHeight - 100 });
-    const isDragging = useRef(false);
-    const offset = useRef({ x: 0, y: 0 });
-
-    const handleMouseDown = (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
-        if (fabRef.current) {
-            isDragging.current = true;
-            offset.current = {
-                x: e.clientX - fabRef.current.getBoundingClientRect().left,
-                y: e.clientY - fabRef.current.getBoundingClientRect().top,
-            };
-            fabRef.current.style.cursor = 'grabbing';
-        }
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-        if (!isDragging.current || !fabRef.current) return;
-        
-        // Prevent text selection while dragging
-        e.preventDefault();
-        e.stopPropagation();
-
-        const newX = e.clientX - offset.current.x;
-        const newY = e.clientY - offset.current.y;
-        
-        // Constrain movement within the viewport
-        const constrainedX = Math.max(0, Math.min(window.innerWidth - fabRef.current.offsetWidth, newX));
-        const constrainedY = Math.max(0, Math.min(window.innerHeight - fabRef.current.offsetHeight, newY));
-
-        setPosition({ x: constrainedX, y: constrainedY });
-    };
-
-    const handleMouseUp = () => {
-        isDragging.current = false;
-        if (fabRef.current) {
-            fabRef.current.style.cursor = 'grab';
-        }
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    const startDrag = (e: React.MouseEvent<HTMLButtonElement>) => {
-        if (e.button !== 0) return; // Only drag with left mouse button
-        handleMouseDown(e);
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-    }
-    
-    useEffect(() => {
-        // Cleanup function
-        return () => {
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
-        };
-    }, []);
+    const [isOpen, setIsOpen] = useState(false);
 
     if (!context || !context.floatingActionButtonSettings.isEnabled) {
         return null;
@@ -165,36 +110,32 @@ const DraggableFloatingActionButton = ({ onOpenChange, setMockupView }: { onOpen
                 }
                 break;
         }
+        setIsOpen(false);
     };
 
     const MainIcon = (LucideIcons as any)[visibleItems[0]?.icon || 'HelpCircle'] || LucideIcons.HelpCircle;
 
     return (
-        <div
-            ref={fabRef}
-            className="fixed z-50"
-            style={{ top: `${position.y}px`, left: `${position.x}px`, touchAction: 'none' }}
-        >
-            <Popover>
+        <div className="fixed bottom-8 right-8 z-50">
+            <Popover open={isOpen} onOpenChange={setIsOpen}>
                 <PopoverTrigger asChild>
                     <Button 
                         variant="outline" 
                         size="icon" 
-                        className="rounded-full size-16 bg-accent/50 backdrop-blur-sm border-accent/20 hover:bg-accent/80 cursor-grab active:cursor-grabbing"
-                        onMouseDown={startDrag}
+                        className="rounded-full size-16 bg-accent/50 backdrop-blur-sm border-accent/20 hover:bg-accent/80"
                     >
                         <MainIcon className="size-8" />
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-80 mr-4 mb-2">
-                    <div className="grid gap-4">
-                        <div className="space-y-2">
-                            <h4 className="font-medium leading-none">Help & Actions</h4>
-                            <p className="text-sm text-muted-foreground">
-                                Select an option below.
-                            </p>
-                        </div>
-                        <div className="grid gap-2">
+                <PopoverContent className="w-80 mr-4 mb-2 p-2">
+                     <div className="space-y-2 mb-2 p-2">
+                        <h4 className="font-medium leading-none">Help & Actions</h4>
+                        <p className="text-sm text-muted-foreground">
+                            Select an option below.
+                        </p>
+                    </div>
+                    <ScrollArea className="max-h-80">
+                        <div className="grid gap-2 p-2">
                             {visibleItems.map(item => {
                                 const ItemIcon = (LucideIcons as any)[item.icon] || LucideIcons.AlertCircle;
                                 return (
@@ -204,7 +145,7 @@ const DraggableFloatingActionButton = ({ onOpenChange, setMockupView }: { onOpen
                                 );
                             })}
                         </div>
-                    </div>
+                    </ScrollArea>
                 </PopoverContent>
             </Popover>
         </div>

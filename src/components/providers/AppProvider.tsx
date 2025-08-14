@@ -7,7 +7,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
@@ -247,6 +247,43 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       });
       return newTransaction;
   }, []);
+
+  const checkAndApplyLevelUp = useCallback(async (userId: string) => {
+    const userRef = doc(db, "users", userId);
+    const userSnap = await getDoc(userRef);
+    if (!userSnap.exists()) return;
+
+    const userData = userSnap.data() as User;
+    const oldLevel = userData.level;
+    let newLevel = oldLevel;
+
+    const sortedLevels = Object.keys(levels).map(Number).sort((a, b) => b - a);
+
+    for (const levelKey of sortedLevels) {
+        if (levelKey > newLevel) {
+            const levelDetails = levels[levelKey];
+            const totalReferrals = (userData.directReferrals || 0) + (userData.purchasedReferralPoints || 0);
+
+            if (userData.balance >= levelDetails.minBalance && totalReferrals >= levelDetails.directReferrals) {
+                newLevel = levelKey;
+                break; 
+            }
+        }
+    }
+
+    if (newLevel > oldLevel) {
+        await updateDoc(userRef, { level: newLevel });
+        await addTransaction(userId, { 
+            id: generateTxnId(), 
+            type: 'level_up', 
+            amount: newLevel, 
+            status: 'info', 
+            description: `Promoted to Level ${newLevel} - ${levels[newLevel].name}` 
+        });
+        toast({ title: "Congratulations!", description: `You have been promoted to Level ${newLevel}!`});
+    }
+  }, [levels, addTransaction, toast]);
+
 
   const signIn = async (email: string, pass: string) => {
     try {
@@ -494,49 +531,36 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     // Post-approval logic
     if (newStatus === 'approved' && type === 'deposit') {
-        const postApprovalUserSnap = await getDoc(userRef);
-        const postApprovalUserData = postApprovalUserSnap.data() as User;
-
-        const oldLevel = userFound.level;
-        let newLevel = oldLevel;
-        const sortedLevels = Object.keys(levels).map(Number).sort((a, b) => b - a);
-        for (const levelKey of sortedLevels) {
-            if (levelKey > newLevel) { // Only check for promotion
-                const levelDetails = levels[levelKey];
-                const totalReferrals = postApprovalUserData.directReferrals + (postApprovalUserData.purchasedReferralPoints || 0);
-                if (postApprovalUserData.balance >= levelDetails.minBalance && totalReferrals >= levelDetails.directReferrals) {
-                    newLevel = levelKey;
-                    break;
-                }
-            }
-        }
-
-        if (newLevel > oldLevel) {
-            await updateDoc(userRef, { level: newLevel });
-            await addTransaction(userDocId, { id: generateTxnId(), type: 'level_up', amount: newLevel, status: 'info', description: `Promoted to Level ${newLevel}` });
-        }
-
         const isFirstDeposit = !userFound.firstDepositTime;
         if (isFirstDeposit && referralBonusSettings.isEnabled && originalRequest.amount >= referralBonusSettings.minDeposit && userFound.referredBy && userFound.referredBy !== ADMIN_REFERRAL_CODE) {
             const referrerRef = doc(db, "users", userFound.referredBy);
             const referrerSnap = await getDoc(referrerRef);
             if (referrerSnap.exists()) {
                 const referrerData = referrerSnap.data() as User;
-                const bonusAmount = referralBonusSettings.bonusAmount;
+                
+                // Check for referral bonus booster
+                const now = Date.now();
+                const activeBoosters = (referrerData.activeBoosters || []).filter(b => b.type === 'referral_bonus_boost' && b.expiresAt > now);
+                const boostMultiplier = activeBoosters.reduce((acc, b) => acc * b.effectValue, 1);
+
+                const bonusAmount = referralBonusSettings.bonusAmount * boostMultiplier;
+
                 await updateDoc(referrerRef, {
                     balance: referrerData.balance + bonusAmount,
                     directReferrals: (referrerData.directReferrals || 0) + 1,
-                    referredUsers: referrerData.referredUsers.map(u => u.email === postApprovalUserData.email ? { ...u, isActivated: true } : u)
+                    referredUsers: referrerData.referredUsers.map(u => u.email === userFound!.email ? { ...u, isActivated: true } : u)
                 });
+
                 await addTransaction(referrerData.id, {
                     id: generateTxnId(),
                     type: 'referral_bonus',
                     amount: bonusAmount,
                     status: 'credited',
-                    description: `You received a ${bonusAmount} USDT bonus for activating ${postApprovalUserData.email}!`
+                    description: `You received a ${bonusAmount.toFixed(2)} USDT bonus for activating ${userFound!.email}! ${boostMultiplier > 1 ? '(Boosted!)' : ''}`
                 });
             }
         }
+        await checkAndApplyLevelUp(userDocId);
     }
 
     toast({ title: "Success", description: `${type} request has been ${newStatus}.` });
@@ -990,7 +1014,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 let interestRate = levels[currentUser.level].interest;
                 
                 // Check for active interest boosters
-                const activeBoosters = (currentUser.activeBoosters || []).filter(b => b.expiresAt > now);
+                const activeBoosters = (currentUser.activeBoosters || []).filter(b => b.type === 'interest_boost' && b.expiresAt > now);
                 const boostAmount = activeBoosters.reduce((acc, b) => acc + b.effectValue, 0);
                 interestRate += boostAmount;
                 
@@ -1000,7 +1024,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 await updateDoc(userDocRef, {
                     balance: currentUser.balance + interestAmount,
                     lastInterestCreditTime: now,
-                    activeBoosters: activeBoosters // Clean out expired boosters
+                    activeBoosters: (currentUser.activeBoosters || []).filter(b => b.expiresAt > now) // Clean out expired boosters
                 });
                 await addTransaction(currentUser.id, {
                     id: generateTxnId(),
@@ -1028,8 +1052,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             cost: 10,
             type: 'referral_points',
             effectValue: 1,
+            durationDays: 0,
             durationHours: 0,
             isActive: false,
+            applicableLevels: []
         };
         updateFirestoreSettings({ boosterPacks: [...(boosterPacks || []), newBooster] });
     };
@@ -1084,11 +1110,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
         if (booster.type === 'referral_points') {
             updates.purchasedReferralPoints = (currentUser.purchasedReferralPoints || 0) + booster.effectValue;
-        } else if (booster.type === 'interest_boost') {
-            const newBooster = {
+        } else if (booster.type === 'interest_boost' || booster.type === 'referral_bonus_boost') {
+            const durationMillis = ((booster.durationDays || 0) * 24 * 60 * 60 * 1000) + ((booster.durationHours || 0) * 60 * 60 * 1000);
+            const newBooster: ActiveBooster = {
                 boosterId: booster.id,
                 type: booster.type,
-                expiresAt: Date.now() + (booster.durationHours || 0) * 60 * 60 * 1000,
+                expiresAt: Date.now() + durationMillis,
                 effectValue: booster.effectValue,
             };
             updates.activeBoosters = arrayUnion(newBooster);
@@ -1102,6 +1129,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             status: 'completed',
             description: `Purchased '${booster.name}' for ${booster.cost} USDT.`
         });
+        
+        // Immediately check for level up if referral points were purchased
+        if (booster.type === 'referral_points') {
+            await checkAndApplyLevelUp(currentUser.id);
+        }
+
         toast({ title: "Success", description: `'${booster.name}' purchased and activated!` });
     };
     
@@ -1315,7 +1348,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const batch = writeBatch(db);
 
         for (const inv of maturedInvestments) {
-            const interest = inv.amount * inv.interestRate * (inv.maturesAt - inv.startedAt) / (365 * 24 * 60 * 60 * 1000);
+            const termInDays = (inv.maturesAt - inv.startedAt) / (24 * 60 * 60 * 1000);
+            const interest = inv.amount * inv.interestRate * (termInDays / 365);
             const payout = inv.amount + interest;
             totalPayout += payout;
             

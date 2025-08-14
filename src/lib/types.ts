@@ -54,9 +54,9 @@ export interface AugmentedTransaction extends Transaction {
 
 export interface ActiveBooster {
     boosterId: string;
-    type: 'interest_boost';
+    type: 'interest_boost' | 'referral_bonus_boost';
     expiresAt: number;
-    effectValue: number;
+    effectValue: number; // e.g., 0.01 for interest, 1.5 for 1.5x bonus
 }
 
 export interface UserVaultInvestment {
@@ -117,11 +117,14 @@ export interface BoosterPack {
     name: string;
     description: string;
     cost: number;
-    type: 'interest_boost' | 'referral_points';
+    type: 'interest_boost' | 'referral_points' | 'referral_bonus_boost';
     // The value of the boost (e.g., 0.01 for 1% interest, or 2 for 2 points)
     effectValue: number; 
-    // Optional: duration in hours for temporary boosts
+    // Optional: duration in hours/days for temporary boosts
+    durationDays?: number;
     durationHours?: number;
+    // Optional: which levels can purchase this
+    applicableLevels?: number[];
     isActive: boolean;
 }
 

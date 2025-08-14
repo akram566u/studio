@@ -119,8 +119,9 @@ export const initialAppSettings: AppSettings = {
     ],
     
     boosterPacks: [
-        { id: 'bp_1', name: 'Referral Point Pack', description: 'Get 2 referral points to help you level up faster.', cost: 10, type: 'referral_points', effectValue: 2, durationHours: 0, isActive: true },
+        { id: 'bp_1', name: 'Referral Point Pack', description: 'Get 2 referral points to help you level up faster.', cost: 10, type: 'referral_points', effectValue: 2, isActive: true, applicableLevels: [0,1,2,3,4] },
         { id: 'bp_2', name: '24hr Interest Boost', description: 'Increase your daily interest by an additional 1% for 24 hours.', cost: 5, type: 'interest_boost', effectValue: 0.01, durationHours: 24, isActive: true },
+        { id: 'bp_3', name: 'Referral Bonus Boost', description: 'Earn 1.5x bonus from your next referral!', cost: 20, type: 'referral_bonus_boost', effectValue: 1.5, durationDays: 7, isActive: true },
     ],
     
     stakingPools: [

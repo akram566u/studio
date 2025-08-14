@@ -28,8 +28,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank } from 'lucide-react';
-import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction } from '@/lib/types';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck } from 'lucide-react';
+import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels } from '@/lib/types';
 
 
 type AdminModalView =
@@ -921,16 +921,55 @@ const NoticesPanel = () => {
     );
 };
 
+const MultiSelect = ({ options, value, onChange, placeholder }: { options: { value: number, label: string }[], value: number[], onChange: (value: number[]) => void, placeholder: string }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const selectedLabels = options.filter(opt => value.includes(opt.value)).map(opt => opt.label).join(', ');
+
+    return (
+        <Popover open={isOpen} onOpenChange={setIsOpen}>
+            <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" aria-expanded={isOpen} className="w-full justify-between">
+                    <span className="truncate">{selectedLabels || placeholder}</span>
+                    <ChevronRight className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-full p-0">
+                <Command>
+                    <CommandInput placeholder="Search levels..." />
+                    <CommandEmpty>No levels found.</CommandEmpty>
+                    <CommandGroup>
+                        {options.map((option) => (
+                            <CommandItem
+                                key={option.value}
+                                onSelect={() => {
+                                    const newValue = value.includes(option.value)
+                                        ? value.filter(v => v !== option.value)
+                                        : [...value, option.value];
+                                    onChange(newValue);
+                                }}
+                            >
+                                <CheckCheck className={cn("mr-2 h-4 w-4", value.includes(option.value) ? "opacity-100" : "opacity-0")} />
+                                {option.label}
+                            </CommandItem>
+                        ))}
+                    </CommandGroup>
+                </Command>
+            </PopoverContent>
+        </Popover>
+    );
+};
+
 const BoostersPanel = () => {
     const context = useContext(AppContext);
     const [localBoosterPacks, setLocalBoosterPacks] = useState<BoosterPack[]>([]);
-
+    
     useEffect(() => {
         if(context?.boosterPacks) setLocalBoosterPacks(context.boosterPacks);
     }, [context?.boosterPacks]);
 
     if(!context) return null;
-    const { addBoosterPack, updateBoosterPack, deleteBoosterPack } = context;
+    const { addBoosterPack, updateBoosterPack, deleteBoosterPack, levels } = context;
+    const levelOptions = Object.entries(levels).map(([level, details]) => ({ value: Number(level), label: `Level ${level} - ${details.name}` }));
 
     const handleBoosterChange = (id: string, field: keyof BoosterPack, value: any) => {
         setLocalBoosterPacks(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
@@ -957,13 +996,39 @@ const BoostersPanel = () => {
                                             <SelectContent>
                                                 <SelectItem value="referral_points">Referral Points</SelectItem>
                                                 <SelectItem value="interest_boost">Interest Boost</SelectItem>
+                                                <SelectItem value="referral_bonus_boost">Referral Bonus Boost</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
                                     <div className="col-span-2"><Label>Description</Label><Textarea value={pack.description} onChange={e => handleBoosterChange(pack.id, 'description', e.target.value)} /></div>
                                     <div><Label>Cost (USDT)</Label><Input type="number" value={pack.cost} onChange={e => handleBoosterChange(pack.id, 'cost', Number(e.target.value))} /></div>
-                                    <div><Label>Effect Value</Label><Input type="number" value={pack.effectValue} onChange={e => handleBoosterChange(pack.id, 'effectValue', Number(e.target.value))} /></div>
-                                    {pack.type === 'interest_boost' && <div><Label>Duration (Hours)</Label><Input type="number" value={pack.durationHours || 0} onChange={e => handleBoosterChange(pack.id, 'durationHours', Number(e.target.value))} /></div>}
+                                    <div>
+                                        <Label>Effect Value</Label>
+                                        <Input 
+                                            type="number" 
+                                            step={pack.type === 'referral_points' ? '1' : '0.01'}
+                                            value={pack.effectValue} 
+                                            onChange={e => handleBoosterChange(pack.id, 'effectValue', Number(e.target.value))} 
+                                        />
+                                        <p className="text-xs text-gray-400 mt-1">
+                                            {pack.type === 'referral_points' && 'Number of points to grant.'}
+                                            {pack.type === 'interest_boost' && 'Decimal interest boost (e.g., 0.01 for 1%).'}
+                                            {pack.type === 'referral_bonus_boost' && 'Multiplier for bonus (e.g., 1.5 for 1.5x).'}
+                                        </p>
+                                    </div>
+                                    {(pack.type === 'interest_boost' || pack.type === 'referral_bonus_boost') && <>
+                                        <div><Label>Duration (Days)</Label><Input type="number" value={pack.durationDays || 0} onChange={e => handleBoosterChange(pack.id, 'durationDays', Number(e.target.value))} /></div>
+                                        <div><Label>Duration (Hours)</Label><Input type="number" value={pack.durationHours || 0} onChange={e => handleBoosterChange(pack.id, 'durationHours', Number(e.target.value))} /></div>
+                                    </>}
+                                    <div className="col-span-2">
+                                        <Label>Applicable Levels</Label>
+                                        <MultiSelect 
+                                            options={levelOptions} 
+                                            value={pack.applicableLevels || []}
+                                            onChange={(v) => handleBoosterChange(pack.id, 'applicableLevels', v)}
+                                            placeholder="Select applicable levels (or leave blank for all)"
+                                        />
+                                    </div>
                                 </div>
                                 <Button size="sm" onClick={() => handleSaveBooster(pack.id)}>Save Booster</Button>
                             </div>
@@ -1097,25 +1162,29 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: AdminModalView, labe
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        className="mb-4 flex flex-col items-end gap-3"
+                        className="mb-4 flex flex-col items-end"
                     >
-                        {items.map((item) => (
-                             <div key={item.view} className="flex items-center gap-3">
-                                <span className="bg-card/50 backdrop-blur-md text-white px-3 py-1 rounded-md shadow-lg text-sm">
-                                    {item.label}
-                                 </span>
-                                <Button
-                                    size="icon"
-                                    className="rounded-full size-12 bg-secondary/80 hover:bg-secondary"
-                                    onClick={() => {
-                                        onSelect(item.view);
-                                        setIsOpen(false);
-                                    }}
-                                >
-                                    <item.icon className="size-6" />
-                                </Button>
+                        <ScrollArea className="h-auto max-h-96 pr-4 -mr-4">
+                            <div className="flex flex-col items-end gap-3">
+                                {items.map((item) => (
+                                    <div key={item.view} className="flex items-center gap-3">
+                                        <span className="bg-card/50 backdrop-blur-md text-white px-3 py-1 rounded-md shadow-lg text-sm">
+                                            {item.label}
+                                        </span>
+                                        <Button
+                                            size="icon"
+                                            className="rounded-full size-12 bg-secondary/80 hover:bg-secondary"
+                                            onClick={() => {
+                                                onSelect(item.view);
+                                                setIsOpen(false);
+                                            }}
+                                        >
+                                            <item.icon className="size-6" />
+                                        </Button>
+                                    </div>
+                                ))}
                             </div>
-                        ))}
+                        </ScrollArea>
                     </motion.div>
                 )}
             </AnimatePresence>
