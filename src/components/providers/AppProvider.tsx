@@ -542,9 +542,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 // Check for referral bonus booster
                 const now = Date.now();
                 const activeBoosters = (referrerData.activeBoosters || []).filter(b => b.type === 'referral_bonus_boost' && b.expiresAt > now);
+                let bonusAmount = referralBonusSettings.bonusAmount;
                 const boostMultiplier = activeBoosters.reduce((acc, b) => acc * b.effectValue, 1);
+                bonusAmount *= boostMultiplier;
 
-                const bonusAmount = referralBonusSettings.bonusAmount * boostMultiplier;
 
                 await updateDoc(referrerRef, {
                     balance: referrerData.balance + bonusAmount,
@@ -1195,6 +1196,32 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
 
         toast({ title: "Success", description: `'${booster.name}' purchased and activated!` });
+    };
+    
+    const addStakingPool = () => {
+        const newPool: StakingPool = {
+            id: `sp_${Date.now()}`,
+            name: 'New Staking Pool',
+            description: 'A new limited-time staking event.',
+            endsAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // Default to 7 days from now
+            interestRate: 0.1, // 10% interest for the pool duration
+            totalStaked: 0,
+            minContribution: 10,
+            maxContribution: 1000,
+            participants: [],
+            status: 'active',
+            isActive: false, // Start as inactive
+        };
+        updateFirestoreSettings({ stakingPools: [...(stakingPools || []), newPool] });
+    };
+
+    const updateStakingPool = (id: string, updates: Partial<StakingPool>) => {
+        const newPools = (stakingPools || []).map(p => p.id === id ? { ...p, ...updates } : p);
+        updateFirestoreSettings({ stakingPools: newPools });
+    };
+
+    const deleteStakingPool = (id: string) => {
+        updateFirestoreSettings({ stakingPools: (stakingPools || []).filter(p => p.id !== id) });
     };
     
     const joinStakingPool = async (poolId: string, amount: number) => {
