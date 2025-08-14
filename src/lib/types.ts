@@ -28,10 +28,12 @@ export interface AppLinks {
     supportUrl: string;
 }
 
+export type TransactionType = 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created' | 'info' | 'booster_purchase' | 'pool_join' | 'pool_payout' | 'vault_investment' | 'vault_payout' | 'team_commission' | 'team_size_reward' | 'team_business_reward';
+
 export interface Transaction {
   id: string;
   userId: string;
-  type: 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created' | 'info' | 'booster_purchase' | 'pool_join' | 'pool_payout' | 'vault_investment' | 'vault_payout' | 'team_commission' | 'team_size_reward';
+  type: TransactionType;
   amount: number;
   status: 'pending' | 'approved' | 'declined' | 'credited' | 'completed' | 'info' | 'active';
   timestamp: number;
@@ -92,7 +94,9 @@ export interface User {
   activeBoosters?: ActiveBooster[];
   vaultInvestments?: UserVaultInvestment[];
   teamSize?: number; // Total number of users in the downline
+  teamBusiness?: number; // Total deposits made by the entire downline
   claimedTeamSizeRewards?: string[]; // Array of claimed reward IDs
+  claimedTeamBusinessRewards?: string[]; // Array of claimed reward IDs
 }
 
 export interface Level {
@@ -191,6 +195,13 @@ export interface TeamSizeReward {
     isEnabled: boolean;
 }
 
+export interface TeamBusinessReward {
+    id: string;
+    businessAmount: number; // Total team deposit amount required
+    rewardAmount: number;
+    isEnabled: boolean;
+}
+
 export interface StartScreenSettings {
   title: string;
   subtitle: string;
@@ -216,6 +227,7 @@ export interface AppSettings {
     referralBonusSettings: ReferralBonusSettings;
     teamCommissionSettings: TeamCommissionSettings;
     teamSizeRewards: TeamSizeReward[];
+    teamBusinessRewards: TeamBusinessReward[];
     active3DTheme: BackgroundTheme;
     rechargeAddresses: RechargeAddress[];
     appLinks: AppLinks;

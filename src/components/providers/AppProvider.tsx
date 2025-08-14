@@ -7,7 +7,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe, runTransaction } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
@@ -36,12 +36,10 @@ export interface AppContextType {
   deleteLevel: (levelKey: number) => void;
   allPendingRequests: AugmentedTransaction[];
   adminHistory: AugmentedTransaction[];
+  approveRequest: (transactionId: string, type: Transaction['type']) => void;
+  declineRequest: (transactionId: string, type: Transaction['type']) => void;
   submitDepositRequest: (amount: number, address: string) => void;
-  approveDeposit: (transactionId: string) => void;
-  declineDeposit: (transactionId: string) => void;
   submitWithdrawalRequest: (amount: number) => void;
-  approveWithdrawal: (transactionId: string) => void;
-  declineWithdrawal: (transactionId: string) => void;
   findUser: (email: string) => Promise<UserForAdmin | null>;
   adjustUserBalance: (userId: string, amount: number) => Promise<UserForAdmin | null>;
   adjustUserLevel: (userId: string, level: number) => Promise<UserForAdmin | null>;
@@ -68,7 +66,11 @@ export interface AppContextType {
   addTeamSizeReward: () => void;
   updateTeamSizeReward: (id: string, updates: Partial<TeamSizeReward>) => void;
   deleteTeamSizeReward: (id: string) => void;
-  claimTeamSizeReward: (rewardId: string) => Promise<void>;
+  teamBusinessRewards: TeamBusinessReward[];
+  addTeamBusinessReward: () => void;
+  updateTeamBusinessReward: (id: string, updates: Partial<TeamBusinessReward>) => void;
+  deleteTeamBusinessReward: (id: string) => void;
+  claimTeamReward: (type: 'team_size_reward' | 'team_business_reward', rewardId: string) => Promise<void>;
   active3DTheme: BackgroundTheme;
   setActive3DTheme: (theme: BackgroundTheme) => void;
   rechargeAddresses: RechargeAddress[];
@@ -150,6 +152,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     referralBonusSettings, 
     teamCommissionSettings,
     teamSizeRewards,
+    teamBusinessRewards,
     active3DTheme, 
     rechargeAddresses,
     appLinks,
@@ -177,6 +180,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             stakingPools: data.stakingPools || [],
             stakingVaults: data.stakingVaults || [],
             teamSizeRewards: data.teamSizeRewards || [],
+            teamBusinessRewards: data.teamBusinessRewards || [],
         };
         setAppSettings(sanitizedData);
       } else {
@@ -328,106 +332,123 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   
-    const signUp = async (email: string, pass: string, referral: string): Promise<boolean> => {
-        if (!email || !pass || !referral) {
-            toast({ title: "Error", description: "Please fill all fields.", variant: "destructive" });
+  const signUp = async (email: string, pass: string, referral: string): Promise<boolean> => {
+    if (!email || !pass || !referral) {
+        toast({ title: "Error", description: "Please fill all fields.", variant: "destructive" });
+        return false;
+    }
+
+    try {
+        const usersRef = collection(db, "users");
+        const emailQuery = query(usersRef, where("email", "==", email));
+        const emailQuerySnapshot = await getDocs(emailQuery);
+        if (!emailQuerySnapshot.empty) {
+            toast({ title: "Error", description: "User with this email already exists.", variant: "destructive" });
             return false;
         }
 
-        try {
-            const usersRef = collection(db, "users");
-            const emailQuery = query(usersRef, where("email", "==", email));
-            const emailQuerySnapshot = await getDocs(emailQuery);
-            if (!emailQuerySnapshot.empty) {
-                toast({ title: "Error", description: "User with this email already exists.", variant: "destructive" });
-                return false;
-            }
+        const referralQuery = query(usersRef, where("userReferralCode", "==", referral));
+        const referralQuerySnapshot = await getDocs(referralQuery);
+        const referrerDoc = referralQuerySnapshot.docs[0];
 
-            const referralQuery = query(usersRef, where("userReferralCode", "==", referral));
-            const referralQuerySnapshot = await getDocs(referralQuery);
-            const referrerDoc = referralQuerySnapshot.docs[0];
+        if (referralQuerySnapshot.empty && referral !== ADMIN_REFERRAL_CODE) {
+            toast({ title: "Error", description: "Invalid referral code.", variant: "destructive" });
+            return false;
+        }
 
-            if (referralQuerySnapshot.empty && referral !== ADMIN_REFERRAL_CODE) {
-                toast({ title: "Error", description: "Invalid referral code.", variant: "destructive" });
-                return false;
-            }
+        const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+        const newUserAuth = userCredential.user;
+        await sendEmailVerification(newUserAuth);
 
-            const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-            const newUserAuth = userCredential.user;
-            await sendEmailVerification(newUserAuth);
+        const referrerData = referrerDoc ? (referrerDoc.data() as User) : null;
+        const newReferralPath = referrerDoc ? [referrerDoc.id, ...(referrerData?.referralPath || [])] : [];
 
-            const referrerData = referrerDoc ? (referrerDoc.data() as User) : null;
-            const newReferralPath = referrerData ? [referrerDoc.id, ...(referrerData.referralPath || [])] : [];
+        const newUser: User = {
+            id: newUserAuth.uid,
+            email: email,
+            balance: 0,
+            totalDeposits: 0,
+            level: 0,
+            userReferralCode: generateReferralCode(),
+            referredBy: referrerDoc ? referrerDoc.id : ADMIN_REFERRAL_CODE,
+            referralPath: newReferralPath,
+            directReferrals: 0,
+            purchasedReferralPoints: 0,
+            transactions: [],
+            referredUsers: [],
+            lastInterestCreditTime: 0,
+            primaryWithdrawalAddress: '',
+            firstDepositTime: null,
+            registrationTime: Date.now(),
+            lastWithdrawalTime: null,
+            activeBoosters: [],
+            vaultInvestments: [],
+            teamSize: 0,
+            teamBusiness: 0,
+            claimedTeamSizeRewards: [],
+            claimedTeamBusinessRewards: [],
+        };
 
-            const newUser: User = {
-                id: newUserAuth.uid,
-                email: email,
-                balance: 0,
-                totalDeposits: 0,
-                level: 0,
-                userReferralCode: generateReferralCode(),
-                referredBy: referrerDoc ? referrerDoc.id : ADMIN_REFERRAL_CODE,
-                referralPath: newReferralPath,
-                directReferrals: 0,
-                purchasedReferralPoints: 0,
-                transactions: [],
-                referredUsers: [],
-                lastInterestCreditTime: 0,
-                primaryWithdrawalAddress: '',
-                firstDepositTime: null,
-                registrationTime: Date.now(),
-                lastWithdrawalTime: null,
-                activeBoosters: [],
-                vaultInvestments: [],
-                teamSize: 0,
-                claimedTeamSizeRewards: []
-            };
+        const batch = writeBatch(db);
+        batch.set(doc(db, "users", newUserAuth.uid), newUser);
+        
+        let teamUpdates = new Map<string, { size: number, business: number }>();
 
-            const batch = writeBatch(db);
-            batch.set(doc(db, "users", newUserAuth.uid), newUser);
-
-            if (referrerDoc) {
-                batch.update(doc(db, "users", referrerDoc.id), {
-                    referredUsers: arrayUnion({ email: newUser.email, isActivated: false })
-                });
-
-                // Update team size for all upline members
-                for (const uplineId of newReferralPath) {
-                    batch.update(doc(db, "users", uplineId), {
-                        teamSize: (await getDoc(doc(db, "users", uplineId))).data()?.teamSize + 1 || 1
-                    });
-                }
-            }
-
-            await batch.commit();
-
-            await addTransaction(newUserAuth.uid, {
-                id: generateTxnId(),
-                type: 'account_created',
-                amount: 0,
-                status: 'completed',
-                description: `Account created successfully. Referred by ${referral}. Awaiting email verification.`,
+        if (referrerDoc) {
+            batch.update(doc(db, "users", referrerDoc.id), {
+                referredUsers: arrayUnion({ email: newUser.email, isActivated: false })
             });
 
-            if (referrerDoc) {
-                await addTransaction(referrerDoc.id, {
-                    id: generateTxnId(),
-                    type: 'new_referral',
-                    amount: 0,
-                    status: 'info',
-                    description: `New user registered with your code: ${newUser.email} (Pending activation)`
+            // Prepare team updates for upline
+            for (const uplineId of newReferralPath) {
+                const currentUpdate = teamUpdates.get(uplineId) || { size: 0, business: 0 };
+                teamUpdates.set(uplineId, { size: currentUpdate.size + 1, business: currentUpdate.business });
+            }
+        }
+        
+        // Apply team updates
+        for (const [uplineId, updates] of teamUpdates.entries()) {
+            const uplineUserRef = doc(db, "users", uplineId);
+            const uplineUserSnap = await getDoc(uplineUserRef);
+            if (uplineUserSnap.exists()) {
+                const uplineUserData = uplineUserSnap.data() as User;
+                batch.update(uplineUserRef, {
+                    teamSize: (uplineUserData.teamSize || 0) + updates.size
                 });
             }
-
-            toast({ title: "Verification Email Sent!", description: "Please check your inbox to activate your account." });
-            return true;
-
-        } catch (error) {
-            console.error("Sign up error:", error);
-            toast({ title: "Error", description: "Could not create account.", variant: "destructive" });
-            return false;
         }
-    };
+
+
+        await batch.commit();
+
+        await addTransaction(newUserAuth.uid, {
+            id: generateTxnId(),
+            type: 'account_created',
+            amount: 0,
+            status: 'completed',
+            description: `Account created successfully. Referred by ${referral}. Awaiting email verification.`,
+        });
+
+        if (referrerDoc) {
+            await addTransaction(referrerDoc.id, {
+                id: generateTxnId(),
+                type: 'new_referral',
+                amount: 0,
+                status: 'info',
+                description: `New user registered with your code: ${newUser.email} (Pending activation)`
+            });
+        }
+
+        toast({ title: "Verification Email Sent!", description: "Please check your inbox to activate your account." });
+        return true;
+
+    } catch (error) {
+        console.error("Sign up error:", error);
+        toast({ title: "Error", description: "Could not create account.", variant: "destructive" });
+        return false;
+    }
+};
+
   
   const signOut = async () => {
     try {
@@ -486,114 +507,137 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     toast({ title: "Success", description: "Deposit request submitted." });
   };
   
-  const processRequest = async (transactionId: string, newStatus: 'approved' | 'declined', type: 'deposit' | 'withdrawal') => {
-    const usersRef = collection(db, "users");
-    
-    const allUsersSnap = await getDocs(usersRef);
-    let userFound: User | null = null;
-    let userDocId: string | null = null;
-    let originalRequest: Transaction | null = null;
+    const processRequest = async (transactionId: string, newStatus: 'approved' | 'declined', type: Transaction['type']) => {
+        const usersRef = collection(db, "users");
+        
+        const allUsersSnap = await getDocs(usersRef);
+        let userFound: User | null = null;
+        let userDocId: string | null = null;
+        let originalRequest: Transaction | null = null;
 
-    for (const userDoc of allUsersSnap.docs) {
-        const userData = userDoc.data() as User;
-        const req = userData.transactions.find(t => t.id === transactionId && t.status === 'pending' && t.type === type);
-        if (req) {
-            userFound = userData;
-            userDocId = userDoc.id;
-            originalRequest = req;
-            break;
-        }
-    }
-
-    if (!userFound || !userDocId || !originalRequest) {
-        toast({ title: "Error", description: `Transaction not found or already processed. ID: ${transactionId}`, variant: "destructive" });
-        return;
-    }
-
-    const userRef = doc(db, "users", userDocId);
-    
-    const description = `${type.charAt(0).toUpperCase() + type.slice(1)} of ${originalRequest.amount} USDT ${newStatus}.`;
-    const updatedTransactions = userFound.transactions.map(tx =>
-        tx.id === transactionId ? { ...tx, status: newStatus, description } : tx
-    );
-    
-    const batch = writeBatch(db);
-    const updates: any = { transactions: updatedTransactions };
-    const adminTxDescription = `Admin ${newStatus} ${type} of ${originalRequest.amount} for user ${userFound.email}`;
-
-
-    if (newStatus === 'approved') {
-        if (type === 'deposit') {
-            updates.balance = userFound.balance + originalRequest.amount;
-            updates.totalDeposits = (userFound.totalDeposits || 0) + originalRequest.amount;
-            if (!userFound.firstDepositTime) {
-                updates.firstDepositTime = Date.now();
-                 // On first deposit, set lastInterestCreditTime to now to start the first 24h cycle
-                updates.lastInterestCreditTime = Date.now();
-            }
-        } else { // withdrawal
-            updates.balance = userFound.balance - originalRequest.amount;
-            updates.lastWithdrawalTime = Date.now();
-        }
-    }
-    
-    batch.update(userRef, updates);
-    await batch.commit();
-
-    // Log this action to admin history by adding a transaction to the admin's (or a global log's) doc
-    // For simplicity, I'm logging it back to the user with a special type.
-    await addTransaction(userDocId, {
-      id: generateTxnId(),
-      type: 'admin_adjusted',
-      amount: originalRequest.amount,
-      status: newStatus,
-      description: adminTxDescription,
-    });
-    
-    // Post-approval logic
-    if (newStatus === 'approved' && type === 'deposit') {
-        const isFirstDeposit = !userFound.firstDepositTime;
-        if (isFirstDeposit && referralBonusSettings.isEnabled && originalRequest.amount >= referralBonusSettings.minDeposit && userFound.referredBy && userFound.referredBy !== ADMIN_REFERRAL_CODE) {
-            const referrerRef = doc(db, "users", userFound.referredBy);
-            const referrerSnap = await getDoc(referrerRef);
-            if (referrerSnap.exists()) {
-                const referrerData = referrerSnap.data() as User;
-                
-                // Check for referral bonus booster
-                const now = Date.now();
-                const activeBoosters = (referrerData.activeBoosters || []).filter(b => b.type === 'referral_bonus_boost' && b.expiresAt > now);
-                let bonusAmount = referralBonusSettings.bonusAmount;
-                const boostMultiplier = activeBoosters.reduce((acc, b) => acc * b.effectValue, 1);
-                bonusAmount *= boostMultiplier;
-
-
-                await updateDoc(referrerRef, {
-                    balance: referrerData.balance + bonusAmount,
-                    directReferrals: (referrerData.directReferrals || 0) + 1,
-                    referredUsers: referrerData.referredUsers.map(u => u.email === userFound!.email ? { ...u, isActivated: true } : u)
-                });
-
-                await addTransaction(referrerData.id, {
-                    id: generateTxnId(),
-                    type: 'referral_bonus',
-                    amount: bonusAmount,
-                    status: 'credited',
-                    description: `You received a ${bonusAmount.toFixed(2)} USDT bonus for activating ${userFound!.email}! ${boostMultiplier > 1 ? '(Boosted!)' : ''}`
-                });
+        for (const userDoc of allUsersSnap.docs) {
+            const userData = userDoc.data() as User;
+            const req = userData.transactions.find(t => t.id === transactionId && t.status === 'pending' && t.type === type);
+            if (req) {
+                userFound = userData;
+                userDocId = userDoc.id;
+                originalRequest = req;
+                break;
             }
         }
-        await checkAndApplyLevelUp(userDocId);
-    }
 
-    toast({ title: "Success", description: `${type} request has been ${newStatus}.` });
-    // No need to manually refresh admin list, Firestore listener will do it.
-  };
-    
-    const approveDeposit = (transactionId: string) => processRequest(transactionId, 'approved', 'deposit');
-    const declineDeposit = (transactionId: string) => processRequest(transactionId, 'declined', 'deposit');
-    
-    const approveWithdrawal = (transactionId: string) => processRequest(transactionId, 'approved', 'withdrawal');
-    const declineWithdrawal = (transactionId: string) => processRequest(transactionId, 'declined', 'withdrawal');
+        if (!userFound || !userDocId || !originalRequest) {
+            toast({ title: "Error", description: `Transaction not found or already processed. ID: ${transactionId}`, variant: "destructive" });
+            return;
+        }
+
+        const userRef = doc(db, "users", userDocId);
+        
+        const description = `${type.replace('_', ' ')} of ${originalRequest.amount} USDT ${newStatus}.`;
+        const updatedTransactions = userFound.transactions.map(tx =>
+            tx.id === transactionId ? { ...tx, status: newStatus, description } : tx
+        );
+        
+        const batch = writeBatch(db);
+        const updates: any = { transactions: updatedTransactions };
+        const adminTxDescription = `Admin ${newStatus} ${type.replace('_', ' ')} of ${originalRequest.amount} for user ${userFound.email}`;
+
+        if (newStatus === 'approved') {
+            switch(type) {
+                case 'deposit':
+                    updates.balance = userFound.balance + originalRequest.amount;
+                    updates.totalDeposits = (userFound.totalDeposits || 0) + originalRequest.amount;
+                    if (!userFound.firstDepositTime) {
+                        updates.firstDepositTime = Date.now();
+                        updates.lastInterestCreditTime = Date.now();
+                    }
+                    break;
+                case 'withdrawal':
+                    updates.balance = userFound.balance - originalRequest.amount;
+                    updates.lastWithdrawalTime = Date.now();
+                    break;
+                case 'team_size_reward':
+                    updates.balance = userFound.balance + originalRequest.amount;
+                    updates.claimedTeamSizeRewards = arrayUnion(originalRequest.note); // Note stores reward ID
+                    break;
+                 case 'team_business_reward':
+                    updates.balance = userFound.balance + originalRequest.amount;
+                    updates.claimedTeamBusinessRewards = arrayUnion(originalRequest.note); // Note stores reward ID
+                    break;
+            }
+        }
+        
+        batch.update(userRef, updates);
+        await batch.commit();
+
+        await addTransaction(userDocId, {
+          id: generateTxnId(),
+          type: 'admin_adjusted',
+          amount: originalRequest.amount,
+          status: newStatus,
+          description: adminTxDescription,
+        });
+        
+        if (newStatus === 'approved' && type === 'deposit') {
+            const isFirstDeposit = !userFound.firstDepositTime;
+            
+            // Activate referrer
+            if (isFirstDeposit && userFound.referredBy && userFound.referredBy !== ADMIN_REFERRAL_CODE) {
+                const referrerRef = doc(db, "users", userFound.referredBy);
+                const referrerSnap = await getDoc(referrerRef);
+                if (referrerSnap.exists()) {
+                    const referrerData = referrerSnap.data() as User;
+                    const updatedReferredUsers = referrerData.referredUsers.map(u => u.email === userFound!.email ? { ...u, isActivated: true } : u);
+                    await updateDoc(referrerRef, { referredUsers: updatedReferredUsers });
+                }
+            }
+
+            // Distribute team business
+            const batch = writeBatch(db);
+            for (const uplineId of userFound.referralPath) {
+                const uplineRef = doc(db, 'users', uplineId);
+                const uplineSnap = await getDoc(uplineRef);
+                if(uplineSnap.exists()){
+                    batch.update(uplineRef, { teamBusiness: (uplineSnap.data().teamBusiness || 0) + originalRequest.amount });
+                }
+            }
+            await batch.commit();
+
+            // Referral bonus logic
+            if (isFirstDeposit && referralBonusSettings.isEnabled && originalRequest.amount >= referralBonusSettings.minDeposit && userFound.referredBy && userFound.referredBy !== ADMIN_REFERRAL_CODE) {
+                const referrerRef = doc(db, "users", userFound.referredBy);
+                const referrerSnap = await getDoc(referrerRef);
+                if (referrerSnap.exists()) {
+                    const referrerData = referrerSnap.data() as User;
+                    
+                    const now = Date.now();
+                    const activeBoosters = (referrerData.activeBoosters || []).filter(b => b.type === 'referral_bonus_boost' && b.expiresAt > now);
+                    let bonusAmount = referralBonusSettings.bonusAmount;
+                    const boostMultiplier = activeBoosters.reduce((acc, b) => acc * b.effectValue, 1);
+                    bonusAmount *= boostMultiplier;
+
+                    await updateDoc(referrerRef, {
+                        balance: referrerData.balance + bonusAmount,
+                        directReferrals: (referrerData.directReferrals || 0) + 1,
+                    });
+
+                    await addTransaction(referrerData.id, {
+                        id: generateTxnId(),
+                        type: 'referral_bonus',
+                        amount: bonusAmount,
+                        status: 'credited',
+                        description: `You received a ${bonusAmount.toFixed(2)} USDT bonus for activating ${userFound!.email}! ${boostMultiplier > 1 ? '(Boosted!)' : ''}`
+                    });
+                }
+            }
+            await checkAndApplyLevelUp(userDocId);
+        }
+
+        toast({ title: "Success", description: `${type.replace('_', ' ')} request has been ${newStatus}.` });
+    };
+
+    const approveRequest = (transactionId: string, type: Transaction['type']) => processRequest(transactionId, 'approved', type);
+    const declineRequest = (transactionId: string, type: Transaction['type']) => processRequest(transactionId, 'declined', type);
 
   const validateWithdrawal = (amount: number): string | null => {
     if (!currentUser) return "Not logged in.";
@@ -854,37 +898,75 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const deleteTeamSizeReward = (id: string) => {
         updateFirestoreSettings({ teamSizeRewards: teamSizeRewards.filter(r => r.id !== id) });
     }
-    const claimTeamSizeReward = async (rewardId: string) => {
+    const addTeamBusinessReward = () => {
+        const newReward: TeamBusinessReward = {
+            id: `tbr_${Date.now()}`,
+            businessAmount: 10000,
+            rewardAmount: 500,
+            isEnabled: true,
+        };
+        updateFirestoreSettings({ teamBusinessRewards: [...(teamBusinessRewards || []), newReward] });
+    }
+    const updateTeamBusinessReward = (id: string, updates: Partial<TeamBusinessReward>) => {
+        const newRewards = (teamBusinessRewards || []).map(r => r.id === id ? { ...r, ...updates } : r);
+        updateFirestoreSettings({ teamBusinessRewards: newRewards });
+    }
+    const deleteTeamBusinessReward = (id: string) => {
+        updateFirestoreSettings({ teamBusinessRewards: (teamBusinessRewards || []).filter(r => r.id !== id) });
+    }
+
+    const claimTeamReward = async (type: 'team_size_reward' | 'team_business_reward', rewardId: string) => {
         if (!currentUser) return;
-        const reward = teamSizeRewards.find(r => r.id === rewardId);
+
+        let reward;
+        let userValue = 0;
+        let rewardValue = 0;
+        let claimedList: string[] = [];
+        let description = '';
+
+        if (type === 'team_size_reward') {
+            reward = teamSizeRewards.find(r => r.id === rewardId);
+            userValue = currentUser.teamSize || 0;
+            rewardValue = reward?.teamSize || 0;
+            claimedList = currentUser.claimedTeamSizeRewards || [];
+            description = `User requested Team Size Reward of ${reward?.rewardAmount} for reaching ${reward?.teamSize} members.`;
+        } else {
+            reward = teamBusinessRewards.find(r => r.id === rewardId);
+            userValue = currentUser.teamBusiness || 0;
+            rewardValue = reward?.businessAmount || 0;
+            claimedList = currentUser.claimedTeamBusinessRewards || [];
+            description = `User requested Team Business Reward of ${reward?.rewardAmount} for reaching ${reward?.businessAmount} USDT business.`;
+        }
+
         if (!reward || !reward.isEnabled) {
             toast({ title: "Error", description: "This reward is not available.", variant: "destructive" });
             return;
         }
-        if ((currentUser.teamSize || 0) < reward.teamSize) {
-            toast({ title: "Error", description: "You have not met the team size requirement.", variant: "destructive" });
+        if (userValue < rewardValue) {
+            toast({ title: "Error", description: "You have not met the requirement.", variant: "destructive" });
             return;
         }
-        if (currentUser.claimedTeamSizeRewards?.includes(rewardId)) {
+        if (claimedList.includes(rewardId)) {
             toast({ title: "Error", description: "You have already claimed this reward.", variant: "destructive" });
             return;
         }
-
-        const userRef = doc(db, "users", currentUser.id);
-        await updateDoc(userRef, {
-            balance: currentUser.balance + reward.rewardAmount,
-            claimedTeamSizeRewards: arrayUnion(rewardId)
-        });
+        if (currentUser.transactions.some(tx => tx.status === 'pending' && tx.note === rewardId)) {
+            toast({ title: "Error", description: "You have a pending claim for this reward.", variant: "destructive" });
+            return;
+        }
 
         await addTransaction(currentUser.id, {
             id: generateTxnId(),
-            type: 'team_size_reward',
+            type,
             amount: reward.rewardAmount,
-            status: 'credited',
-            description: `Claimed ${reward.rewardAmount} USDT for reaching ${reward.teamSize} team members.`
+            status: 'pending',
+            description,
+            note: reward.id, // Store reward ID in note field for processing
         });
-        toast({ title: "Reward Claimed!", description: `You received ${reward.rewardAmount} USDT!` });
+
+        toast({ title: "Claim Submitted!", description: "Your reward claim has been sent for admin approval." });
     };
+
     const updateDashboardPanel = (id: string, updates: Partial<DashboardPanel>) => {
         const newPanels = dashboardPanels.map(p => p.id === id ? { ...p, ...updates } : p);
         updateFirestoreSettings({ dashboardPanels: newPanels });
@@ -1100,7 +1182,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
             const now = Date.now();
             const lastCredit = currentUser.lastInterestCreditTime || currentUser.firstDepositTime;
-            const timeSinceLastCredit = now - lastCredit;
             const twentyFourHours = 24 * 60 * 60 * 1000;
 
             if (timeSinceLastCredit >= twentyFourHours) {
@@ -1205,8 +1286,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const newPacks = (boosterPacks || []).map(p => p.id === id ? { ...p, ...updates } : p);
         await updateFirestoreSettings({ boosterPacks: newPacks });
     
-        // Refund logic: if the pack is being deactivated
-        if (oldPack.isActive && updates.isActive === false) {
+        // Refund logic: if the pack is being deactivated or deleted
+        if (oldPack.isActive && (updates.isActive === false || updates.isActive === undefined)) {
             await refundBooster(id, oldPack.cost);
         }
     };
@@ -1597,12 +1678,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     deleteLevel,
     allPendingRequests,
     adminHistory,
+    approveRequest,
+    declineRequest,
     submitDepositRequest,
-    approveDeposit,
-    declineDeposit,
     submitWithdrawalRequest,
-    approveWithdrawal,
-    declineWithdrawal,
     findUser,
     adjustUserBalance,
     adjustUserLevel,
@@ -1629,7 +1708,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     addTeamSizeReward,
     updateTeamSizeReward,
     deleteTeamSizeReward,
-    claimTeamSizeReward,
+    teamBusinessRewards,
+    addTeamBusinessReward,
+    updateTeamBusinessReward,
+    deleteTeamBusinessReward,
+    claimTeamReward,
     active3DTheme,
     setActive3DTheme,
     rechargeAddresses,

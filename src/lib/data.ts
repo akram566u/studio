@@ -1,4 +1,5 @@
 
+
 import { AppSettings } from '@/lib/types';
 
 // This object now defines the INITIAL state of the settings.
@@ -104,6 +105,11 @@ export const initialAppSettings: AppSettings = {
         { id: 'tsr_1', teamSize: 10, rewardAmount: 10, isEnabled: true },
         { id: 'tsr_2', teamSize: 50, rewardAmount: 60, isEnabled: true },
         { id: 'tsr_3', teamSize: 100, rewardAmount: 150, isEnabled: true },
+    ],
+
+    teamBusinessRewards: [
+        { id: 'tbr_1', businessAmount: 5000, rewardAmount: 100, isEnabled: true },
+        { id: 'tbr_2', businessAmount: 25000, rewardAmount: 600, isEnabled: true },
     ],
 
     startScreenContent: {

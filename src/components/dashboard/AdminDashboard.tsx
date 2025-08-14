@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { Label } from '../ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '../ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -30,9 +30,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy } from 'lucide-react';
-import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward } from '@/lib/types';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2 } from 'lucide-react';
+import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { analyzeTeam, AnalyzeTeamOutput } from '@/ai/flows/analyze-team-flow';
 
 
 type AdminModalView =
@@ -106,6 +107,16 @@ const AdminDashboard = () => {
       { view: 'view_examples', label: 'View Examples', icon: BarChart },
   ];
 
+  const getRequestIcon = (type: string) => {
+      switch(type) {
+          case 'deposit': return <ArrowDownCircle className="text-green-400 mt-1 size-6" />;
+          case 'withdrawal': return <ArrowUpCircle className="text-red-400 mt-1 size-6" />;
+          case 'team_size_reward': return <Trophy className="text-amber-400 mt-1 size-6" />;
+          case 'team_business_reward': return <BadgePercent className="text-cyan-400 mt-1 size-6" />;
+          default: return <CheckCircle className="text-gray-400 mt-1 size-6" />;
+      }
+  }
+
   return (
     <>
       <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
@@ -149,15 +160,12 @@ const AdminDashboard = () => {
                             <div className="space-y-4">
                                 {allPendingRequests.map(request => (
                                     <div key={`${request.id}-${request.timestamp}`} className="bg-black/20 p-4 rounded-lg flex items-start gap-4">
-                                        {request.type === 'deposit' ? 
-                                            <ArrowDownCircle className="text-green-400 mt-1 size-6" /> :
-                                            <ArrowUpCircle className="text-red-400 mt-1 size-6" />
-                                        }
+                                        {getRequestIcon(request.type)}
                                         <div className="flex-1 space-y-2">
                                             <div className="flex justify-between items-start">
                                                 <div>
-                                                    <p className="font-bold text-lg">
-                                                        {request.type === 'deposit' ? 'Deposit' : 'Withdrawal'} Request
+                                                    <p className="font-bold text-lg capitalize">
+                                                        {request.type.replace('_', ' ')} Request
                                                         <span className={`ml-2 font-mono text-xl ${request.type === 'deposit' ? 'text-green-300' : 'text-red-300'}`}>
                                                             {request.amount.toFixed(2)} USDT
                                                         </span>
@@ -172,11 +180,12 @@ const AdminDashboard = () => {
                                                     Lvl: {request.userLevel} | Deposits: {request.userDepositCount} | Withdrawals: {request.userWithdrawalCount} | Referrals: {request.directReferrals}
                                                 </p>
                                                 <p className="break-all">Address: {request.walletAddress || request.userWithdrawalAddress}</p>
+                                                {request.note && <p className="text-yellow-300">Note: {request.note}</p>}
                                             </div>
 
                                             <div className="flex gap-2 pt-2">
-                                                <Button onClick={() => request.type === 'deposit' ? context.approveDeposit(request.id) : context.approveWithdrawal(request.id)} size="sm">Approve</Button>
-                                                <Button onClick={() => request.type === 'deposit' ? context.declineDeposit(request.id) : context.declineWithdrawal(request.id)} variant="destructive" size="sm">Decline</Button>
+                                                <Button onClick={() => context.approveRequest(request.id, request.type)} size="sm">Approve</Button>
+                                                <Button onClick={() => context.declineRequest(request.id, request.type)} variant="destructive" size="sm">Decline</Button>
                                             </div>
                                         </div>
                                     </div>
@@ -299,6 +308,78 @@ const ActivityLogPanel = () => {
     )
 };
 
+const TeamAnalysisDialog = ({ open, onOpenChange, userId }: { open: boolean, onOpenChange: (open: boolean) => void, userId: string }) => {
+    const [analysis, setAnalysis] = useState<AnalyzeTeamOutput | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (open && userId && !analysis) {
+            const getAnalysis = async () => {
+                setIsLoading(true);
+                setError(null);
+                try {
+                    const result = await analyzeTeam({ userId });
+                    setAnalysis(result);
+                } catch (e: any) {
+                    setError(e.message || "Failed to analyze team.");
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+            getAnalysis();
+        }
+    }, [open, userId, analysis]);
+
+    const handleClose = () => {
+        setAnalysis(null); // Reset analysis when closing
+        onOpenChange(false);
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={handleClose}>
+            <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle className="text-purple-400 text-2xl flex items-center gap-2"><BrainCircuit /> AI Team Performance Analysis</DialogTitle>
+                    <DialogDescription>
+                        This AI-powered analysis provides insights into the user's team structure and suggests areas for improvement.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
+                    {isLoading && <div className="flex justify-center items-center gap-2"><Loader2 className="animate-spin" /> <p>Analyzing team data...</p></div>}
+                    {error && <p className="text-red-400">Error: {error}</p>}
+                    {analysis && (
+                        <div className="space-y-4 text-sm">
+                            <div>
+                                <h4 className="font-bold text-yellow-300 mb-1">Strengths</h4>
+                                <ul className="list-disc list-inside space-y-1 text-gray-300">
+                                    {analysis.strengths.map((s, i) => <li key={i}>{s}</li>)}
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-yellow-300 mb-1">Weaknesses</h4>
+                                <ul className="list-disc list-inside space-y-1 text-gray-300">
+                                    {analysis.weaknesses.map((w, i) => <li key={i}>{w}</li>)}
+                                </ul>
+                            </div>
+                             <div>
+                                <h4 className="font-bold text-green-300 mb-1">Suggestions for User</h4>
+                                <ul className="list-disc list-inside space-y-1 text-gray-300">
+                                    {analysis.suggestions.map((s, i) => <li key={i}>{s}</li>)}
+                                </ul>
+                            </div>
+                             <div>
+                                <h4 className="font-bold text-blue-300 mb-1">Reward Analysis</h4>
+                                <p className="text-gray-300">{analysis.rewardAnalysis}</p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
 const UserManagementPanel = () => {
     const context = useContext(AppContext);
     const [searchQuery, setSearchQuery] = useState('');
@@ -308,6 +389,8 @@ const UserManagementPanel = () => {
     const [editingBalance, setEditingBalance] = useState(0);
     const [editingLevel, setEditingLevel] = useState(0);
     const [editingReferrals, setEditingReferrals] = useState(0);
+    const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
+
 
     useEffect(() => {
         if (searchedUser) {
@@ -368,6 +451,7 @@ const UserManagementPanel = () => {
     };
 
     return (
+        <>
         <Card className="card-gradient-indigo-fuchsia p-6">
             <CardContent>
                  <form onSubmit={handleUserSearch} className="flex gap-2 mb-4">
@@ -427,12 +511,13 @@ const UserManagementPanel = () => {
                             </div>
                         </div>
                         <hr className="border-white/10" />
-                        <div className="space-y-2">
-                            <Label>Password Management</Label>
+                        <div className="flex flex-col md:flex-row gap-2">
                             <Button onClick={handlePasswordReset} variant="destructive" className="w-full">
                                 <KeyRound /> Send Password Reset Email
                             </Button>
-                            <p className="text-xs text-gray-400">This will send a secure link to the user's email for them to reset their own password.</p>
+                             <Button onClick={() => setIsAnalysisDialogOpen(true)} variant="outline" className="w-full">
+                                <BrainCircuit /> Analyze Team Performance
+                            </Button>
                         </div>
                    </div>
                 )}
@@ -462,6 +547,8 @@ const UserManagementPanel = () => {
                 )}
             </CardContent>
         </Card>
+        {searchedUser && <TeamAnalysisDialog open={isAnalysisDialogOpen} onOpenChange={setIsAnalysisDialogOpen} userId={searchedUser.id} />}
+        </>
     );
 };
 
@@ -601,8 +688,8 @@ const ContentUIPanel = () => {
                         />
                     </div>
                     
-                    <div className="space-y-4">
-                        <Label>Button Actions</Label>
+                    <ScrollArea className="h-auto max-h-[40vh] custom-scrollbar">
+                    <div className="space-y-4 pr-4">
                         {localFabSettings.items.map((item) => (
                             <div key={item.id} className="bg-black/20 p-4 rounded-lg space-y-2">
                                 <div className="flex items-center gap-2">
@@ -658,6 +745,7 @@ const ContentUIPanel = () => {
                             </div>
                         ))}
                     </div>
+                    </ScrollArea>
 
                     <div className="flex gap-4">
                         <Button onClick={handleSaveFabSettings}>Save FAB Settings</Button>
@@ -678,6 +766,7 @@ const SystemSettingsPanel = () => {
     const [localAppLinks, setLocalAppLinks] = useState<AppLinks>({ downloadUrl: '', supportUrl: '' });
     const [localTeamCommissionSettings, setLocalTeamCommissionSettings] = useState<TeamCommissionSettings>({ isEnabled: false, rates: { level1: 0, level2: 0, level3: 0 } });
     const [localTeamSizeRewards, setLocalTeamSizeRewards] = useState<TeamSizeReward[]>([]);
+    const [localTeamBusinessRewards, setLocalTeamBusinessRewards] = useState<TeamBusinessReward[]>([]);
     
     useEffect(() => {
         if(context?.levels) setLocalLevels(context.levels);
@@ -687,6 +776,7 @@ const SystemSettingsPanel = () => {
         if(context?.appLinks) setLocalAppLinks(context.appLinks);
         if(context?.teamCommissionSettings) setLocalTeamCommissionSettings(context.teamCommissionSettings);
         if(context?.teamSizeRewards) setLocalTeamSizeRewards(context.teamSizeRewards);
+        if(context?.teamBusinessRewards) setLocalTeamBusinessRewards(context.teamBusinessRewards);
     }, [context]);
     
     if(!context) return null;
@@ -697,6 +787,7 @@ const SystemSettingsPanel = () => {
         updateReferralBonusSettings,
         updateTeamCommissionSettings,
         addTeamSizeReward, updateTeamSizeReward, deleteTeamSizeReward,
+        addTeamBusinessReward, updateTeamBusinessReward, deleteTeamBusinessReward,
         addRechargeAddress, updateRechargeAddress, deleteRechargeAddress,
         updateAppLinks,
     } = context;
@@ -734,6 +825,11 @@ const SystemSettingsPanel = () => {
         setLocalTeamSizeRewards(prev => prev.map(r => r.id === id ? {...r, [field]: value} : r));
     }
     const handleSaveTeamSizeReward = (id: string) => { const reward = localTeamSizeRewards.find(r => r.id === id); if(reward) updateTeamSizeReward(id, reward); }
+
+    const handleTeamBusinessRewardChange = (id: string, field: keyof TeamBusinessReward, value: any) => {
+        setLocalTeamBusinessRewards(prev => prev.map(r => r.id === id ? {...r, [field]: value} : r));
+    }
+    const handleSaveTeamBusinessReward = (id: string) => { const reward = localTeamBusinessRewards.find(r => r.id === id); if(reward) updateTeamBusinessReward(id, reward); }
 
 
     const handleRechargeAddressChange = (id: string, field: keyof RechargeAddress, value: any) => {
@@ -847,6 +943,28 @@ const SystemSettingsPanel = () => {
                            </div>
                         </ScrollArea>
                          <Button onClick={addTeamSizeReward} variant="secondary" className="mt-4">Add New Size Reward</Button>
+                    </div>
+                    {/* Team Business Rewards */}
+                    <div className='p-4 rounded-lg bg-black/20'>
+                         <h4 className="text-lg mb-2">Team Business Rewards</h4>
+                        <ScrollArea className="h-60 custom-scrollbar pr-2">
+                           <div className="space-y-4">
+                                {(localTeamBusinessRewards || []).map(reward => (
+                                    <div key={reward.id} className="bg-black/20 p-3 rounded-lg space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <Label htmlFor={`biz-reward-enabled-${reward.id}`} className="flex items-center gap-2"><Switch id={`biz-reward-enabled-${reward.id}`} checked={reward.isEnabled} onCheckedChange={c => handleTeamBusinessRewardChange(reward.id, 'isEnabled', c)} />Enabled</Label>
+                                            <Button variant="destructive" size="icon" onClick={() => deleteTeamBusinessReward(reward.id)}><Trash2/></Button>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1"><Label>Team Business (USDT)</Label><Input type="number" value={reward.businessAmount} onChange={e => handleTeamBusinessRewardChange(reward.id, 'businessAmount', Number(e.target.value))} /></div>
+                                            <div className="flex-1"><Label>Reward (USDT)</Label><Input type="number" value={reward.rewardAmount} onChange={e => handleTeamBusinessRewardChange(reward.id, 'rewardAmount', Number(e.target.value))} /></div>
+                                        </div>
+                                        <Button size="sm" onClick={() => handleSaveTeamBusinessReward(reward.id)}>Save Reward</Button>
+                                    </div>
+                                ))}
+                           </div>
+                        </ScrollArea>
+                         <Button onClick={addTeamBusinessReward} variant="secondary" className="mt-4">Add New Business Reward</Button>
                     </div>
                 </CardContent>
             </Card>

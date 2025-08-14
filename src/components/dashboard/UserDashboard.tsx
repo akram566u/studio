@@ -8,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -31,7 +31,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format, formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward } from '@/lib/types';
+import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward } from '@/lib/types';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -167,6 +167,7 @@ const TransactionHistoryPanel = () => {
             case 'new_referral': return <UserCheck className="text-yellow-400" />;
             case 'team_commission': return <Users className="text-teal-400" />;
             case 'team_size_reward': return <Trophy className="text-amber-400" />;
+            case 'team_business_reward': return <BadgePercent className="text-cyan-400" />;
             case 'booster_purchase': return <Rocket className="text-orange-400" />;
             case 'pool_join': return <Users className="text-cyan-400" />;
             case 'pool_payout': return <Star className="text-yellow-300" />;
@@ -785,9 +786,10 @@ const StakingVaultsPanel = () => {
 const TeamPanel = () => {
     const context = useContext(AppContext);
     if (!context || !context.currentUser || !context.teamSizeRewards) return null;
-    const { currentUser, teamSizeRewards, claimTeamSizeReward } = context;
+    const { currentUser, teamSizeRewards, claimTeamReward, teamBusinessRewards } = context;
 
-    const availableRewards = teamSizeRewards.filter(r => r.isEnabled);
+    const availableSizeRewards = teamSizeRewards.filter(r => r.isEnabled);
+    const availableBusinessRewards = teamBusinessRewards.filter(r => r.isEnabled);
 
     return (
         <>
@@ -799,38 +801,82 @@ const TeamPanel = () => {
                         <p className="text-3xl font-bold">{(currentUser.teamSize || 0)}</p>
                         <p className="text-sm text-gray-300">Total Members</p>
                     </div>
+                     <div>
+                        <p className="text-3xl font-bold">{(currentUser.teamBusiness || 0).toFixed(2)}</p>
+                        <p className="text-sm text-gray-300">Team Business (USDT)</p>
+                    </div>
                 </div>
             </Card>
 
-            <h4 className="text-xl font-semibold mb-3 text-purple-300">Team Size Rewards</h4>
-            <ScrollArea className="h-72 custom-scrollbar">
-                <div className="space-y-3">
-                    {availableRewards.map(reward => {
-                        const isClaimed = currentUser.claimedTeamSizeRewards?.includes(reward.id);
-                        const canClaim = (currentUser.teamSize || 0) >= reward.teamSize && !isClaimed;
-                        const progress = Math.min(100, ((currentUser.teamSize || 0) / reward.teamSize) * 100);
+            <Tabs defaultValue="size_rewards" className="w-full">
+                <TabsList className='grid w-full grid-cols-2'>
+                    <TabsTrigger value="size_rewards">Size Rewards</TabsTrigger>
+                    <TabsTrigger value="business_rewards">Business Rewards</TabsTrigger>
+                </TabsList>
+                <TabsContent value="size_rewards" className="mt-4">
+                    <h4 className="text-xl font-semibold mb-3 text-purple-300">Team Size Rewards</h4>
+                    <ScrollArea className="h-72 custom-scrollbar">
+                        <div className="space-y-3">
+                            {availableSizeRewards.map(reward => {
+                                const isClaimed = currentUser.claimedTeamSizeRewards?.includes(reward.id);
+                                const canClaim = (currentUser.teamSize || 0) >= reward.teamSize && !isClaimed;
+                                const hasPending = currentUser.transactions.some(tx => tx.type === 'team_size_reward' && tx.status === 'pending' && tx.note === reward.id);
+                                const progress = Math.min(100, ((currentUser.teamSize || 0) / reward.teamSize) * 100);
 
-                        return (
-                            <Card key={reward.id} className="p-4 bg-black/20">
-                                <div className="flex justify-between items-center">
-                                    <div>
-                                        <p className="font-bold text-lg text-amber-400">{reward.rewardAmount} USDT Bonus</p>
-                                        <p className="text-sm text-gray-400">Reach {reward.teamSize} team members</p>
-                                    </div>
-                                    <Button
-                                        onClick={() => claimTeamSizeReward(reward.id)}
-                                        disabled={!canClaim}
-                                    >
-                                        {isClaimed ? <CheckCircle /> : <Trophy />}
-                                        {isClaimed ? 'Claimed' : 'Claim'}
-                                    </Button>
-                                </div>
-                                {!isClaimed && <Progress value={progress} className="mt-2" />}
-                            </Card>
-                        )
-                    })}
-                </div>
-            </ScrollArea>
+                                return (
+                                    <Card key={reward.id} className="p-4 bg-black/20">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <p className="font-bold text-lg text-amber-400">{reward.rewardAmount} USDT Bonus</p>
+                                                <p className="text-sm text-gray-400">Reach {reward.teamSize} team members</p>
+                                            </div>
+                                            <Button
+                                                onClick={() => claimTeamReward('team_size_reward', reward.id)}
+                                                disabled={!canClaim || hasPending}
+                                            >
+                                                {hasPending ? <><Info className='mr-2' />Pending</> : isClaimed ? <><CheckCircle className='mr-2' />Claimed</> : <><Trophy className='mr-2' />Claim</>}
+                                            </Button>
+                                        </div>
+                                        {!isClaimed && <Progress value={progress} className="mt-2" />}
+                                    </Card>
+                                )
+                            })}
+                        </div>
+                    </ScrollArea>
+                </TabsContent>
+                 <TabsContent value="business_rewards" className="mt-4">
+                     <h4 className="text-xl font-semibold mb-3 text-purple-300">Team Business Rewards</h4>
+                    <ScrollArea className="h-72 custom-scrollbar">
+                        <div className="space-y-3">
+                            {availableBusinessRewards.map(reward => {
+                                const isClaimed = currentUser.claimedTeamBusinessRewards?.includes(reward.id);
+                                const canClaim = (currentUser.teamBusiness || 0) >= reward.businessAmount && !isClaimed;
+                                const hasPending = currentUser.transactions.some(tx => tx.type === 'team_business_reward' && tx.status === 'pending' && tx.note === reward.id);
+                                const progress = Math.min(100, ((currentUser.teamBusiness || 0) / reward.businessAmount) * 100);
+
+                                return (
+                                    <Card key={reward.id} className="p-4 bg-black/20">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <p className="font-bold text-lg text-cyan-400">{reward.rewardAmount} USDT Bonus</p>
+                                                <p className="text-sm text-gray-400">Reach {reward.businessAmount} USDT in team business</p>
+                                            </div>
+                                            <Button
+                                                onClick={() => claimTeamReward('team_business_reward', reward.id)}
+                                                disabled={!canClaim || hasPending}
+                                                variant="secondary"
+                                            >
+                                                {hasPending ? <><Info className='mr-2' />Pending</> : isClaimed ? <><CheckCircle className='mr-2' />Claimed</> : <><BadgePercent className='mr-2' />Claim</>}
+                                            </Button>
+                                        </div>
+                                        {!isClaimed && <Progress value={progress} className="mt-2" />}
+                                    </Card>
+                                )
+                            })}
+                        </div>
+                    </ScrollArea>
+                </TabsContent>
+            </Tabs>
         </>
     );
 };
