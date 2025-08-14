@@ -9,24 +9,9 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { User, Level } from '@/lib/types'; // Assuming types are available
+import { User, Level, AnalyzeTeamInputSchema, AnalyzeTeamOutputSchema, AnalyzeTeamInput, AnalyzeTeamOutput } from '@/lib/types';
 import { getDoc, doc, collection, getDocs, where, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-
-
-// Define Zod Schemas for input and output
-export const AnalyzeTeamInputSchema = z.object({
-  userId: z.string().describe("The ID of the user whose team is to be analyzed."),
-});
-export type AnalyzeTeamInput = z.infer<typeof AnalyzeTeamInputSchema>;
-
-export const AnalyzeTeamOutputSchema = z.object({
-  strengths: z.array(z.string()).describe("Positive aspects of the user's team-building efforts."),
-  weaknesses: z.array(z.string()).describe("Areas where the user's team-building could be improved."),
-  suggestions: z.array(z.string()).describe("Actionable suggestions for the user to improve team performance and engagement."),
-  rewardAnalysis: z.string().describe("An analysis of the user's proximity to earning team-based rewards."),
-});
-export type AnalyzeTeamOutput = z.infer<typeof AnalyzeTeamOutputSchema>;
 
 
 // Helper function to fetch the entire downline for a user

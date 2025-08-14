@@ -1,5 +1,7 @@
 
 
+import { z } from 'zod';
+
 export type BackgroundTheme = 'FloatingCrystals' | 'CosmicNebula' | 'DigitalMatrix' | 'AbstractParticles' | 'SynthwaveSunset';
 
 export interface RechargeAddress {
@@ -239,3 +241,18 @@ export interface AppSettings {
     stakingPools: StakingPool[];
     stakingVaults: StakingVault[];
 }
+
+
+// Zod schemas and types for analyzeTeam AI flow
+export const AnalyzeTeamInputSchema = z.object({
+  userId: z.string().describe("The ID of the user whose team is to be analyzed."),
+});
+export type AnalyzeTeamInput = z.infer<typeof AnalyzeTeamInputSchema>;
+
+export const AnalyzeTeamOutputSchema = z.object({
+  strengths: z.array(z.string()).describe("Positive aspects of the user's team-building efforts."),
+  weaknesses: z.array(z.string()).describe("Areas where the user's team-building could be improved."),
+  suggestions: z.array(z.string()).describe("Actionable suggestions for the user to improve team performance and engagement."),
+  rewardAnalysis: z.string().describe("An analysis of the user's proximity to earning team-based rewards."),
+});
+export type AnalyzeTeamOutput = z.infer<typeof AnalyzeTeamOutputSchema>;

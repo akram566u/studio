@@ -31,9 +31,9 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
 import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2 } from 'lucide-react';
-import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward } from '@/lib/types';
+import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { analyzeTeam, AnalyzeTeamOutput } from '@/ai/flows/analyze-team-flow';
+import { analyzeTeam } from '@/ai/flows/analyze-team-flow';
 
 
 type AdminModalView =
