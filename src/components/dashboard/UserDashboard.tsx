@@ -69,7 +69,7 @@ const UserOverviewPanel = ({ currentUser, levels }: { currentUser: any, levels: 
             {activeBoosters.length > 0 && (
                 <div className="mt-2 text-xs text-orange-300 space-y-1">
                     {activeBoosters.map((b: ActiveBooster) => (
-                        <p key={b.boosterId}>
+                        <p key={`${b.boosterId}-${b.expiresAt}`}>
                            +{(b.effectValue * 100).toFixed(2)}% boost expires in {formatDistanceToNow(b.expiresAt, { addSuffix: true })}
                         </p>
                     ))}
