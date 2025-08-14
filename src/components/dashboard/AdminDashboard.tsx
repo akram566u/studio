@@ -30,8 +30,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck } from 'lucide-react';
-import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels } from '@/lib/types';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy } from 'lucide-react';
+import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 
@@ -676,6 +676,8 @@ const SystemSettingsPanel = () => {
     const [localReferralBonusSettings, setLocalReferralBonusSettings] = useState<ReferralBonusSettings>({ isEnabled: true, bonusAmount: 5, minDeposit: 100 });
     const [localRechargeAddresses, setLocalRechargeAddresses] = useState<RechargeAddress[]>([]);
     const [localAppLinks, setLocalAppLinks] = useState<AppLinks>({ downloadUrl: '', supportUrl: '' });
+    const [localTeamCommissionSettings, setLocalTeamCommissionSettings] = useState<TeamCommissionSettings>({ isEnabled: false, rates: { level1: 0, level2: 0, level3: 0 } });
+    const [localTeamSizeRewards, setLocalTeamSizeRewards] = useState<TeamSizeReward[]>([]);
     
     useEffect(() => {
         if(context?.levels) setLocalLevels(context.levels);
@@ -683,7 +685,9 @@ const SystemSettingsPanel = () => {
         if(context?.referralBonusSettings) setLocalReferralBonusSettings(context.referralBonusSettings);
         if(context?.rechargeAddresses) setLocalRechargeAddresses(context.rechargeAddresses);
         if(context?.appLinks) setLocalAppLinks(context.appLinks);
-    }, [context?.levels, context?.restrictionMessages, context?.referralBonusSettings, context?.rechargeAddresses, context?.appLinks]);
+        if(context?.teamCommissionSettings) setLocalTeamCommissionSettings(context.teamCommissionSettings);
+        if(context?.teamSizeRewards) setLocalTeamSizeRewards(context.teamSizeRewards);
+    }, [context]);
     
     if(!context) return null;
 
@@ -691,6 +695,8 @@ const SystemSettingsPanel = () => {
         updateLevel, addLevel, deleteLevel,
         updateRestrictionMessages, addRestrictionMessage, deleteRestrictionMessage,
         updateReferralBonusSettings,
+        updateTeamCommissionSettings,
+        addTeamSizeReward, updateTeamSizeReward, deleteTeamSizeReward,
         addRechargeAddress, updateRechargeAddress, deleteRechargeAddress,
         updateAppLinks,
     } = context;
@@ -714,6 +720,22 @@ const SystemSettingsPanel = () => {
         setLocalReferralBonusSettings(newSettings);
     };
     const handleSaveReferralBonusSettings = () => updateReferralBonusSettings(localReferralBonusSettings);
+    
+    const handleTeamCommissionChange = (field: 'isEnabled' | keyof TeamCommissionSettings['rates'], value: any) => {
+        if(field === 'isEnabled') {
+            setLocalTeamCommissionSettings(prev => ({...prev, isEnabled: value}));
+        } else {
+            setLocalTeamCommissionSettings(prev => ({ ...prev, rates: { ...prev.rates, [field]: value }}));
+        }
+    };
+    const handleSaveTeamCommissionSettings = () => updateTeamCommissionSettings(localTeamCommissionSettings);
+    
+    const handleTeamSizeRewardChange = (id: string, field: keyof TeamSizeReward, value: any) => {
+        setLocalTeamSizeRewards(prev => prev.map(r => r.id === id ? {...r, [field]: value} : r));
+    }
+    const handleSaveTeamSizeReward = (id: string) => { const reward = localTeamSizeRewards.find(r => r.id === id); if(reward) updateTeamSizeReward(id, reward); }
+
+
     const handleRechargeAddressChange = (id: string, field: keyof RechargeAddress, value: any) => {
         const newAddresses = localRechargeAddresses.map(addr => addr.id === id ? { ...addr, [field]: value } : addr);
         setLocalRechargeAddresses(newAddresses);
@@ -756,35 +778,6 @@ const SystemSettingsPanel = () => {
                     <div className="mt-4 flex gap-4"><Button onClick={handleAddNewLevel} variant="secondary">Add New Level</Button></div>
                 </CardContent>
             </Card>
-            <Card className="card-gradient-yellow-pink p-6">
-                <CardHeader><CardTitle className="text-purple-300">Manage Recharge Addresses</CardTitle><CardDescription>Add or update the USDT addresses users will deposit to.</CardDescription></CardHeader>
-                <CardContent>
-                    <ScrollArea className="h-72 custom-scrollbar">
-                        <div className="space-y-4">
-                            {localRechargeAddresses.map((addr) => (
-                                <div key={addr.id} className="bg-black/20 p-4 rounded-lg space-y-2">
-                                    <div className="flex justify-between items-center">
-                                        <Label htmlFor={`addr-active-${addr.id}`} className="flex items-center gap-2 text-base"><Switch id={`addr-active-${addr.id}`} checked={addr.isActive} onCheckedChange={checked => handleRechargeAddressChange(addr.id, 'isActive', checked)} />{addr.isActive ? 'Active Address' : 'Inactive Address'}</Label>
-                                        <Button variant="destructive" size="icon" onClick={() => deleteRechargeAddress(addr.id)}><Trash2 /></Button>
-                                    </div>
-                                    <div><Label htmlFor={`addr-address-${addr.id}`}>Address</Label><Input id={`addr-address-${addr.id}`} value={addr.address} onChange={e => handleRechargeAddressChange(addr.id, 'address', e.target.value)} /></div>
-                                    <div><Label htmlFor={`addr-network-${addr.id}`}>Network</Label><Input id={`addr-network-${addr.id}`} value={addr.network} onChange={e => handleRechargeAddressChange(addr.id, 'network', e.target.value)} /></div>
-                                    <Button size="sm" onClick={() => handleSaveRechargeAddress(addr.id)}>Save Address</Button>
-                                </div>
-                            ))}
-                        </div>
-                    </ScrollArea>
-                    <div className="mt-4"><Button onClick={addRechargeAddress} variant="secondary">Add New Address</Button></div>
-                </CardContent>
-            </Card>
-            <Card className="card-gradient-blue-purple p-6">
-                <CardHeader><CardTitle className="text-purple-300">Manage App Links</CardTitle><CardDescription>Set the URLs for the download and support buttons.</CardDescription></CardHeader>
-                <CardContent className="space-y-4">
-                    <div><Label htmlFor="downloadUrl">Download App URL</Label><Input id="downloadUrl" value={localAppLinks.downloadUrl} onChange={(e) => handleAppLinksChange('downloadUrl', e.target.value)} placeholder="https://example.com/app.apk" /></div>
-                    <div><Label htmlFor="supportUrl">Customer Support URL</Label><Input id="supportUrl" value={localAppLinks.supportUrl} onChange={(e) => handleAppLinksChange('supportUrl', e.target.value)} placeholder="https://t.me/your-support-channel" /></div>
-                    <Button onClick={handleSaveAppLinks}>Save App Links</Button>
-                </CardContent>
-            </Card>
             <Card className="card-gradient-orange-red p-6">
                 <CardHeader><CardTitle className="text-purple-300">Manage Restriction Messages</CardTitle></CardHeader>
                 <CardContent>
@@ -817,6 +810,73 @@ const SystemSettingsPanel = () => {
                        </div>
                     </ScrollArea>
                     <div className="mt-4 flex gap-4"><Button onClick={handleSaveRestrictions}>Save Restriction Changes</Button><Button onClick={handleAddNewRestriction} variant="secondary">Add New Restriction</Button></div>
+                </CardContent>
+            </Card>
+             <Card className="card-gradient-blue-purple p-6">
+                <CardHeader><CardTitle className="text-purple-300">Manage Team Settings</CardTitle></CardHeader>
+                <CardContent className="space-y-6">
+                    {/* Team Commission Settings */}
+                    <div className='p-4 rounded-lg bg-black/20'>
+                        <div className="flex items-center justify-between"><Label htmlFor="team-commission-enabled" className="text-lg">Enable Team Commissions</Label><Switch id="team-commission-enabled" checked={localTeamCommissionSettings.isEnabled} onCheckedChange={checked => handleTeamCommissionChange('isEnabled', checked)} /></div>
+                        <div className="grid grid-cols-3 gap-4 mt-4">
+                            <div><Label htmlFor="l1-rate">L1 Rate (%)</Label><Input id="l1-rate" type="number" value={localTeamCommissionSettings.rates.level1 * 100} onChange={e => handleTeamCommissionChange('level1', Number(e.target.value) / 100)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
+                            <div><Label htmlFor="l2-rate">L2 Rate (%)</Label><Input id="l2-rate" type="number" value={localTeamCommissionSettings.rates.level2 * 100} onChange={e => handleTeamCommissionChange('level2', Number(e.target.value) / 100)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
+                            <div><Label htmlFor="l3-rate">L3 Rate (%)</Label><Input id="l3-rate" type="number" value={localTeamCommissionSettings.rates.level3 * 100} onChange={e => handleTeamCommissionChange('level3', Number(e.target.value) / 100)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
+                        </div>
+                        <Button onClick={handleSaveTeamCommissionSettings} className="mt-4">Save Commission Settings</Button>
+                    </div>
+
+                    {/* Team Size Rewards */}
+                    <div className='p-4 rounded-lg bg-black/20'>
+                         <h4 className="text-lg mb-2">Team Size Rewards</h4>
+                        <ScrollArea className="h-60 custom-scrollbar pr-2">
+                           <div className="space-y-4">
+                                {localTeamSizeRewards.map(reward => (
+                                    <div key={reward.id} className="bg-black/20 p-3 rounded-lg space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <Label htmlFor={`reward-enabled-${reward.id}`} className="flex items-center gap-2"><Switch id={`reward-enabled-${reward.id}`} checked={reward.isEnabled} onCheckedChange={c => handleTeamSizeRewardChange(reward.id, 'isEnabled', c)} />Enabled</Label>
+                                            <Button variant="destructive" size="icon" onClick={() => deleteTeamSizeReward(reward.id)}><Trash2/></Button>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1"><Label>Team Size</Label><Input type="number" value={reward.teamSize} onChange={e => handleTeamSizeRewardChange(reward.id, 'teamSize', Number(e.target.value))} /></div>
+                                            <div className="flex-1"><Label>Reward (USDT)</Label><Input type="number" value={reward.rewardAmount} onChange={e => handleTeamSizeRewardChange(reward.id, 'rewardAmount', Number(e.target.value))} /></div>
+                                        </div>
+                                        <Button size="sm" onClick={() => handleSaveTeamSizeReward(reward.id)}>Save Reward</Button>
+                                    </div>
+                                ))}
+                           </div>
+                        </ScrollArea>
+                         <Button onClick={addTeamSizeReward} variant="secondary" className="mt-4">Add New Size Reward</Button>
+                    </div>
+                </CardContent>
+            </Card>
+            <Card className="card-gradient-yellow-pink p-6">
+                <CardHeader><CardTitle className="text-purple-300">Manage Recharge Addresses</CardTitle><CardDescription>Add or update the USDT addresses users will deposit to.</CardDescription></CardHeader>
+                <CardContent>
+                    <ScrollArea className="h-72 custom-scrollbar">
+                        <div className="space-y-4">
+                            {localRechargeAddresses.map((addr) => (
+                                <div key={addr.id} className="bg-black/20 p-4 rounded-lg space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <Label htmlFor={`addr-active-${addr.id}`} className="flex items-center gap-2 text-base"><Switch id={`addr-active-${addr.id}`} checked={addr.isActive} onCheckedChange={checked => handleRechargeAddressChange(addr.id, 'isActive', checked)} />{addr.isActive ? 'Active Address' : 'Inactive Address'}</Label>
+                                        <Button variant="destructive" size="icon" onClick={() => deleteRechargeAddress(addr.id)}><Trash2 /></Button>
+                                    </div>
+                                    <div><Label htmlFor={`addr-address-${addr.id}`}>Address</Label><Input id={`addr-address-${addr.id}`} value={addr.address} onChange={e => handleRechargeAddressChange(addr.id, 'address', e.target.value)} /></div>
+                                    <div><Label htmlFor={`addr-network-${addr.id}`}>Network</Label><Input id={`addr-network-${addr.id}`} value={addr.network} onChange={e => handleRechargeAddressChange(addr.id, 'network', e.target.value)} /></div>
+                                    <Button size="sm" onClick={() => handleSaveRechargeAddress(addr.id)}>Save Address</Button>
+                                </div>
+                            ))}
+                        </div>
+                    </ScrollArea>
+                    <div className="mt-4"><Button onClick={addRechargeAddress} variant="secondary">Add New Address</Button></div>
+                </CardContent>
+            </Card>
+            <Card className="card-gradient-blue-purple p-6">
+                <CardHeader><CardTitle className="text-purple-300">Manage App Links</CardTitle><CardDescription>Set the URLs for the download and support buttons.</CardDescription></CardHeader>
+                <CardContent className="space-y-4">
+                    <div><Label htmlFor="downloadUrl">Download App URL</Label><Input id="downloadUrl" value={localAppLinks.downloadUrl} onChange={(e) => handleAppLinksChange('downloadUrl', e.target.value)} placeholder="https://example.com/app.apk" /></div>
+                    <div><Label htmlFor="supportUrl">Customer Support URL</Label><Input id="supportUrl" value={localAppLinks.supportUrl} onChange={(e) => handleAppLinksChange('supportUrl', e.target.value)} placeholder="https://t.me/your-support-channel" /></div>
+                    <Button onClick={handleSaveAppLinks}>Save App Links</Button>
                 </CardContent>
             </Card>
             <Card className="card-gradient-indigo-fuchsia p-6">
@@ -1179,7 +1239,7 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: AdminModalView, labe
                         exit={{ opacity: 0, y: 10 }}
                         className="mb-4 flex flex-col items-end"
                     >
-                        <ScrollArea className="h-auto max-h-[60vh] pr-4 -mr-4">
+                        <ScrollArea className="h-auto max-h-[60vh] pr-4 -mr-4 custom-scrollbar">
                             <div className="flex flex-col items-end gap-3">
                                 {items.map((item) => (
                                     <div key={item.view} className="flex items-center gap-3">

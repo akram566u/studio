@@ -4,10 +4,10 @@
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe, runTransaction } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
@@ -62,6 +62,13 @@ export interface AppContextType {
   deleteDashboardPanel: (id: string) => void;
   referralBonusSettings: ReferralBonusSettings;
   updateReferralBonusSettings: (settings: ReferralBonusSettings) => void;
+  teamCommissionSettings: TeamCommissionSettings;
+  updateTeamCommissionSettings: (settings: TeamCommissionSettings) => void;
+  teamSizeRewards: TeamSizeReward[];
+  addTeamSizeReward: () => void;
+  updateTeamSizeReward: (id: string, updates: Partial<TeamSizeReward>) => void;
+  deleteTeamSizeReward: (id: string) => void;
+  claimTeamSizeReward: (rewardId: string) => Promise<void>;
   active3DTheme: BackgroundTheme;
   setActive3DTheme: (theme: BackgroundTheme) => void;
   rechargeAddresses: RechargeAddress[];
@@ -141,6 +148,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     startScreenContent, 
     dashboardPanels, 
     referralBonusSettings, 
+    teamCommissionSettings,
+    teamSizeRewards,
     active3DTheme, 
     rechargeAddresses,
     appLinks,
@@ -167,6 +176,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             boosterPacks: data.boosterPacks || [],
             stakingPools: data.stakingPools || [],
             stakingVaults: data.stakingVaults || [],
+            teamSizeRewards: data.teamSizeRewards || [],
         };
         setAppSettings(sanitizedData);
       } else {
@@ -318,96 +328,106 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   
-  const signUp = async (email: string, pass: string, referral: string): Promise<boolean> => {
-    if(!email || !pass || !referral) {
-        toast({ title: "Error", description: "Please fill all fields.", variant: "destructive"});
-        return false;
-    }
-
-    try {
-        const usersRef = collection(db, "users");
-        
-        // Check for existing user with email
-        const emailQuery = query(usersRef, where("email", "==", email));
-        const emailQuerySnapshot = await getDocs(emailQuery);
-        if (!emailQuerySnapshot.empty) {
-            toast({ title: "Error", description: "User with this email already exists.", variant: "destructive"});
+    const signUp = async (email: string, pass: string, referral: string): Promise<boolean> => {
+        if (!email || !pass || !referral) {
+            toast({ title: "Error", description: "Please fill all fields.", variant: "destructive" });
             return false;
         }
 
-        // Check for referrer
-        const referralQuery = query(usersRef, where("userReferralCode", "==", referral));
-        const referralQuerySnapshot = await getDocs(referralQuery);
-        
-        const referrerDoc = referralQuerySnapshot.docs[0];
-        
-        if (referralQuerySnapshot.empty && referral !== ADMIN_REFERRAL_CODE) {
-            toast({ title: "Error", description: "Invalid referral code.", variant: "destructive"});
-            return false;
-        }
-        
-        // Create user in Firebase Auth
-        const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-        const newUserAuth = userCredential.user;
+        try {
+            const usersRef = collection(db, "users");
+            const emailQuery = query(usersRef, where("email", "==", email));
+            const emailQuerySnapshot = await getDocs(emailQuery);
+            if (!emailQuerySnapshot.empty) {
+                toast({ title: "Error", description: "User with this email already exists.", variant: "destructive" });
+                return false;
+            }
 
-        // Send verification email
-        await sendEmailVerification(newUserAuth);
+            const referralQuery = query(usersRef, where("userReferralCode", "==", referral));
+            const referralQuerySnapshot = await getDocs(referralQuery);
+            const referrerDoc = referralQuerySnapshot.docs[0];
 
-        const newUser: User = {
-            id: newUserAuth.uid,
-            email: email,
-            balance: 0,
-            totalDeposits: 0,
-            level: 0,
-            userReferralCode: generateReferralCode(),
-            referredBy: referrerDoc ? referrerDoc.id : ADMIN_REFERRAL_CODE,
-            directReferrals: 0,
-            purchasedReferralPoints: 0,
-            transactions: [],
-            referredUsers: [],
-            lastInterestCreditTime: 0,
-            primaryWithdrawalAddress: '',
-            firstDepositTime: null,
-            registrationTime: Date.now(),
-            lastWithdrawalTime: null,
-            activeBoosters: [],
-            vaultInvestments: [],
-        };
+            if (referralQuerySnapshot.empty && referral !== ADMIN_REFERRAL_CODE) {
+                toast({ title: "Error", description: "Invalid referral code.", variant: "destructive" });
+                return false;
+            }
 
-        // Create user document in Firestore
-        await setDoc(doc(db, "users", newUserAuth.uid), newUser);
-        await addTransaction(newUserAuth.uid, {
-            id: generateTxnId(),
-            type: 'account_created',
-            amount: 0,
-            status: 'completed',
-            description: `Account created successfully. Referred by ${referral}. Awaiting email verification.`,
-        });
+            const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+            const newUserAuth = userCredential.user;
+            await sendEmailVerification(newUserAuth);
 
-        // Update referrer if one exists
-        if(referrerDoc) {
-            const referrerRef = doc(db, "users", referrerDoc.id);
-            await updateDoc(referrerRef, {
-                referredUsers: arrayUnion({ email: newUser.email, isActivated: false })
-            });
-            await addTransaction(referrerDoc.id, {
+            const referrerData = referrerDoc ? (referrerDoc.data() as User) : null;
+            const newReferralPath = referrerData ? [referrerDoc.id, ...(referrerData.referralPath || [])] : [];
+
+            const newUser: User = {
+                id: newUserAuth.uid,
+                email: email,
+                balance: 0,
+                totalDeposits: 0,
+                level: 0,
+                userReferralCode: generateReferralCode(),
+                referredBy: referrerDoc ? referrerDoc.id : ADMIN_REFERRAL_CODE,
+                referralPath: newReferralPath,
+                directReferrals: 0,
+                purchasedReferralPoints: 0,
+                transactions: [],
+                referredUsers: [],
+                lastInterestCreditTime: 0,
+                primaryWithdrawalAddress: '',
+                firstDepositTime: null,
+                registrationTime: Date.now(),
+                lastWithdrawalTime: null,
+                activeBoosters: [],
+                vaultInvestments: [],
+                teamSize: 0,
+                claimedTeamSizeRewards: []
+            };
+
+            const batch = writeBatch(db);
+            batch.set(doc(db, "users", newUserAuth.uid), newUser);
+
+            if (referrerDoc) {
+                batch.update(doc(db, "users", referrerDoc.id), {
+                    referredUsers: arrayUnion({ email: newUser.email, isActivated: false })
+                });
+
+                // Update team size for all upline members
+                for (const uplineId of newReferralPath) {
+                    batch.update(doc(db, "users", uplineId), {
+                        teamSize: (await getDoc(doc(db, "users", uplineId))).data()?.teamSize + 1 || 1
+                    });
+                }
+            }
+
+            await batch.commit();
+
+            await addTransaction(newUserAuth.uid, {
                 id: generateTxnId(),
-                type: 'new_referral',
+                type: 'account_created',
                 amount: 0,
-                status: 'info',
-                description: `New user registered with your code: ${newUser.email} (Pending activation)`
+                status: 'completed',
+                description: `Account created successfully. Referred by ${referral}. Awaiting email verification.`,
             });
-        }
-        
-        toast({ title: "Verification Email Sent!", description: "Please check your inbox to activate your account." });
-        return true;
 
-    } catch (error) {
-        console.error("Sign up error:", error);
-        toast({ title: "Error", description: "Could not create account.", variant: "destructive" });
-        return false;
-    }
-  };
+            if (referrerDoc) {
+                await addTransaction(referrerDoc.id, {
+                    id: generateTxnId(),
+                    type: 'new_referral',
+                    amount: 0,
+                    status: 'info',
+                    description: `New user registered with your code: ${newUser.email} (Pending activation)`
+                });
+            }
+
+            toast({ title: "Verification Email Sent!", description: "Please check your inbox to activate your account." });
+            return true;
+
+        } catch (error) {
+            console.error("Sign up error:", error);
+            toast({ title: "Error", description: "Could not create account.", variant: "destructive" });
+            return false;
+        }
+    };
   
   const signOut = async () => {
     try {
@@ -817,6 +837,54 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         updateFirestoreSettings({ levels: remainingLevels });
     };
     const updateReferralBonusSettings = (settings: ReferralBonusSettings) => updateFirestoreSettings({ referralBonusSettings: settings });
+    const updateTeamCommissionSettings = (settings: TeamCommissionSettings) => updateFirestoreSettings({ teamCommissionSettings: settings });
+    const addTeamSizeReward = () => {
+        const newReward: TeamSizeReward = {
+            id: `tsr_${Date.now()}`,
+            teamSize: 200,
+            rewardAmount: 300,
+            isEnabled: true,
+        };
+        updateFirestoreSettings({ teamSizeRewards: [...teamSizeRewards, newReward] });
+    }
+    const updateTeamSizeReward = (id: string, updates: Partial<TeamSizeReward>) => {
+        const newRewards = teamSizeRewards.map(r => r.id === id ? { ...r, ...updates } : r);
+        updateFirestoreSettings({ teamSizeRewards: newRewards });
+    }
+    const deleteTeamSizeReward = (id: string) => {
+        updateFirestoreSettings({ teamSizeRewards: teamSizeRewards.filter(r => r.id !== id) });
+    }
+    const claimTeamSizeReward = async (rewardId: string) => {
+        if (!currentUser) return;
+        const reward = teamSizeRewards.find(r => r.id === rewardId);
+        if (!reward || !reward.isEnabled) {
+            toast({ title: "Error", description: "This reward is not available.", variant: "destructive" });
+            return;
+        }
+        if ((currentUser.teamSize || 0) < reward.teamSize) {
+            toast({ title: "Error", description: "You have not met the team size requirement.", variant: "destructive" });
+            return;
+        }
+        if (currentUser.claimedTeamSizeRewards?.includes(rewardId)) {
+            toast({ title: "Error", description: "You have already claimed this reward.", variant: "destructive" });
+            return;
+        }
+
+        const userRef = doc(db, "users", currentUser.id);
+        await updateDoc(userRef, {
+            balance: currentUser.balance + reward.rewardAmount,
+            claimedTeamSizeRewards: arrayUnion(rewardId)
+        });
+
+        await addTransaction(currentUser.id, {
+            id: generateTxnId(),
+            type: 'team_size_reward',
+            amount: reward.rewardAmount,
+            status: 'credited',
+            description: `Claimed ${reward.rewardAmount} USDT for reaching ${reward.teamSize} team members.`
+        });
+        toast({ title: "Reward Claimed!", description: `You received ${reward.rewardAmount} USDT!` });
+    };
     const updateDashboardPanel = (id: string, updates: Partial<DashboardPanel>) => {
         const newPanels = dashboardPanels.map(p => p.id === id ? { ...p, ...updates } : p);
         updateFirestoreSettings({ dashboardPanels: newPanels });
@@ -1058,6 +1126,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     status: 'credited',
                     description: `Daily interest of ${interestAmount.toFixed(4)} USDT credited ${boostAmount > 0 ? '(Boosted!)' : ''}.`
                 });
+
+                if (teamCommissionSettings.isEnabled) {
+                    await processTeamCommissions(currentUser.id, interestAmount);
+                }
                 
                 toast({ title: "Interest Claimed!", description: `You earned ${interestAmount.toFixed(4)} USDT.`});
             } else {
@@ -1065,6 +1137,47 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             }
         } else {
             toast({ title: "Ineligible", description: "You must make a deposit and be at least Level 1 to earn interest.", variant: "destructive" });
+        }
+    };
+    
+    const processTeamCommissions = async (userId: string, interestEarned: number) => {
+        const userRef = doc(db, 'users', userId);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) return;
+        const userData = userSnap.data() as User;
+
+        const rates = [
+            teamCommissionSettings.rates.level1,
+            teamCommissionSettings.rates.level2,
+            teamCommissionSettings.rates.level3,
+        ];
+
+        // referralPath is from direct referrer to top-level.
+        // We only need to go up 3 levels.
+        const upline = userData.referralPath.slice(0, 3);
+        
+        for (let i = 0; i < upline.length; i++) {
+            const referrerId = upline[i];
+            const commissionRate = rates[i];
+            const commissionAmount = interestEarned * commissionRate;
+
+            if (commissionAmount > 0) {
+                const referrerRef = doc(db, 'users', referrerId);
+                await runTransaction(db, async (transaction) => {
+                    const referrerSnap = await transaction.get(referrerRef);
+                    if (!referrerSnap.exists()) return;
+                    const newBalance = referrerSnap.data().balance + commissionAmount;
+                    transaction.update(referrerRef, { balance: newBalance });
+                });
+
+                await addTransaction(referrerId, {
+                    id: generateTxnId(),
+                    type: 'team_commission',
+                    amount: commissionAmount,
+                    status: 'credited',
+                    description: `Received ${commissionAmount.toFixed(4)} USDT commission from L${i + 1} member ${userData.email}.`
+                });
+            }
         }
     };
     
@@ -1087,11 +1200,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     const updateBoosterPack = async (id: string, updates: Partial<BoosterPack>) => {
         const oldPack = boosterPacks.find(p => p.id === id);
+        if (!oldPack) return;
+        
         const newPacks = (boosterPacks || []).map(p => p.id === id ? { ...p, ...updates } : p);
         await updateFirestoreSettings({ boosterPacks: newPacks });
     
         // Refund logic: if the pack is being deactivated
-        if (oldPack && oldPack.isActive && !updates.isActive) {
+        if (oldPack.isActive && updates.isActive === false) {
             await refundBooster(id, oldPack.cost);
         }
     };
@@ -1110,40 +1225,36 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     const refundBooster = async (boosterId: string, cost: number) => {
         const usersRef = collection(db, "users");
-        const allUsersSnap = await getDocs(usersRef);
+        const q = query(usersRef, where("activeBoosters", "array-contains", { boosterId: boosterId }));
+        const affectedUsersSnap = await getDocs(q);
+        
         const batch = writeBatch(db);
 
-        for (const userDoc of allUsersSnap.docs) {
+        affectedUsersSnap.forEach(userDoc => {
             const userData = userDoc.data() as User;
-            const activeBoosters = userData.activeBoosters || [];
+            const userRef = doc(db, "users", userDoc.id);
+            const updatedBoosters = (userData.activeBoosters || []).filter(b => b.boosterId !== boosterId);
             
-            if (activeBoosters.some(b => b.boosterId === boosterId)) {
-                const userRef = doc(db, "users", userDoc.id);
-                
-                // Remove the booster and refund the cost
-                const updatedBoosters = activeBoosters.filter(b => b.boosterId !== boosterId);
-                batch.update(userRef, {
-                    activeBoosters: updatedBoosters,
-                    balance: userData.balance + cost
-                });
+            batch.update(userRef, {
+                activeBoosters: updatedBoosters,
+                balance: userData.balance + cost
+            });
 
-                // Add a transaction log for the refund
-                const refundTx: Transaction = {
-                    userId: userDoc.id,
-                    timestamp: Date.now(),
-                    id: generateTxnId(),
-                    type: 'admin_adjusted',
-                    amount: cost,
-                    status: 'credited',
-                    description: `Refund for disabled booster pack.`
-                };
-                 batch.update(userRef, { transactions: arrayUnion(refundTx) });
-            }
-        }
+            const refundTx: Omit<Transaction, 'userId' | 'timestamp'> = {
+                id: generateTxnId(),
+                type: 'admin_adjusted',
+                amount: cost,
+                status: 'credited',
+                description: `Refund for disabled booster pack.`
+            };
+            batch.update(userRef, { transactions: arrayUnion(refundTx) });
+        });
 
         try {
             await batch.commit();
-            toast({ title: 'Booster Disabled', description: `Refunds have been processed for all affected users.` });
+            if (!affectedUsersSnap.empty) {
+               toast({ title: 'Booster Disabled', description: `Refunds have been processed for ${affectedUsersSnap.size} affected users.` });
+            }
         } catch(e) {
             console.error("Error during booster refund batch commit:", e);
             toast({ title: 'Error', description: 'Failed to process booster refunds.', variant: 'destructive' });
@@ -1512,6 +1623,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     deleteDashboardPanel,
     referralBonusSettings,
     updateReferralBonusSettings,
+    teamCommissionSettings,
+    updateTeamCommissionSettings,
+    teamSizeRewards,
+    addTeamSizeReward,
+    updateTeamSizeReward,
+    deleteTeamSizeReward,
+    claimTeamSizeReward,
     active3DTheme,
     setActive3DTheme,
     rechargeAddresses,

@@ -8,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -31,7 +31,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format, formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster } from '@/lib/types';
+import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward } from '@/lib/types';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -165,6 +165,8 @@ const TransactionHistoryPanel = () => {
             case 'interest_credit': return <TrendingUp className="text-purple-400" />;
             case 'level_up': return <TrendingUp className="text-blue-400" />;
             case 'new_referral': return <UserCheck className="text-yellow-400" />;
+            case 'team_commission': return <Users className="text-teal-400" />;
+            case 'team_size_reward': return <Trophy className="text-amber-400" />;
             case 'booster_purchase': return <Rocket className="text-orange-400" />;
             case 'pool_join': return <Users className="text-cyan-400" />;
             case 'pool_payout': return <Star className="text-yellow-300" />;
@@ -536,33 +538,33 @@ const ReferralNetworkPanel = ({ currentUser }: { currentUser: any }) => {
 const LevelDetailsPanel = ({ levels }: { levels: { [key: number]: Level } }) => (
     <>
         <h3 className="text-2xl font-semibold mb-4 text-blue-300">Staking Level Details</h3>
-        <ScrollArea className="h-auto" orientation="horizontal">
-        <Table className="min-w-max">
-            <TableHeader>
-            <TableRow>
-                <TableHead className="text-white">Level</TableHead>
-                <TableHead className="text-white">Name</TableHead>
-                <TableHead className="text-white">Min Balance</TableHead>
-                <TableHead className="text-white">Referrals</TableHead>
-                <TableHead className="text-white">Withdraw Limit</TableHead>
-                <TableHead className="text-white">Monthly Withdrawals</TableHead>
-                <TableHead className="text-white">Interest</TableHead>
-            </TableRow>
-            </TableHeader>
-            <TableBody>
-            {Object.entries(levels).filter(([,details]) => details.isEnabled).sort(([a], [b]) => Number(a) - Number(b)).map(([level, details]) => (
-                <TableRow key={level}>
-                    <TableCell><LevelBadge level={parseInt(level, 10)} /></TableCell>
-                    <TableCell className="font-semibold text-gray-200">{details.name}</TableCell>
-                    <TableCell className="font-mono text-green-300">{details.minBalance} USDT</TableCell>
-                    <TableCell className="font-mono text-blue-300">{details.directReferrals}</TableCell>
-                    <TableCell className="font-mono text-yellow-300">{details.withdrawalLimit} USDT</TableCell>
-                    <TableCell className="font-mono text-orange-300">{details.monthlyWithdrawals}</TableCell>
-                    <TableCell className="font-mono text-purple-300">{(details.interest * 100).toFixed(2)}%</TableCell>
+        <ScrollArea className="w-full whitespace-nowrap" orientation="horizontal">
+            <Table className="min-w-max">
+                <TableHeader>
+                <TableRow>
+                    <TableHead className="text-white">Level</TableHead>
+                    <TableHead className="text-white">Name</TableHead>
+                    <TableHead className="text-white">Min Balance</TableHead>
+                    <TableHead className="text-white">Referrals</TableHead>
+                    <TableHead className="text-white">Withdraw Limit</TableHead>
+                    <TableHead className="text-white">Monthly Withdrawals</TableHead>
+                    <TableHead className="text-white">Interest</TableHead>
                 </TableRow>
-            ))}
-            </TableBody>
-        </Table>
+                </TableHeader>
+                <TableBody>
+                {Object.entries(levels).filter(([,details]) => details.isEnabled).sort(([a], [b]) => Number(a) - Number(b)).map(([level, details]) => (
+                    <TableRow key={level}>
+                        <TableCell><LevelBadge level={parseInt(level, 10)} /></TableCell>
+                        <TableCell className="font-semibold text-gray-200">{details.name}</TableCell>
+                        <TableCell className="font-mono text-green-300">{details.minBalance} USDT</TableCell>
+                        <TableCell className="font-mono text-blue-300">{details.directReferrals}</TableCell>
+                        <TableCell className="font-mono text-yellow-300">{details.withdrawalLimit} USDT</TableCell>
+                        <TableCell className="font-mono text-orange-300">{details.monthlyWithdrawals}</TableCell>
+                        <TableCell className="font-mono text-purple-300">{(details.interest * 100).toFixed(2)}%</TableCell>
+                    </TableRow>
+                ))}
+                </TableBody>
+            </Table>
         </ScrollArea>
     </>
 );
@@ -780,6 +782,59 @@ const StakingVaultsPanel = () => {
     );
 };
 
+const TeamPanel = () => {
+    const context = useContext(AppContext);
+    if (!context || !context.currentUser || !context.teamSizeRewards) return null;
+    const { currentUser, teamSizeRewards, claimTeamSizeReward } = context;
+
+    const availableRewards = teamSizeRewards.filter(r => r.isEnabled);
+
+    return (
+        <>
+            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Your Team</h3>
+            <Card className="card-gradient-yellow-pink p-4 mb-6">
+                <h4 className="text-lg font-bold text-yellow-200">Team Overview</h4>
+                <div className="flex justify-around items-center mt-2 text-center">
+                    <div>
+                        <p className="text-3xl font-bold">{(currentUser.teamSize || 0)}</p>
+                        <p className="text-sm text-gray-300">Total Members</p>
+                    </div>
+                </div>
+            </Card>
+
+            <h4 className="text-xl font-semibold mb-3 text-purple-300">Team Size Rewards</h4>
+            <ScrollArea className="h-72 custom-scrollbar">
+                <div className="space-y-3">
+                    {availableRewards.map(reward => {
+                        const isClaimed = currentUser.claimedTeamSizeRewards?.includes(reward.id);
+                        const canClaim = (currentUser.teamSize || 0) >= reward.teamSize && !isClaimed;
+                        const progress = Math.min(100, ((currentUser.teamSize || 0) / reward.teamSize) * 100);
+
+                        return (
+                            <Card key={reward.id} className="p-4 bg-black/20">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <p className="font-bold text-lg text-amber-400">{reward.rewardAmount} USDT Bonus</p>
+                                        <p className="text-sm text-gray-400">Reach {reward.teamSize} team members</p>
+                                    </div>
+                                    <Button
+                                        onClick={() => claimTeamSizeReward(reward.id)}
+                                        disabled={!canClaim}
+                                    >
+                                        {isClaimed ? <CheckCircle /> : <Trophy />}
+                                        {isClaimed ? 'Claimed' : 'Claim'}
+                                    </Button>
+                                </div>
+                                {!isClaimed && <Progress value={progress} className="mt-2" />}
+                            </Card>
+                        )
+                    })}
+                </div>
+            </ScrollArea>
+        </>
+    );
+};
+
 const CustomPanel = ({ panel }: { panel: DashboardPanel }) => (
     <>
         <h3 className="text-2xl font-semibold mb-4 text-blue-300">{panel.title}</h3>
@@ -799,7 +854,8 @@ type ModalView =
     | 'notices'
     | 'boosters'
     | 'pools'
-    | 'vaults';
+    | 'vaults'
+    | 'team';
 
 // Main Dashboard Component
 const UserDashboard = () => {
@@ -822,6 +878,7 @@ const UserDashboard = () => {
         case 'withdraw': return <WithdrawPanel />;
         case 'history': return <TransactionHistoryPanel />;
         case 'referrals': return <ReferralNetworkPanel currentUser={currentUser} />;
+        case 'team': return <TeamPanel />;
         case 'levels': return <LevelDetailsPanel levels={levels} />;
         case 'settings': return <SettingsPanel />;
         case 'notices': return <NoticesPanel />;
@@ -839,6 +896,7 @@ const UserDashboard = () => {
         withdraw: 'Withdraw',
         history: 'History',
         referrals: 'Referral Network',
+        team: 'Your Team',
         levels: 'Level Details',
         settings: 'Settings',
         notices: 'Notices',
@@ -854,6 +912,7 @@ const UserDashboard = () => {
     { view: 'withdraw', label: 'Withdraw', icon: Send },
     { view: 'history', label: 'History', icon: BarChart },
     { view: 'referrals', label: 'Referrals', icon: UserCheck },
+    { view: 'team', label: 'Team', icon: Users },
     { view: 'levels', label: 'Levels', icon: Layers },
     { view: 'vaults', label: 'Vaults', icon: PiggyBank },
     { view: 'boosters', label: 'Boosters', icon: Gift },
@@ -913,7 +972,7 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
                         exit={{ opacity: 0, y: 10 }}
                         className="mb-4 flex flex-col items-end"
                     >
-                        <ScrollArea className="h-auto max-h-[60vh] pr-4 -mr-4">
+                        <ScrollArea className="h-auto max-h-[60vh] pr-4 -mr-4 custom-scrollbar">
                             <div className="flex flex-col items-end gap-3">
                                 {items.map((item) => (
                                     <div key={item.view} className="flex items-center gap-3">

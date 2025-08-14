@@ -91,6 +91,21 @@ export const initialAppSettings: AppSettings = {
         minDeposit: 100,
     },
 
+    teamCommissionSettings: {
+        isEnabled: true,
+        rates: {
+            level1: 0.10, // 10% of Level 1's interest earnings
+            level2: 0.05, // 5%
+            level3: 0.02, // 2%
+        }
+    },
+
+    teamSizeRewards: [
+        { id: 'tsr_1', teamSize: 10, rewardAmount: 10, isEnabled: true },
+        { id: 'tsr_2', teamSize: 50, rewardAmount: 60, isEnabled: true },
+        { id: 'tsr_3', teamSize: 100, rewardAmount: 150, isEnabled: true },
+    ],
+
     startScreenContent: {
         title: 'Staking Hub',
         subtitle: 'Unlock Your Financial Potential. Securely stake USDT and earn daily rewards.',
@@ -106,6 +121,7 @@ export const initialAppSettings: AppSettings = {
         { id: 'p7', title: 'Manage Withdrawal Address', componentKey: 'ManageAddress', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p10', title: 'Change Password', componentKey: 'ChangePassword', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p8', title: 'Your Referral Network', componentKey: 'ReferralNetwork', isVisible: true, isDeletable: false, isEditable: true },
+        { id: 'p15', title: 'Your Team', componentKey: 'Team', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p9', title: 'Staking Level Details', componentKey: 'LevelDetails', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p11', title: 'Notices', componentKey: 'Notices', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p12', title: 'Booster Store', componentKey: 'BoosterStore', isVisible: true, isDeletable: false, isEditable: true },

@@ -127,14 +127,14 @@ const DraggableFloatingActionButton = ({ onOpenChange, setMockupView }: { onOpen
                         <MainIcon className="size-8" />
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-80 mr-4 mb-2 p-2">
-                     <div className="space-y-2 mb-2 p-2">
+                <PopoverContent className="w-80 mr-4 mb-2 p-0">
+                     <div className="p-4">
                         <h4 className="font-medium leading-none">Help & Actions</h4>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-muted-foreground mt-1">
                             Select an option below.
                         </p>
                     </div>
-                    <ScrollArea className="max-h-[60vh]">
+                    <ScrollArea className="h-auto max-h-[60vh]">
                         <div className="grid gap-2 p-2">
                             {visibleItems.map(item => {
                                 const ItemIcon = (LucideIcons as any)[item.icon] || LucideIcons.AlertCircle;

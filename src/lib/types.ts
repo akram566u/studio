@@ -31,7 +31,7 @@ export interface AppLinks {
 export interface Transaction {
   id: string;
   userId: string;
-  type: 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created' | 'info' | 'booster_purchase' | 'pool_join' | 'pool_payout' | 'vault_investment' | 'vault_payout';
+  type: 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created' | 'info' | 'booster_purchase' | 'pool_join' | 'pool_payout' | 'vault_investment' | 'vault_payout' | 'team_commission' | 'team_size_reward';
   amount: number;
   status: 'pending' | 'approved' | 'declined' | 'credited' | 'completed' | 'info' | 'active';
   timestamp: number;
@@ -75,7 +75,8 @@ export interface User {
   email: string;
   password?: string; // Should be hashed in a real app
   userReferralCode: string;
-  referredBy: string | null; // Can be null if no referrer
+  referredBy: string | null; // The direct referrer's ID
+  referralPath: string[]; // An array of referrer IDs, from direct to top-level
   balance: number;
   totalDeposits: number; // New field
   level: number;
@@ -90,6 +91,8 @@ export interface User {
   lastWithdrawalTime: number | null; // To track monthly withdrawal limit
   activeBoosters?: ActiveBooster[];
   vaultInvestments?: UserVaultInvestment[];
+  teamSize?: number; // Total number of users in the downline
+  claimedTeamSizeRewards?: string[]; // Array of claimed reward IDs
 }
 
 export interface Level {
@@ -172,6 +175,22 @@ export interface ReferralBonusSettings {
     minDeposit: number;
 }
 
+export interface TeamCommissionSettings {
+    isEnabled: boolean;
+    rates: {
+        level1: number;
+        level2: number;
+        level3: number;
+    };
+}
+
+export interface TeamSizeReward {
+    id: string;
+    teamSize: number;
+    rewardAmount: number;
+    isEnabled: boolean;
+}
+
 export interface StartScreenSettings {
   title: string;
   subtitle: string;
@@ -180,7 +199,7 @@ export interface StartScreenSettings {
 export interface DashboardPanel {
   id: string;
   title: string;
-  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices' | 'BoosterStore' | 'StakingPools' | 'StakingVaults';
+  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices' | 'BoosterStore' | 'StakingPools' | 'StakingVaults' | 'Team';
   isVisible: boolean;
   isDeletable: boolean;
   isEditable: boolean;
@@ -195,6 +214,8 @@ export interface AppSettings {
     startScreenContent: StartScreenSettings;
     dashboardPanels: DashboardPanel[];
     referralBonusSettings: ReferralBonusSettings;
+    teamCommissionSettings: TeamCommissionSettings;
+    teamSizeRewards: TeamSizeReward[];
     active3DTheme: BackgroundTheme;
     rechargeAddresses: RechargeAddress[];
     appLinks: AppLinks;
