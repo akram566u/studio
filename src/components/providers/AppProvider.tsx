@@ -7,7 +7,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe, runTransaction } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
@@ -15,6 +15,7 @@ import Script from 'next/script';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Progress } from '../ui/progress';
 import { formatDistanceToNow } from 'date-fns';
+import { prioritizeMessage } from '@/ai/flows/prioritize-message-flow';
 
 
 // A version of the User type that is safe to expose to the admin panel
@@ -95,9 +96,10 @@ export interface AppContextType {
   totalReferralBonusPaid: number;
   allUsersForAdmin: UserForAdmin[];
   boosterPacks: BoosterPack[];
+  boosterPurchaseHistory: AugmentedTransaction[];
   addBoosterPack: () => void;
   updateBoosterPack: (id: string, updates: Partial<BoosterPack>) => void;
-  deleteBoosterPack: (id: string) => void;
+  deleteBoosterPack: () => void;
   purchaseBooster: (boosterId: string) => Promise<void>;
   stakingPools: StakingPool[];
   addStakingPool: () => void;
@@ -111,6 +113,9 @@ export interface AppContextType {
   updateStakingVault: (id: string, updates: Partial<StakingVault>) => void;
   deleteStakingVault: (id: string) => void;
   investInVault: (vaultId: string, amount: number) => Promise<void>;
+  sendAnnouncement: (userId: string, message: string) => void;
+  getPrioritizedMessage: () => Promise<PrioritizeMessageOutput | null>;
+  markAnnouncementAsRead: (announcementId: string) => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -135,6 +140,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [totalWithdrawalAmount, setTotalWithdrawalAmount] = useState(0);
   const [totalReferralBonusPaid, setTotalReferralBonusPaid] = useState(0);
   const [allUsersForAdmin, setAllUsersForAdmin] = useState<UserForAdmin[]>([]);
+  const [boosterPurchaseHistory, setBoosterPurchaseHistory] = useState<AugmentedTransaction[]>([]);
   
   const { toast } = useToast();
   
@@ -387,6 +393,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             teamBusiness: 0,
             claimedTeamSizeRewards: [],
             claimedTeamBusinessRewards: [],
+            announcements: [],
         };
 
         const batch = writeBatch(db);
@@ -1097,19 +1104,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         let totalWithdrawals = 0;
         let totalBonuses = 0;
 
+        const boosterHistory: AugmentedTransaction[] = [];
+
         allUsers.forEach(user => {
             user.transactions.forEach(tx => {
-                if(tx.status === 'approved' || tx.status === 'credited') {
+                if(tx.status === 'approved' || tx.status === 'credited' || tx.status === 'completed') {
                     if (tx.type === 'deposit') totalDeposits += tx.amount;
                     if (tx.type === 'withdrawal') totalWithdrawals += tx.amount;
                     if (tx.type === 'referral_bonus') totalBonuses += tx.amount;
+                    if (tx.type === 'booster_purchase') boosterHistory.push({ ...tx, email: user.email });
                 }
             });
         });
         setTotalDepositAmount(totalDeposits);
         setTotalWithdrawalAmount(totalWithdrawals);
         setTotalReferralBonusPaid(totalBonuses);
-
+        setBoosterPurchaseHistory(boosterHistory.sort((a,b) => b.timestamp - a.timestamp));
 
         // Process for pending requests
         const allRequests: AugmentedTransaction[] = [];
@@ -1184,7 +1194,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             const lastCredit = currentUser.lastInterestCreditTime || currentUser.firstDepositTime;
             const twentyFourHours = 24 * 60 * 60 * 1000;
 
-            if (timeSinceLastCredit >= twentyFourHours) {
+            if (now - lastCredit >= twentyFourHours) {
                 let interestRate = levels[currentUser.level].interest;
                 
                 // Check for active interest boosters
@@ -1379,7 +1389,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             type: 'booster_purchase',
             amount: booster.cost,
             status: 'completed',
-            description: `Purchased '${booster.name}' for ${booster.cost} USDT.`
+            description: `Purchased '${booster.name}' for ${booster.cost} USDT.`,
+            note: booster.name,
         });
         
         // Immediately check for level up if referral points were purchased
@@ -1653,6 +1664,81 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: "Vault Matured!", description: `A total of ${totalPayout.toFixed(2)} USDT has been credited to your balance.` });
     };
 
+    const sendAnnouncement = async (userId: string, message: string) => {
+        const userRef = doc(db, "users", userId);
+        const newAnnouncement = {
+            id: `ann_${Date.now()}`,
+            message,
+            createdAt: Date.now(),
+            createdBy: 'admin',
+            read: false,
+            priority: 1, // Admin announcements are high priority
+        };
+        await updateDoc(userRef, {
+            announcements: arrayUnion(newAnnouncement)
+        });
+        toast({ title: "Announcement Sent!", description: "The personalized message has been sent to the user." });
+    };
+
+    const getPrioritizedMessage = useCallback(async (): Promise<PrioritizeMessageOutput | null> => {
+        if (!currentUser) return null;
+        
+        const nextLevelKey = currentUser.level + 1;
+        const nextLevel = levels[nextLevelKey] || { minBalance: Infinity, directReferrals: Infinity };
+    
+        const nextTeamSizeReward = [...teamSizeRewards]
+            .filter(r => r.isEnabled && !(currentUser.claimedTeamSizeRewards || []).includes(r.id))
+            .sort((a, b) => a.teamSize - b.teamSize)
+            .find(r => r.teamSize > (currentUser.teamSize || 0)) 
+            || { teamSize: Infinity, rewardAmount: 0 };
+    
+        const nextTeamBusinessReward = [...teamBusinessRewards]
+            .filter(r => r.isEnabled && !(currentUser.claimedTeamBusinessRewards || []).includes(r.id))
+            .sort((a, b) => a.businessAmount - b.businessAmount)
+            .find(r => r.businessAmount > (currentUser.teamBusiness || 0))
+            || { businessAmount: Infinity, rewardAmount: 0 };
+
+        try {
+            const result = await prioritizeMessage({
+                user: {
+                    balance: currentUser.balance,
+                    level: currentUser.level,
+                    teamSize: currentUser.teamSize || 0,
+                    teamBusiness: currentUser.teamBusiness || 0,
+                    announcements: (currentUser.announcements || [])
+                        .filter(a => !a.read)
+                        .map(a => ({ message: a.message, createdAt: a.createdAt })),
+                },
+                nextLevel,
+                nextTeamSizeReward,
+                nextTeamBusinessReward,
+            });
+            return result;
+        } catch (error) {
+            console.error("AI prioritization failed:", error);
+            // Fallback to a simple unread admin message if AI fails
+            const unreadAdmin = (currentUser.announcements || []).find(a => a.createdBy === 'admin' && !a.read);
+            if(unreadAdmin) {
+                return { source: 'admin', message: unreadAdmin.message, announcementId: unreadAdmin.id };
+            }
+            return null;
+        }
+    }, [currentUser, levels, teamSizeRewards, teamBusinessRewards]);
+
+    const markAnnouncementAsRead = async (announcementId: string) => {
+        if (!currentUser) return;
+        const userRef = doc(db, "users", currentUser.id);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) return;
+
+        const userData = userSnap.data() as User;
+        const updatedAnnouncements = (userData.announcements || []).map(ann => 
+            ann.id === announcementId ? { ...ann, read: true } : ann
+        );
+
+        await updateDoc(userRef, { announcements: updatedAnnouncements });
+    };
+
 
   if (loading) {
     return (
@@ -1737,6 +1823,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     totalReferralBonusPaid,
     allUsersForAdmin,
     boosterPacks,
+    boosterPurchaseHistory,
     addBoosterPack,
     updateBoosterPack,
     deleteBoosterPack,
@@ -1753,6 +1840,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateStakingVault,
     deleteStakingVault,
     investInVault,
+    sendAnnouncement,
+    getPrioritizedMessage,
+    markAnnouncementAsRead,
   };
 
   return (

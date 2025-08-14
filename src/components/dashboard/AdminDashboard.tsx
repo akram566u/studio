@@ -1108,7 +1108,7 @@ const NoticesPanel = () => {
     }, [context?.notices]);
 
     if(!context) return null;
-    const { addNotice, updateNotice, deleteNotice } = context;
+    const { addNotice, updateNotice, deleteNotice, notices } = context;
 
     const handleNoticeChange = (id: string, field: keyof Notice, value: any) => {
         setLocalNotices(prev => prev.map(n => n.id === id ? { ...n, [field]: value } : n));
@@ -1283,7 +1283,7 @@ const BoosterAnalyticsPanel = () => {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {boosterPurchaseHistory.length > 0 ? boosterPurchaseHistory.map(tx => (
+                            {boosterPurchaseHistory && boosterPurchaseHistory.length > 0 ? boosterPurchaseHistory.map(tx => (
                                 <TableRow key={tx.id}>
                                     <TableCell className="font-medium">{tx.note}</TableCell>
                                     <TableCell>{tx.email}</TableCell>
