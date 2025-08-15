@@ -1681,21 +1681,27 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     const getPrioritizedMessage = useCallback(async (): Promise<PrioritizeMessageOutput | null> => {
         if (!currentUser) return null;
-        
+    
         const nextLevelKey = currentUser.level + 1;
         const nextLevel = levels[nextLevelKey] || { minBalance: Infinity, directReferrals: Infinity };
     
-        const nextTeamSizeReward = [...(teamSizeRewards || [])]
+        const nextTeamSizeRewardResult = [...(teamSizeRewards || [])]
             .filter(r => r.isEnabled && !(currentUser.claimedTeamSizeRewards || []).includes(r.id))
             .sort((a, b) => a.teamSize - b.teamSize)
-            .find(r => r.teamSize > (currentUser.teamSize || 0)) 
-            || { teamSize: Infinity, rewardAmount: 0 };
+            .find(r => r.teamSize > (currentUser.teamSize || 0));
     
-        const nextTeamBusinessReward = [...(teamBusinessRewards || [])]
+        const nextTeamBusinessRewardResult = [...(teamBusinessRewards || [])]
             .filter(r => r.isEnabled && !(currentUser.claimedTeamBusinessRewards || []).includes(r.id))
             .sort((a, b) => a.businessAmount - b.businessAmount)
-            .find(r => r.businessAmount > (currentUser.teamBusiness || 0))
-            || { businessAmount: Infinity, rewardAmount: 0 };
+            .find(r => r.businessAmount > (currentUser.teamBusiness || 0));
+    
+        const nextTeamSizeReward = nextTeamSizeRewardResult 
+            ? { teamSize: nextTeamSizeRewardResult.teamSize, rewardAmount: nextTeamSizeRewardResult.rewardAmount }
+            : { teamSize: Infinity, rewardAmount: 0 };
+    
+        const nextTeamBusinessReward = nextTeamBusinessRewardResult
+            ? { businessAmount: nextTeamBusinessRewardResult.businessAmount, rewardAmount: nextTeamBusinessRewardResult.rewardAmount }
+            : { businessAmount: Infinity, rewardAmount: 0 };
 
         try {
             const result = await prioritizeMessage({
@@ -1715,7 +1721,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             return result;
         } catch (error) {
             console.error("AI prioritization failed:", error);
-            // Fallback to a simple unread admin message if AI fails
             const unreadAdmin = (currentUser.announcements || []).find(a => a.createdBy === 'admin' && !a.read);
             if(unreadAdmin) {
                 return { source: 'admin', message: unreadAdmin.message, announcementId: unreadAdmin.id };
