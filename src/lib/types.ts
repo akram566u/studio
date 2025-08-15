@@ -37,7 +37,7 @@ export interface Transaction {
   userId: string;
   type: TransactionType;
   amount: number;
-  status: 'pending' | 'approved' | 'declined' | 'credited' | 'completed' | 'info' | 'active';
+  status: 'pending' | 'on_hold' | 'approved' | 'declined' | 'credited' | 'completed' | 'info' | 'active';
   timestamp: number;
   walletAddress?: string;
   completionTime?: number | null;
@@ -145,6 +145,7 @@ export interface BoosterPack {
     durationHours?: number;
     // Optional: which levels can purchase this
     applicableLevels?: number[];
+    purchaseLimit: number; // -1 for unlimited
     isActive: boolean;
 }
 

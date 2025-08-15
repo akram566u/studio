@@ -30,7 +30,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle } from 'lucide-react';
 import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { analyzeTeam } from '@/ai/flows/analyze-team-flow';
@@ -58,7 +58,7 @@ const AdminDashboard = () => {
     return <div>Access Denied.</div>;
   }
 
-  const { totalUsers, totalDepositAmount, totalWithdrawalAmount, totalReferralBonusPaid, allPendingRequests, adminReferrals } = context;
+  const { totalUsers, totalDepositAmount, totalWithdrawalAmount, totalReferralBonusPaid, allPendingRequests, allOnHoldRequests, adminReferrals } = context;
 
   const firebaseProjectId = "staking-hub-3";
 
@@ -190,6 +190,7 @@ const AdminDashboard = () => {
                                             <div className="flex gap-2 pt-2">
                                                 <Button onClick={() => context.approveRequest(request.id, request.type)} size="sm">Approve</Button>
                                                 <Button onClick={() => context.declineRequest(request.id, request.type)} variant="destructive" size="sm">Decline</Button>
+                                                <Button onClick={() => context.holdRequest(request.id, request.type)} variant="outline" size="sm">Hold</Button>
                                             </div>
                                         </div>
                                     </div>
@@ -201,6 +202,46 @@ const AdminDashboard = () => {
                     </ScrollArea>
                 </CardContent>
             </Card>
+
+            <Card className="card-gradient-orange-red p-6">
+                <CardHeader>
+                    <CardTitle className="text-purple-300">On-Hold Requests</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <ScrollArea className="h-60 custom-scrollbar">
+                        {allOnHoldRequests && allOnHoldRequests.length > 0 ? (
+                            <div className="space-y-4">
+                                {allOnHoldRequests.map(request => (
+                                    <div key={`${request.id}-${request.timestamp}`} className="bg-black/20 p-4 rounded-lg flex items-start gap-4">
+                                        <PauseCircle className="text-yellow-400 mt-1 size-6" />
+                                        <div className="flex-1 space-y-2">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <p className="font-bold text-lg capitalize">
+                                                        {request.type.replace('_', ' ')} Request
+                                                        <span className={`ml-2 font-mono text-xl ${request.type === 'deposit' ? 'text-green-300' : 'text-red-300'}`}>
+                                                            {request.amount.toFixed(2)} USDT
+                                                        </span>
+                                                    </p>
+                                                    <p className="text-sm text-gray-300 font-mono">{request.email}</p>
+                                                </div>
+                                                <p className="text-xs text-gray-400">{format(new Date(request.timestamp), 'PPpp')}</p>
+                                            </div>
+                                            <div className="flex gap-2 pt-2">
+                                                <Button onClick={() => context.approveRequest(request.id, request.type)} size="sm">Approve</Button>
+                                                <Button onClick={() => context.declineRequest(request.id, request.type)} variant="destructive" size="sm">Decline</Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-gray-400 text-center">No requests are on hold.</p>
+                        )}
+                    </ScrollArea>
+                </CardContent>
+            </Card>
+
 
             <Card className="card-gradient-yellow-pink p-6">
                 <CardHeader>
@@ -1233,6 +1274,13 @@ const BoostersPanel = () => {
                                             {pack.type === 'referral_points' && 'Number of points to grant.'}
                                             {pack.type === 'interest_boost' && 'Decimal interest boost (e.g., 0.01 for 1%).'}
                                             {pack.type === 'referral_bonus_boost' && 'Multiplier for bonus (e.g., 1.5 for 1.5x).'}
+                                        </p>
+                                    </div>
+                                     <div>
+                                        <Label>Purchase Limit</Label>
+                                        <Input type="number" value={pack.purchaseLimit} onChange={e => handleBoosterChange(pack.id, 'purchaseLimit', Number(e.target.value))} />
+                                        <p className="text-xs text-gray-400 mt-1">
+                                            -1 for unlimited purchases.
                                         </p>
                                     </div>
                                     {(pack.type === 'interest_boost' || pack.type === 'referral_bonus_boost') && <>

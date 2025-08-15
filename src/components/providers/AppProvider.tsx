@@ -35,9 +35,11 @@ export interface AppContextType {
   addLevel: () => void;
   deleteLevel: (levelKey: number) => void;
   allPendingRequests: AugmentedTransaction[];
+  allOnHoldRequests: AugmentedTransaction[];
   adminHistory: AugmentedTransaction[];
   approveRequest: (transactionId: string, type: Transaction['type']) => void;
   declineRequest: (transactionId: string, type: Transaction['type']) => void;
+  holdRequest: (transactionId: string, type: Transaction['type']) => void;
   submitDepositRequest: (amount: number, address: string) => void;
   submitWithdrawalRequest: (amount: number) => void;
   findUser: (email: string) => Promise<UserForAdmin | null>;
@@ -132,6 +134,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   
   // Admin-specific state
   const [allPendingRequests, setAllPendingRequests] = useState<AugmentedTransaction[]>([]);
+  const [allOnHoldRequests, setAllOnHoldRequests] = useState<AugmentedTransaction[]>([]);
   const [adminReferrals, setAdminReferrals] = useState<UserForAdmin[]>([]);
   const [adminHistory, setAdminHistory] = useState<AugmentedTransaction[]>([]);
   const [totalUsers, setTotalUsers] = useState(0);
@@ -513,7 +516,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     toast({ title: "Success", description: "Deposit request submitted." });
   };
   
-    const processRequest = async (transactionId: string, newStatus: 'approved' | 'declined', type: Transaction['type']) => {
+    const processRequest = async (transactionId: string, newStatus: 'approved' | 'declined' | 'on_hold', type: Transaction['type']) => {
         const usersRef = collection(db, "users");
         
         const allUsersSnap = await getDocs(usersRef);
@@ -523,7 +526,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
         for (const userDoc of allUsersSnap.docs) {
             const userData = userDoc.data() as User;
-            const req = userData.transactions.find(t => t.id === transactionId && t.status === 'pending' && t.type === type);
+            const req = userData.transactions.find(t => t.id === transactionId && (t.status === 'pending' || t.status === 'on_hold') && t.type === type);
             if (req) {
                 userFound = userData;
                 userDocId = userDoc.id;
@@ -644,6 +647,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     const approveRequest = (transactionId: string, type: Transaction['type']) => processRequest(transactionId, 'approved', type);
     const declineRequest = (transactionId: string, type: Transaction['type']) => processRequest(transactionId, 'declined', type);
+    const holdRequest = (transactionId: string, type: Transaction['type']) => processRequest(transactionId, 'on_hold', type);
 
   const validateWithdrawal = (amount: number): string | null => {
     if (!currentUser) return "Not logged in.";
@@ -1121,11 +1125,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setBoosterPurchaseHistory(boosterHistory.sort((a,b) => b.timestamp - a.timestamp));
 
         // Process for pending requests
-        const allRequests: AugmentedTransaction[] = [];
+        const requests: AugmentedTransaction[] = [];
+        const onHoldRequests: AugmentedTransaction[] = [];
+
         allUsers.forEach(userData => {
-            const pending = (userData.transactions || []).filter(tx => tx.status === 'pending');
-            pending.forEach(p => {
-                allRequests.push({
+            (userData.transactions || []).forEach(p => {
+                const augmentedTx = {
                     ...p,
                     email: userData.email,
                     userLevel: userData.level,
@@ -1133,10 +1138,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     userWithdrawalCount: (userData.transactions || []).filter(tx => tx.type === 'withdrawal' && tx.status === 'approved').length,
                     userWithdrawalAddress: userData.primaryWithdrawalAddress,
                     directReferrals: userData.directReferrals,
-                })
+                };
+                if (p.status === 'pending') {
+                    requests.push(augmentedTx);
+                } else if (p.status === 'on_hold') {
+                    onHoldRequests.push(augmentedTx);
+                }
             })
         });
-        setAllPendingRequests(allRequests.sort((a,b) => b.timestamp - a.timestamp));
+        setAllPendingRequests(requests.sort((a,b) => b.timestamp - a.timestamp));
+        setAllOnHoldRequests(onHoldRequests.sort((a,b) => b.timestamp - a.timestamp));
+
 
         // Process for admin history
         const allHistory: AugmentedTransaction[] = [];
@@ -1283,7 +1295,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             durationDays: 0,
             durationHours: 0,
             isActive: false,
-            applicableLevels: []
+            applicableLevels: [],
+            purchaseLimit: -1, // Unlimited by default
         };
         updateFirestoreSettings({ boosterPacks: [...(boosterPacks || []), newBooster] });
     };
@@ -1361,6 +1374,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (currentUser.balance < booster.cost) {
             toast({ title: "Error", description: "Insufficient balance to purchase.", variant: "destructive" });
             return;
+        }
+
+        if (booster.purchaseLimit !== -1) {
+            const purchaseCount = currentUser.transactions.filter(
+                tx => tx.type === 'booster_purchase' && tx.note === booster.name && tx.status === 'completed'
+            ).length;
+            if (purchaseCount >= booster.purchaseLimit) {
+                toast({ title: "Error", description: `You have reached the purchase limit for '${booster.name}'.`, variant: "destructive" });
+                return;
+            }
         }
 
         const userDocRef = doc(db, "users", currentUser.id);
@@ -1767,9 +1790,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     addLevel,
     deleteLevel,
     allPendingRequests,
+    allOnHoldRequests,
     adminHistory,
     approveRequest,
     declineRequest,
+    holdRequest,
     submitDepositRequest,
     submitWithdrawalRequest,
     findUser,
@@ -1870,5 +1895,3 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
-
-    
