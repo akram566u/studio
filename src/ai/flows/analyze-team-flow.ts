@@ -14,6 +14,27 @@ import { getDoc, doc, collection, getDocs, where, query } from 'firebase/firesto
 import { db } from '@/lib/firebase';
 
 
+// Helper function to fetch an entire collection in chunks for 'in' queries
+async function getDocsInChunks(ref: any, field: string, values: string[]): Promise<User[]> {
+    if (values.length === 0) return [];
+    
+    const chunks: string[][] = [];
+    // Firestore 'in' queries support a maximum of 30 comparison values.
+    for (let i = 0; i < values.length; i += 30) {
+        chunks.push(values.slice(i, i + 30));
+    }
+
+    const userDocs: User[] = [];
+    for (const chunk of chunks) {
+        const chunkQuery = query(ref, where(field, "in", chunk));
+        const snapshot = await getDocs(chunkQuery);
+        snapshot.forEach(doc => {
+            userDocs.push({ id: doc.id, ...doc.data() } as User);
+        });
+    }
+    return userDocs;
+}
+
 // Helper function to fetch the entire downline for a user
 async function getDownline(userId: string): Promise<{ level1: User[], level2: User[], level3: User[] }> {
     const downline = { level1: [] as User[], level2: [] as User[], level3: [] as User[] };
@@ -29,18 +50,13 @@ async function getDownline(userId: string): Promise<{ level1: User[], level2: Us
 
     // Level 2
     const l1Ids = downline.level1.map(u => u.id);
-    // Firestore 'in' query is limited to 30 items. For larger teams, this needs pagination.
-    const l2Query = query(usersRef, where("referredBy", "in", l1Ids.slice(0,30)));
-    const l2Snap = await getDocs(l2Query);
-    downline.level2 = l2Snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+    downline.level2 = await getDocsInChunks(usersRef, "referredBy", l1Ids);
 
     if (downline.level2.length === 0) return downline;
 
     // Level 3
     const l2Ids = downline.level2.map(u => u.id);
-    const l3Query = query(usersRef, where("referredBy", "in", l2Ids.slice(0,30)));
-    const l3Snap = await getDocs(l3Query);
-    downline.level3 = l3Snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+    downline.level3 = await getDocsInChunks(usersRef, "referredBy", l2Ids);
 
     return downline;
 }
