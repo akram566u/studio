@@ -1371,8 +1371,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             toast({ title: "Error", description: "Booster pack not found.", variant: "destructive" });
             return;
         }
-        if (currentUser.balance < booster.cost) {
-            toast({ title: "Error", description: "Insufficient balance to purchase.", variant: "destructive" });
+
+        const earnedBalance = currentUser.balance - (currentUser.totalDeposits || 0);
+        if (earnedBalance < booster.cost) {
+            toast({ title: "Error", description: `You can only purchase boosters with your earned balance. You need ${booster.cost.toFixed(2)} USDT in earnings.`, variant: "destructive" });
             return;
         }
 
@@ -1895,3 +1897,5 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
+
+    

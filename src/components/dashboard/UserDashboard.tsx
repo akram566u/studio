@@ -614,6 +614,22 @@ const NoticesPanel = () => {
 
 const BoosterStorePanel = () => {
     const context = useContext(AppContext);
+    const [isCounterRunning, setIsCounterRunning] = useState(true);
+
+    useEffect(() => {
+        if (context?.currentUser?.firstDepositTime) {
+            const timer = setInterval(() => {
+                const now = Date.now();
+                const lastCredit = context.currentUser.lastInterestCreditTime || context.currentUser.firstDepositTime;
+                const nextCredit = lastCredit + 24 * 60 * 60 * 1000;
+                setIsCounterRunning(now < nextCredit);
+            }, 1000);
+            return () => clearInterval(timer);
+        } else {
+            setIsCounterRunning(false); // If no deposit, counter isn't running
+        }
+    }, [context?.currentUser]);
+    
     if (!context || !context.boosterPacks || !context.currentUser) return null;
     const { boosterPacks, purchaseBooster, currentUser } = context;
 
@@ -621,23 +637,42 @@ const BoosterStorePanel = () => {
         p.isActive && 
         (!p.applicableLevels || p.applicableLevels.length === 0 || p.applicableLevels.includes(currentUser.level))
     );
+    
+    const earnedBalance = currentUser.balance - (currentUser.totalDeposits || 0);
 
     return (
         <>
-            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Booster Store</h3>
+            <h3 className="text-2xl font-semibold mb-2 text-blue-300">Booster Store</h3>
+            <p className="text-sm text-gray-400 mb-4">Your available earned balance for purchases: <span className="font-bold text-green-400">{Math.max(0, earnedBalance).toFixed(2)} USDT</span></p>
+
+            {isCounterRunning && (
+                 <Alert variant="destructive" className='mb-4'>
+                    <Ban className="h-4 w-4" />
+                    <AlertTitle>Store Locked</AlertTitle>
+                    <AlertDescription>
+                       You can only purchase boosters when the daily interest timer is stopped. Please claim your interest to proceed.
+                    </AlertDescription>
+                </Alert>
+            )}
+
             <ScrollArea className="h-96 custom-scrollbar">
                 <div className="space-y-4">
-                    {activePacks.length > 0 ? activePacks.map(pack => (
+                    {activePacks.length > 0 ? activePacks.map(pack => {
+                        const canAfford = earnedBalance >= pack.cost;
+                        return (
                         <Card key={pack.id} className="card-gradient-yellow-pink p-4 flex justify-between items-center">
                             <div>
                                 <CardTitle className="text-lg text-yellow-200">{pack.name}</CardTitle>
                                 <CardDescription className="text-gray-300">{pack.description}</CardDescription>
                             </div>
-                            <Button onClick={() => purchaseBooster(pack.id)}>
+                            <Button 
+                                onClick={() => purchaseBooster(pack.id)}
+                                disabled={isCounterRunning || !canAfford}
+                            >
                                 <Rocket className="mr-2" /> Buy for {pack.cost} USDT
                             </Button>
                         </Card>
-                    )) : (
+                    )}) : (
                         <p className="text-gray-400 text-center">No booster packs are available for your level right now.</p>
                     )}
                 </div>
@@ -931,7 +966,7 @@ const UserDashboard = () => {
         // Fetch prioritized message
         context.getPrioritizedMessage().then(setPrioritizedMessage);
     }
-  }, [context?.currentUser?.id]);
+  }, [context?.currentUser?.id, context?.boosterPacks]);
 
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;
@@ -1129,3 +1164,5 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
+
+    

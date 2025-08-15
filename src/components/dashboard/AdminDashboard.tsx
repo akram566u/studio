@@ -44,9 +44,9 @@ type AdminModalView =
     | 'panels'
     | 'notices'
     | 'boosters'
+    | 'booster_analytics'
     | 'pools'
     | 'vaults'
-    | 'booster_analytics'
     | 'view_examples';
 
 // Main Dashboard Component
@@ -1522,3 +1522,5 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: AdminModalView, labe
 }
 
 export default AdminDashboard;
+
+    
