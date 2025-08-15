@@ -30,7 +30,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle, MessageSquare } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle, MessageSquare, UserX as UserXIcon } from 'lucide-react';
 import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { analyzeTeam } from '@/ai/flows/analyze-team-flow';
@@ -500,7 +500,7 @@ const UserManagementPanel = () => {
     }, [searchedUser]);
 
     if (!context) return null;
-    const { findUser, allUsersForAdmin, adminUpdateUserEmail, adminUpdateUserWithdrawalAddress, adjustUserBalance, adjustUserLevel, forgotPassword, adjustUserDirectReferrals, sendAnnouncement, sendMessageToUser } = context;
+    const { findUser, allUsersForAdmin, adminUpdateUserEmail, adminUpdateUserWithdrawalAddress, adjustUserBalance, adjustUserLevel, forgotPassword, adjustUserDirectReferrals, sendAnnouncement, sendMessageToUser, deactivateUserAccount } = context;
 
     const handleUserSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -563,6 +563,12 @@ const UserManagementPanel = () => {
             setSearchedUser(updatedUser);
         }
     };
+
+    const handleDeactivate = async () => {
+        if (!searchedUser) return;
+        await deactivateUserAccount(searchedUser.id);
+        setSearchedUser(null); // Clear the search result
+    }
 
     return (
         <>
@@ -637,7 +643,7 @@ const UserManagementPanel = () => {
                         </div>
                         <hr className="border-white/10" />
                         <div className="flex flex-col md:flex-row gap-2">
-                            <Button onClick={handlePasswordReset} variant="destructive" className="w-full">
+                            <Button onClick={handlePasswordReset} variant="outline" className="w-full">
                                 <KeyRound /> Send Password Reset Email
                             </Button>
                              <Button onClick={() => setIsAnalysisDialogOpen(true)} variant="outline" className="w-full">
@@ -645,6 +651,27 @@ const UserManagementPanel = () => {
                             </Button>
                         </div>
                         <ChatPanel user={searchedUser} onSendMessage={handleSendMessage} />
+                        <hr className="border-white/10" />
+                        <div>
+                            <h4 className="text-lg font-bold text-red-400 mb-2">Danger Zone</h4>
+                             <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="destructive" className="w-full"><UserXIcon/> Deactivate User Account</Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            This action cannot be undone. This will permanently delete the user's account and all their data from the database.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={handleDeactivate}>Yes, Deactivate Account</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </div>
                    </div>
                 )}
                 {!searchedUser && (
@@ -916,7 +943,12 @@ const SystemSettingsPanel = () => {
         addTeamBusinessReward, updateTeamBusinessReward, deleteTeamBusinessReward,
         addRechargeAddress, updateRechargeAddress, deleteRechargeAddress,
         updateAppLinks,
+        levels, // Get levels for options
     } = context;
+
+    const levelOptions = Object.entries(levels)
+        .map(([level, details]) => ({ value: Number(level), label: `Level ${level} - ${details.name}` }))
+        .sort((a,b) => a.value - b.value);
 
     const handleLevelChange = (level: number, field: keyof Level, value: string | number | boolean) => {
         let finalValue = value;
@@ -927,7 +959,7 @@ const SystemSettingsPanel = () => {
     };
     const handleSaveLevel = (levelKey: number) => { const levelDetails = localLevels[levelKey]; if (levelDetails) updateLevel(levelKey, levelDetails); };
     const handleAddNewLevel = () => addLevel();
-    const handleRestrictionChange = (id: string, field: keyof RestrictionMessage, value: string | boolean | number) => {
+    const handleRestrictionChange = (id: string, field: keyof RestrictionMessage, value: string | boolean | number | number[] | undefined) => {
         setLocalRestrictions(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
     };
     const handleSaveRestrictions = () => updateRestrictionMessages(localRestrictions);
@@ -1025,6 +1057,19 @@ const SystemSettingsPanel = () => {
                                         </Select>
                                     </div>
                                     <div><Label htmlFor={`restriction-${r.id}-message`}>Message</Label><Textarea id={`restriction-${r.id}-message`} value={r.message} onChange={e => handleRestrictionChange(r.id, 'message', e.target.value)} /></div>
+                                    
+                                    {(r.type === 'withdrawal_hold' || r.type === 'withdrawal_monthly_limit' || r.type === 'withdrawal_initial_deposit') && (
+                                        <div>
+                                            <Label>Applicable Levels</Label>
+                                            <MultiSelect 
+                                                options={levelOptions}
+                                                value={r.applicableLevels || []}
+                                                onChange={(v) => handleRestrictionChange(r.id, 'applicableLevels', v)}
+                                                placeholder="Select levels (or leave blank for all)"
+                                            />
+                                        </div>
+                                    )}
+
                                     {r.type === 'withdrawal_hold' && (<div><Label htmlFor={`restriction-${r.id}-duration`}>Duration (Days)</Label><Input id={`restriction-${r.id}-duration`} type="number" value={r.durationDays || 0} onChange={e => handleRestrictionChange(r.id, 'durationDays', Number(e.target.value))} /></div>)}
                                     {r.type === 'withdrawal_initial_deposit' && (<div><Label htmlFor={`restriction-${r.id}-percentage`}>Withdrawable Principal (%)</Label><Input id={`restriction-${r.id}-percentage`} type="number" value={r.withdrawalPercentage ?? 0} onChange={e => handleRestrictionChange(r.id, 'withdrawalPercentage', Number(e.target.value))} /></div>)}
                                 </div>
@@ -1242,7 +1287,14 @@ const NoticesPanel = () => {
 
 const MultiSelect = ({ options, value, onChange, placeholder }: { options: { value: number, label: string }[], value: number[], onChange: (value: number[]) => void, placeholder: string }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const selectedLabels = options.filter(opt => value.includes(opt.value)).map(opt => opt.label).join(', ');
+    
+    // Check if the value is for "All Levels" (empty array or undefined)
+    const isAllLevels = !value || value.length === 0;
+    
+    // Determine the display label
+    const selectedLabels = isAllLevels 
+        ? "All Levels" 
+        : options.filter(opt => value.includes(opt.value)).map(opt => opt.label).join(', ');
 
     return (
         <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -1257,17 +1309,22 @@ const MultiSelect = ({ options, value, onChange, placeholder }: { options: { val
                     <CommandInput placeholder="Search levels..." />
                     <CommandEmpty>No levels found.</CommandEmpty>
                     <CommandGroup>
+                        <CommandItem onSelect={() => onChange([])}>
+                                <CheckCheck className={cn("mr-2 h-4 w-4", isAllLevels ? "opacity-100" : "opacity-0")} />
+                                All Levels
+                        </CommandItem>
                         {options.map((option) => (
                             <CommandItem
                                 key={option.value}
                                 onSelect={() => {
-                                    const newValue = value.includes(option.value)
-                                        ? value.filter(v => v !== option.value)
-                                        : [...value, option.value];
+                                    const currentSelection = value || [];
+                                    const newValue = currentSelection.includes(option.value)
+                                        ? currentSelection.filter(v => v !== option.value)
+                                        : [...currentSelection, option.value];
                                     onChange(newValue);
                                 }}
                             >
-                                <CheckCheck className={cn("mr-2 h-4 w-4", value.includes(option.value) ? "opacity-100" : "opacity-0")} />
+                                <CheckCheck className={cn("mr-2 h-4 w-4", value?.includes(option.value) ? "opacity-100" : "opacity-0")} />
                                 {option.label}
                             </CommandItem>
                         ))}

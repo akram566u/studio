@@ -8,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent, MessageSquare } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent, MessageSquare, UserX as UserXIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -491,18 +491,67 @@ const ChangePasswordPanel = () => {
     );
 };
 
+const DeactivateAccountPanel = () => {
+    const context = useContext(AppContext);
+    const [password, setPassword] = useState('');
+
+    if (!context) return null;
+
+    const { deactivateCurrentUserAccount } = context;
+
+    const handleDeactivate = async () => {
+        await deactivateCurrentUserAccount(password);
+    }
+
+    return (
+        <>
+        <h3 className="text-xl font-semibold mb-4 text-red-400">Deactivate Account</h3>
+        <p className="text-sm text-gray-300 mb-4">
+            This action is irreversible. All your data, including balance, referrals, and transaction history, will be permanently deleted.
+        </p>
+        <div>
+            <Label htmlFor="deactivate-password">Enter Password to Confirm</Label>
+            <Input id="deactivate-password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+        </div>
+        <AlertDialog>
+            <AlertDialogTrigger asChild>
+                <Button variant="destructive" className="w-full mt-4" disabled={!password}>
+                    <UserXIcon /> Deactivate My Account
+                </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This is your final confirmation. Deactivating your account is permanent and cannot be undone. Are you sure you want to proceed?
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeactivate}>Yes, Delete Everything</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+        </>
+    )
+}
+
 const SettingsPanel = () => {
     return (
         <Tabs defaultValue="address" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="address">Manage Address</TabsTrigger>
                 <TabsTrigger value="password">Change Password</TabsTrigger>
+                <TabsTrigger value="deactivate" className="text-red-400">Deactivate</TabsTrigger>
             </TabsList>
             <TabsContent value="address" className="mt-6">
                 <ManageAddressPanel />
             </TabsContent>
             <TabsContent value="password" className="mt-6">
                 <ChangePasswordPanel />
+            </TabsContent>
+            <TabsContent value="deactivate" className="mt-6">
+                <DeactivateAccountPanel />
             </TabsContent>
         </Tabs>
     )

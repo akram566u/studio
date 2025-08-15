@@ -68,6 +68,7 @@ export const initialAppSettings: AppSettings = {
             message: 'Please wait for the {durationDays}-day holding period to end. {countdown} remaining',
             durationDays: 45,
             isActive: true,
+            applicableLevels: [],
         },
         {
             id: 'withdrawal_monthly_1',
@@ -75,6 +76,7 @@ export const initialAppSettings: AppSettings = {
             type: 'withdrawal_monthly_limit',
             message: 'You have reached your monthly withdrawal limit of {limit}. Please try again next month.',
             isActive: true,
+            applicableLevels: [],
         },
         {
             id: 'withdrawal_initial_deposit_1',
@@ -83,6 +85,7 @@ export const initialAppSettings: AppSettings = {
             message: 'You can only withdraw your earnings. To withdraw a portion of your principal, please contact support. You can currently withdraw up to {max_amount} USDT.',
             withdrawalPercentage: 0,
             isActive: true,
+            applicableLevels: [],
         }
     ],
 
@@ -124,8 +127,7 @@ export const initialAppSettings: AppSettings = {
         { id: 'p4', title: 'Transaction History', componentKey: 'TransactionHistory', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p5', title: 'Recharge USDT (BEP-20)', componentKey: 'Recharge', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p6', title: 'Withdraw USDT', componentKey: 'Withdraw', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p7', title: 'Manage Withdrawal Address', componentKey: 'ManageAddress', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p10', title: 'Change Password', componentKey: 'ChangePassword', isVisible: true, isDeletable: false, isEditable: true },
+        { id: 'p16', title: 'Settings', componentKey: 'Settings', isVisible: true, isDeletable: false, isEditable: false },
         { id: 'p8', title: 'Your Referral Network', componentKey: 'ReferralNetwork', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p15', title: 'Your Team', componentKey: 'Team', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p9', title: 'Staking Level Details', componentKey: 'LevelDetails', isVisible: true, isDeletable: false, isEditable: true },

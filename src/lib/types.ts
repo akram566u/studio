@@ -193,6 +193,7 @@ export interface RestrictionMessage {
   durationDays?: number; // Optional duration for time-based restrictions
   withdrawalPercentage?: number; // Optional percentage for initial deposit withdrawal
   isActive: boolean;
+  applicableLevels?: number[]; // Optional: which levels this restriction applies to. Empty means all levels.
 }
 
 export interface ReferralBonusSettings {
@@ -232,7 +233,7 @@ export interface StartScreenSettings {
 export interface DashboardPanel {
   id: string;
   title: string;
-  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices' | 'BoosterStore' | 'StakingPools' | 'StakingVaults' | 'Team';
+  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices' | 'BoosterStore' | 'StakingPools' | 'StakingVaults' | 'Team' | 'Settings';
   isVisible: boolean;
   isDeletable: boolean;
   isEditable: boolean;

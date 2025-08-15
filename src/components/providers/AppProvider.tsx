@@ -3,9 +3,9 @@
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe, runTransaction } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe, runTransaction, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification } from "firebase/auth";
+import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification, deleteUser } from "firebase/auth";
 import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
@@ -119,6 +119,8 @@ export interface AppContextType {
   markAnnouncementAsRead: (announcementId: string) => void;
   sendMessageToUser: (userId: string, content: string) => Promise<UserForAdmin | null>;
   sendMessageToAdmin: (content: string) => void;
+  deactivateCurrentUserAccount: (password: string) => Promise<void>;
+  deactivateUserAccount: (userId: string) => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -667,7 +669,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return "You already have a pending withdrawal request.";
     }
     
-    const initialDepositMsg = restrictionMessages.find(m => m.type === 'withdrawal_initial_deposit' && m.isActive);
+    // Check applicable restrictions for the user's level
+    const applicableRestrictions = restrictionMessages.filter(m => m.isActive && (!m.applicableLevels || m.applicableLevels.length === 0 || m.applicableLevels.includes(currentUser.level)));
+    
+    const initialDepositMsg = applicableRestrictions.find(m => m.type === 'withdrawal_initial_deposit');
     if(initialDepositMsg) {
         const principal = currentUser.totalDeposits || 0;
         const earnings = currentUser.balance - principal;
@@ -679,7 +684,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
     }
 
-    const holdMsg = restrictionMessages.find(m => m.type === 'withdrawal_hold' && m.isActive);
+    const holdMsg = applicableRestrictions.find(m => m.type === 'withdrawal_hold');
     if (holdMsg && (holdMsg.durationDays || 0) > 0 && currentUser.lastWithdrawalTime) {
       const holdDuration = (holdMsg.durationDays || 0) * 24 * 60 * 60 * 1000;
       if (Date.now() - currentUser.lastWithdrawalTime < holdDuration) {
@@ -687,7 +692,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
     }
     
-    const monthlyLimitMsg = restrictionMessages.find(m => m.type === 'withdrawal_monthly_limit' && m.isActive);
+    const monthlyLimitMsg = applicableRestrictions.find(m => m.type === 'withdrawal_monthly_limit');
     if (monthlyLimitMsg) {
         const monthlyWithdrawalsAllowed = currentLevelDetails?.monthlyWithdrawals || 0;
         const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
@@ -865,6 +870,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             isActive: true,
             durationDays: 0,
             withdrawalPercentage: 0,
+            applicableLevels: [],
         };
         updateFirestoreSettings({ restrictionMessages: [...restrictionMessages, newRestriction] });
         toast({ title: 'New restriction added', description: 'Please edit and save the details.'});
@@ -1809,6 +1815,45 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: "Message Sent!", description: "The admin has been notified." });
     };
 
+    const deactivateUserAccount = async (userId: string) => {
+        try {
+            await deleteDoc(doc(db, "users", userId));
+            // Note: Deleting the Firebase Auth user cannot be done securely from the client-side
+            // without re-authentication. A Cloud Function would be needed for a complete wipe.
+            toast({ title: 'User Deactivated', description: 'User data has been deleted from Firestore.' });
+        } catch (error) {
+            console.error("Error deactivating user:", error);
+            toast({ title: 'Error', description: 'Could not deactivate user.', variant: 'destructive'});
+        }
+    };
+
+    const deactivateCurrentUserAccount = async (password: string) => {
+        const user = auth.currentUser;
+        if (!user || !user.email) {
+            toast({ title: "Error", description: "You are not logged in.", variant: "destructive" });
+            return;
+        }
+
+        try {
+            const credential = EmailAuthProvider.credential(user.email, password);
+            await reauthenticateWithCredential(user, credential);
+            
+            // Re-authenticated, now delete data and then user
+            await deleteDoc(doc(db, "users", user.uid));
+            await deleteUser(user);
+
+            toast({ title: 'Account Deactivated', description: 'Your account has been permanently deleted.' });
+            // The onAuthStateChanged listener will handle the sign-out UI update.
+        } catch (error: any) {
+            console.error("Error during account deactivation:", error);
+            if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                toast({ title: 'Error', description: 'Incorrect password. Deactivation failed.', variant: 'destructive'});
+            } else {
+                toast({ title: 'Error', description: 'An error occurred. Please try again.', variant: 'destructive'});
+            }
+        }
+    };
+
 
   if (loading) {
     return (
@@ -1917,6 +1962,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     markAnnouncementAsRead,
     sendMessageToUser,
     sendMessageToAdmin,
+    deactivateCurrentUserAccount,
+    deactivateUserAccount,
   };
 
   return (
