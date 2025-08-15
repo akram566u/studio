@@ -1,3 +1,4 @@
+
 /**
  * @fileOverview An AI agent that analyzes a user's team structure and performance.
  *
@@ -61,7 +62,6 @@ async function getDownline(userId: string): Promise<{ level1: User[], level2: Us
     return downline;
 }
 
-// Define the Genkit Flow
 const analyzeTeamFlow = ai.defineFlow(
   {
     name: 'analyzeTeamFlow',
