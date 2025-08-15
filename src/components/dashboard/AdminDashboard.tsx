@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext, useState, useEffect, useRef } from 'react';
 import { AppContext, UserForAdmin } from '@/components/providers/AppProvider';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -30,8 +30,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle } from 'lucide-react';
-import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput } from '@/lib/types';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle, MessageSquare } from 'lucide-react';
+import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { analyzeTeam } from '@/ai/flows/analyze-team-flow';
 
@@ -425,6 +425,56 @@ const TeamAnalysisDialog = ({ open, onOpenChange, userId }: { open: boolean, onO
     );
 };
 
+const ChatPanel = ({ user, onSendMessage }: { user: UserForAdmin, onSendMessage: (message: string) => void }) => {
+    const [newMessage, setNewMessage] = useState('');
+    const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (scrollAreaRef.current) {
+            scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
+        }
+    }, [user.messages]);
+
+    const handleSend = () => {
+        if (newMessage.trim()) {
+            onSendMessage(newMessage.trim());
+            setNewMessage('');
+        }
+    };
+
+    return (
+        <Card className="mt-4 card-gradient-indigo-fuchsia">
+            <CardHeader>
+                <CardTitle className="text-xl text-purple-300 flex items-center gap-2"><MessageSquare/> Chat with {user.email}</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div ref={scrollAreaRef} className="h-64 overflow-y-auto custom-scrollbar bg-black/20 rounded-lg p-4 space-y-4 mb-4">
+                    {(user.messages || []).map((msg: Message) => (
+                        <div key={msg.id} className={cn("flex flex-col", msg.sender === 'admin' ? 'items-end' : 'items-start')}>
+                            <div className={cn("rounded-lg px-4 py-2 max-w-sm", msg.sender === 'admin' ? 'bg-blue-800 text-white' : 'bg-gray-700 text-gray-200')}>
+                                <p>{msg.content}</p>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">{format(msg.timestamp, 'Pp')}</p>
+                        </div>
+                    ))}
+                    {(user.messages || []).length === 0 && (
+                        <p className="text-center text-gray-400">No messages yet. Start the conversation!</p>
+                    )}
+                </div>
+                <div className="flex gap-2">
+                    <Textarea 
+                        placeholder="Type your message..."
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }}}
+                    />
+                    <Button onClick={handleSend}><Send/></Button>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
 const UserManagementPanel = () => {
     const context = useContext(AppContext);
     const [searchQuery, setSearchQuery] = useState('');
@@ -450,7 +500,7 @@ const UserManagementPanel = () => {
     }, [searchedUser]);
 
     if (!context) return null;
-    const { findUser, allUsersForAdmin, adminUpdateUserEmail, adminUpdateUserWithdrawalAddress, adjustUserBalance, adjustUserLevel, forgotPassword, adjustUserDirectReferrals, sendAnnouncement } = context;
+    const { findUser, allUsersForAdmin, adminUpdateUserEmail, adminUpdateUserWithdrawalAddress, adjustUserBalance, adjustUserLevel, forgotPassword, adjustUserDirectReferrals, sendAnnouncement, sendMessageToUser } = context;
 
     const handleUserSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -504,6 +554,14 @@ const UserManagementPanel = () => {
         }
         sendAnnouncement(searchedUser.id, announcement);
         setAnnouncement(''); // Clear after sending
+    };
+
+    const handleSendMessage = async (message: string) => {
+        if (!searchedUser) return;
+        const updatedUser = await sendMessageToUser(searchedUser.id, message);
+        if (updatedUser) {
+            setSearchedUser(updatedUser);
+        }
     };
 
     return (
@@ -568,14 +626,14 @@ const UserManagementPanel = () => {
                         </div>
                         <hr className="border-white/10" />
                         <div className="space-y-2">
-                            <Label htmlFor="announcement-text">Personalized Announcement</Label>
+                            <Label htmlFor="announcement-text">Personalized Announcement (One-way)</Label>
                             <Textarea 
                                 id="announcement-text" 
                                 placeholder={`Write a specific message for ${searchedUser.email}...`}
                                 value={announcement}
                                 onChange={e => setAnnouncement(e.target.value)}
                             />
-                            <Button onClick={handleSendAnnouncement}><Send className="mr-2"/> Send Message</Button>
+                            <Button onClick={handleSendAnnouncement}><Send className="mr-2"/> Send Announcement</Button>
                         </div>
                         <hr className="border-white/10" />
                         <div className="flex flex-col md:flex-row gap-2">
@@ -586,6 +644,7 @@ const UserManagementPanel = () => {
                                 <BrainCircuit /> Analyze Team Performance
                             </Button>
                         </div>
+                        <ChatPanel user={searchedUser} onSendMessage={handleSendMessage} />
                    </div>
                 )}
                 {!searchedUser && (
@@ -1522,5 +1581,3 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: AdminModalView, labe
 }
 
 export default AdminDashboard;
-
-    

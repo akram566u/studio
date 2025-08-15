@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext, useState, useEffect, useRef } from 'react';
 import { AppContext } from '@/components/providers/AppProvider';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -31,12 +31,14 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format, formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, User } from '@/lib/types';
+import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, User, Message } from '@/lib/types';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Progress } from '../ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from '@/lib/utils';
+import { Textarea } from '../ui/textarea';
 
 
 // Individual Panel Components (for use in Dialogs)
@@ -925,6 +927,56 @@ const TeamPanel = () => {
     );
 };
 
+const InboxPanel = () => {
+    const context = useContext(AppContext);
+    const [newMessage, setNewMessage] = useState('');
+    const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (scrollAreaRef.current) {
+            scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
+        }
+    }, [context?.currentUser?.messages]);
+
+    if (!context || !context.currentUser) return null;
+    const { currentUser, sendMessageToAdmin } = context;
+
+    const handleSend = () => {
+        if (newMessage.trim()) {
+            sendMessageToAdmin(newMessage.trim());
+            setNewMessage('');
+        }
+    };
+
+    return (
+        <>
+            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Inbox</h3>
+            <div ref={scrollAreaRef} className="h-96 overflow-y-auto custom-scrollbar bg-black/20 rounded-lg p-4 space-y-4 mb-4">
+                 {(currentUser.messages || []).map((msg: Message) => (
+                    <div key={msg.id} className={cn("flex flex-col", msg.sender === 'user' ? 'items-end' : 'items-start')}>
+                        <div className={cn("rounded-lg px-4 py-2 max-w-sm", msg.sender === 'user' ? 'bg-blue-800 text-white' : 'bg-gray-700 text-gray-200')}>
+                            <p>{msg.content}</p>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">{format(msg.timestamp, 'Pp')}</p>
+                    </div>
+                ))}
+                {(currentUser.messages || []).length === 0 && (
+                    <p className="text-center text-gray-400">No messages yet. Send a message to the admin below.</p>
+                )}
+            </div>
+            <div className="flex gap-2">
+                <Textarea
+                    placeholder="Type your message to the admin..."
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }}}
+                />
+                <Button onClick={handleSend}><Send/></Button>
+            </div>
+        </>
+    );
+}
+
 const CustomPanel = ({ panel }: { panel: DashboardPanel }) => (
     <>
         <h3 className="text-2xl font-semibold mb-4 text-blue-300">{panel.title}</h3>
@@ -945,7 +997,8 @@ type ModalView =
     | 'boosters'
     | 'pools'
     | 'vaults'
-    | 'team';
+    | 'team'
+    | 'inbox';
 
 // Main Dashboard Component
 const UserDashboard = () => {
@@ -998,6 +1051,7 @@ const UserDashboard = () => {
         case 'boosters': return <BoosterStorePanel />;
         case 'pools': return <StakingPoolsPanel />;
         case 'vaults': return <StakingVaultsPanel />;
+        case 'inbox': return <InboxPanel />;
         default: return null;
     }
   };
@@ -1016,6 +1070,7 @@ const UserDashboard = () => {
         boosters: 'Booster Store',
         pools: 'Staking Pools',
         vaults: 'Staking Vaults',
+        inbox: 'Inbox',
     };
     return titles[modalView];
   };
@@ -1024,6 +1079,7 @@ const UserDashboard = () => {
     { view: 'recharge', label: 'Recharge', icon: Briefcase },
     { view: 'withdraw', label: 'Withdraw', icon: Send },
     { view: 'history', label: 'History', icon: BarChart },
+    { view: 'inbox', label: 'Inbox', icon: MessageSquare },
     { view: 'referrals', label: 'Referrals', icon: UserCheck },
     { view: 'team', label: 'Team', icon: Users },
     { view: 'levels', label: 'Levels', icon: Layers },
@@ -1164,5 +1220,3 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
-
-    

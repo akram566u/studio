@@ -83,6 +83,14 @@ export interface UserAnnouncement {
   priority: number; // e.g., 1 for high, 10 for low
 }
 
+export interface Message {
+  id: string;
+  sender: 'admin' | 'user';
+  content: string;
+  timestamp: number;
+  read: boolean;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -109,6 +117,7 @@ export interface User {
   claimedTeamSizeRewards?: string[]; // Array of claimed reward IDs
   claimedTeamBusinessRewards?: string[]; // Array of claimed reward IDs
   announcements?: UserAnnouncement[];
+  messages?: Message[];
 }
 
 export interface Level {
@@ -304,5 +313,3 @@ export const PrioritizeMessageOutputSchema = z.object({
     announcementId: z.string().optional().describe("The ID of the admin announcement, if applicable."),
 });
 export type PrioritizeMessageOutput = z.infer<typeof PrioritizeMessageOutputSchema>;
-
-    

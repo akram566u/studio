@@ -6,7 +6,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe, runTransaction } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
@@ -18,7 +18,7 @@ import { prioritizeMessage } from '@/ai/flows/prioritize-message-flow';
 
 
 // A version of the User type that is safe to expose to the admin panel
-export type UserForAdmin = Pick<User, 'id' | 'email' | 'balance' | 'level' | 'primaryWithdrawalAddress' | 'directReferrals'>;
+export type UserForAdmin = Pick<User, 'id' | 'email' | 'balance' | 'level' | 'primaryWithdrawalAddress' | 'directReferrals' | 'messages'>;
 
 export interface AppContextType {
   currentUser: User | null;
@@ -117,6 +117,8 @@ export interface AppContextType {
   sendAnnouncement: (userId: string, message: string) => void;
   getPrioritizedMessage: () => Promise<PrioritizeMessageOutput | null>;
   markAnnouncementAsRead: (announcementId: string) => void;
+  sendMessageToUser: (userId: string, content: string) => Promise<UserForAdmin | null>;
+  sendMessageToAdmin: (content: string) => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -396,6 +398,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             claimedTeamSizeRewards: [],
             claimedTeamBusinessRewards: [],
             announcements: [],
+            messages: [],
         };
 
         const batch = writeBatch(db);
@@ -737,6 +740,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           level: userData.level,
           primaryWithdrawalAddress: userData.primaryWithdrawalAddress,
           directReferrals: userData.directReferrals,
+          messages: userData.messages || [],
       };
   };
 
@@ -1169,6 +1173,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             level: u.level,
             primaryWithdrawalAddress: u.primaryWithdrawalAddress,
             directReferrals: u.directReferrals,
+            messages: u.messages || [],
         }));
         setAllUsersForAdmin(allUsersAdminView);
         
@@ -1183,6 +1188,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     level: u.level,
                     primaryWithdrawalAddress: u.primaryWithdrawalAddress,
                     directReferrals: u.directReferrals,
+                    messages: u.messages || [],
                 })
             }
         });
@@ -1768,6 +1774,41 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         await updateDoc(userRef, { announcements: updatedAnnouncements });
     };
 
+    const sendMessageToUser = async (userId: string, content: string): Promise<UserForAdmin | null> => {
+        const userRef = doc(db, "users", userId);
+        const newMessage: Message = {
+            id: `msg_${Date.now()}`,
+            sender: 'admin',
+            content,
+            timestamp: Date.now(),
+            read: false,
+        };
+        await updateDoc(userRef, {
+            messages: arrayUnion(newMessage)
+        });
+        toast({ title: "Message Sent!" });
+        
+        const userDoc = await getDoc(userRef);
+        if(!userDoc.exists()) return null;
+        return findUser(userDoc.data().email);
+    }
+    
+    const sendMessageToAdmin = async (content: string) => {
+        if (!currentUser) return;
+        const userRef = doc(db, "users", currentUser.id);
+        const newMessage: Message = {
+            id: `msg_${Date.now()}`,
+            sender: 'user',
+            content,
+            timestamp: Date.now(),
+            read: false, // Admin will read this
+        };
+        await updateDoc(userRef, {
+            messages: arrayUnion(newMessage)
+        });
+        toast({ title: "Message Sent!", description: "The admin has been notified." });
+    };
+
 
   if (loading) {
     return (
@@ -1874,6 +1915,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     sendAnnouncement,
     getPrioritizedMessage,
     markAnnouncementAsRead,
+    sendMessageToUser,
+    sendMessageToAdmin,
   };
 
   return (
@@ -1897,5 +1940,3 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
-
-    
