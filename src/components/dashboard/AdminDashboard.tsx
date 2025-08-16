@@ -31,7 +31,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
 import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle, MessageSquare, UserX as UserXIcon } from 'lucide-react';
-import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, ScreenLayoutSettings, FABSettings } from '@/lib/types';
+import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, ScreenLayoutSettings, FABSettings, DailyQuest, QuestType, LoginStreakReward, Leaderboard, LeaderboardCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { analyzeTeam } from '@/ai/flows/analyze-team-flow';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -48,7 +48,9 @@ type AdminModalView =
     | 'booster_analytics'
     | 'pools'
     | 'vaults'
-    | 'view_examples';
+    | 'view_examples'
+    | 'daily_engagement'
+    | 'leaderboards';
 
 // Main Dashboard Component
 const AdminDashboard = () => {
@@ -93,6 +95,8 @@ const AdminDashboard = () => {
         case 'pools': return <PoolsPanel />;
         case 'vaults': return <VaultsPanel />;
         case 'view_examples': return <RequestViewExamples />;
+        case 'daily_engagement': return <DailyEngagementPanel />;
+        case 'leaderboards': return <LeaderboardsPanel />;
         default: return null;
     }
   };
@@ -110,6 +114,8 @@ const AdminDashboard = () => {
         pools: 'Manage Staking Pools',
         vaults: 'Manage Staking Vaults',
         view_examples: 'Request View Examples',
+        daily_engagement: 'Daily Engagement Settings',
+        leaderboards: 'Leaderboard Management',
     };
     return titles[view];
   }
@@ -121,6 +127,8 @@ const AdminDashboard = () => {
       { view: 'system', label: 'System Settings', icon: Settings },
       { view: 'panels', label: 'User Panels', icon: PanelTop },
       { view: 'notices', label: 'Notices', icon: Megaphone },
+      { view: 'daily_engagement', label: 'Daily Engagement', icon: Star },
+      { view: 'leaderboards', label: 'Leaderboards', icon: Trophy },
       { view: 'boosters', label: 'Boosters', icon: Gift },
       { view: 'booster_analytics', label: 'Booster Analytics', icon: BarChart },
       { view: 'pools', label: 'Pools', icon: Layers },
@@ -1130,7 +1138,7 @@ const SystemSettingsPanel = () => {
     const [localReferralBonusSettings, setLocalReferralBonusSettings] = useState<ReferralBonusSettings>({ isEnabled: true, bonusAmount: 5, minDeposit: 100 });
     const [localRechargeAddresses, setLocalRechargeAddresses] = useState<RechargeAddress[]>([]);
     const [localAppLinks, setLocalAppLinks] = useState<AppLinks>({ downloadUrl: '', supportUrl: '' });
-    const [localTeamCommissionSettings, setLocalTeamCommissionSettings] = useState<TeamCommissionSettings>({ isEnabled: false, minDirectReferrals: 3, rates: { level1: 0, level2: 0, level3: 0 } });
+    const [localTeamCommissionSettings, setLocalTeamCommissionSettings] = useState<TeamCommissionSettings>({ isEnabled: false, rates: { level1: 0, level2: 0, level3: 0 } });
     const [localTeamSizeRewards, setLocalTeamSizeRewards] = useState<TeamSizeReward[]>([]);
     const [localTeamBusinessRewards, setLocalTeamBusinessRewards] = useState<TeamBusinessReward[]>([]);
     
@@ -1185,10 +1193,10 @@ const SystemSettingsPanel = () => {
     
     const handleTeamCommissionChange = (field: keyof TeamCommissionSettings | keyof TeamCommissionSettings['rates'], value: any) => {
         setLocalTeamCommissionSettings(prev => {
-            if (field === 'isEnabled' || field === 'minDirectReferrals') {
+            if (field === 'isEnabled') {
                 return { ...prev, [field]: value };
             } else {
-                return { ...prev, rates: { ...prev.rates, [field as keyof TeamCommissionSettings['rates']]: value }};
+                return { ...prev, rates: { ...prev.rates, [field as keyof TeamCommissionSettings['rates']]: Number(value) / 100 }};
             }
         });
     };
@@ -1301,14 +1309,10 @@ const SystemSettingsPanel = () => {
                     <div className='p-4 rounded-lg bg-black/20'>
                         <div className="flex items-center justify-between"><Label htmlFor="team-commission-enabled" className="text-lg">Enable Team Commissions</Label><Switch id="team-commission-enabled" checked={localTeamCommissionSettings.isEnabled} onCheckedChange={checked => handleTeamCommissionChange('isEnabled', checked)} /></div>
                         
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-                            <div className="md:col-span-1">
-                                <Label htmlFor="min-referrals">Min Direct Referrals</Label>
-                                <Input id="min-referrals" type="number" value={localTeamCommissionSettings.minDirectReferrals} onChange={e => handleTeamCommissionChange('minDirectReferrals', Number(e.target.value))} disabled={!localTeamCommissionSettings.isEnabled} />
-                            </div>
-                            <div><Label htmlFor="l1-rate">L1 Rate (%)</Label><Input id="l1-rate" type="number" value={localTeamCommissionSettings.rates.level1 * 100} onChange={e => handleTeamCommissionChange('level1', Number(e.target.value) / 100)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
-                            <div><Label htmlFor="l2-rate">L2 Rate (%)</Label><Input id="l2-rate" type="number" value={localTeamCommissionSettings.rates.level2 * 100} onChange={e => handleTeamCommissionChange('level2', Number(e.target.value) / 100)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
-                            <div><Label htmlFor="l3-rate">L3 Rate (%)</Label><Input id="l3-rate" type="number" value={localTeamCommissionSettings.rates.level3 * 100} onChange={e => handleTeamCommissionChange('level3', Number(e.target.value) / 100)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                            <div><Label htmlFor="l1-rate">L1 Rate (%)</Label><Input id="l1-rate" type="number" value={localTeamCommissionSettings.rates.level1 * 100} onChange={e => handleTeamCommissionChange('level1', e.target.value)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
+                            <div><Label htmlFor="l2-rate">L2 Rate (%)</Label><Input id="l2-rate" type="number" value={localTeamCommissionSettings.rates.level2 * 100} onChange={e => handleTeamCommissionChange('level2', e.target.value)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
+                            <div><Label htmlFor="l3-rate">L3 Rate (%)</Label><Input id="l3-rate" type="number" value={localTeamCommissionSettings.rates.level3 * 100} onChange={e => handleTeamCommissionChange('level3', e.target.value)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
                         </div>
 
                         <Button onClick={handleSaveTeamCommissionSettings} className="mt-4">Save Commission Settings</Button>
@@ -1797,6 +1801,129 @@ const VaultsPanel = () => {
     );
 };
 
+const DailyEngagementPanel = () => {
+    const context = useContext(AppContext);
+    const [localQuests, setLocalQuests] = useState<DailyQuest[]>([]);
+    const [localStreaks, setLocalStreaks] = useState<LoginStreakReward[]>([]);
+
+    useEffect(() => {
+        if (context?.dailyEngagement) {
+            setLocalQuests(context.dailyEngagement.quests);
+            setLocalStreaks(context.dailyEngagement.loginStreakRewards);
+        }
+    }, [context?.dailyEngagement]);
+
+    if (!context) return null;
+    const { updateDailyEngagement } = context;
+
+    const handleQuestChange = (id: string, field: keyof DailyQuest, value: any) => {
+        setLocalQuests(quests => quests.map(q => q.id === id ? { ...q, [field]: value } : q));
+    };
+
+    const handleStreakChange = (day: number, value: number) => {
+        setLocalStreaks(streaks => streaks.map(s => s.day === day ? { ...s, rewardAmount: value } : s));
+    };
+
+    const handleSaveChanges = () => {
+        updateDailyEngagement({ quests: localQuests, loginStreakRewards: localStreaks });
+    };
+
+    const handleAddQuest = () => {
+        const newQuest: DailyQuest = {
+            id: `q_${Date.now()}`,
+            type: 'login',
+            title: 'New Quest',
+            description: '',
+            targetValue: 1,
+            rewardAmount: 0.1,
+            isActive: false,
+        };
+        setLocalQuests(q => [...q, newQuest]);
+    };
+    
+    const handleDeleteQuest = (id: string) => {
+        setLocalQuests(q => q.filter(quest => quest.id !== id));
+    };
+
+    return (
+        <div className="space-y-6">
+            <Card className="card-gradient-blue-purple p-6">
+                <CardHeader><CardTitle>Daily Quests</CardTitle></CardHeader>
+                <CardContent>
+                    <ScrollArea className="h-72 custom-scrollbar pr-2">
+                        <div className="space-y-4">
+                            {localQuests.map(quest => (
+                                <div key={quest.id} className="bg-black/20 p-4 rounded-lg space-y-3">
+                                    <div className="flex justify-between items-center">
+                                        <Label htmlFor={`quest-active-${quest.id}`} className="flex items-center gap-2 text-base font-bold text-yellow-300"><Switch id={`quest-active-${quest.id}`} checked={quest.isActive} onCheckedChange={c => handleQuestChange(quest.id, 'isActive', c)} />Active</Label>
+                                        <Button variant="destructive" size="icon" onClick={() => handleDeleteQuest(quest.id)}><Trash2 /></Button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div><Label>Title</Label><Input value={quest.title} onChange={e => handleQuestChange(quest.id, 'title', e.target.value)} /></div>
+                                        <div><Label>Type</Label>
+                                            <Select value={quest.type} onValueChange={(v: QuestType) => handleQuestChange(quest.id, 'type', v)}>
+                                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="login">Daily Login</SelectItem>
+                                                    <SelectItem value="deposit_amount">Deposit Amount</SelectItem>
+                                                    <SelectItem value="refer_users">Refer Users</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="col-span-2"><Label>Description</Label><Textarea value={quest.description} onChange={e => handleQuestChange(quest.id, 'description', e.target.value)} /></div>
+                                        <div><Label>Target Value</Label><Input type="number" value={quest.targetValue} onChange={e => handleQuestChange(quest.id, 'targetValue', Number(e.target.value))} /></div>
+                                        <div><Label>Reward (USDT)</Label><Input type="number" value={quest.rewardAmount} onChange={e => handleQuestChange(quest.id, 'rewardAmount', Number(e.target.value))} /></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </ScrollArea>
+                    <Button onClick={handleAddQuest} variant="secondary" className="mt-4">Add Quest</Button>
+                </CardContent>
+            </Card>
+            <Card className="card-gradient-green-cyan p-6">
+                <CardHeader><CardTitle>Login Streak Rewards</CardTitle></CardHeader>
+                <CardContent>
+                    <div className="space-y-2">
+                        {localStreaks.map(streak => (
+                            <div key={streak.day} className="flex items-center gap-4">
+                                <Label className="w-20">Day {streak.day}</Label>
+                                <Input type="number" value={streak.rewardAmount} onChange={e => handleStreakChange(streak.day, Number(e.target.value))} />
+                                <span>USDT</span>
+                            </div>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
+            <Button onClick={handleSaveChanges} className="w-full">Save All Engagement Settings</Button>
+        </div>
+    );
+};
+
+const LeaderboardsPanel = () => {
+    const context = useContext(AppContext);
+    if (!context) return null;
+    const { leaderboards, updateLeaderboardSettings } = context;
+
+    const handleToggle = (category: LeaderboardCategory, isEnabled: boolean) => {
+        updateLeaderboardSettings(category, { isEnabled });
+    };
+    
+    return (
+        <Card className="card-gradient-yellow-pink p-6">
+            <CardHeader><CardTitle>Leaderboard Management</CardTitle><CardDescription>Enable or disable leaderboards. Rankings update periodically.</CardDescription></CardHeader>
+            <CardContent className="space-y-4">
+                {leaderboards.map(lb => (
+                     <div key={lb.category} className="flex items-center justify-between bg-black/20 p-4 rounded-lg">
+                        <Label htmlFor={`lb-enabled-${lb.category}`} className="text-lg">{lb.title}</Label>
+                        <Switch id={`lb-enabled-${lb.category}`} checked={lb.isEnabled} onCheckedChange={checked => handleToggle(lb.category, checked)} />
+                    </div>
+                ))}
+            </CardContent>
+        </Card>
+    );
+};
+
 
 const FloatingMenu = ({ items, onSelect }: { items: { view: AdminModalView, label: string, icon: React.ElementType }[], onSelect: (view: AdminModalView) => void }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -1861,4 +1988,6 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: AdminModalView, labe
 export default AdminDashboard;
 
     
+    
+
     

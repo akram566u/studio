@@ -8,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent, MessageSquare, UserX as UserXIcon, Loader2 } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent, MessageSquare, UserX as UserXIcon, Loader2, CalendarCheck, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -32,7 +32,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format, formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, User, Message } from '@/lib/types';
+import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, User, Message, DailyQuest, UserDailyQuest, Leaderboard } from '@/lib/types';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -189,6 +189,8 @@ const TransactionHistoryPanel = () => {
             case 'pool_payout': return <Star className="text-yellow-300" />;
             case 'vault_investment': return <Lock className="text-indigo-400" />;
             case 'vault_payout': return <PiggyBank className="text-pink-400" />;
+            case 'quest_reward': return <ShieldCheck className="text-green-500" />;
+            case 'login_reward': return <CalendarCheck className="text-blue-500" />;
             default: return <CheckCircle className="text-gray-400" />;
         }
     }
@@ -1106,6 +1108,110 @@ const InboxPanel = () => {
     );
 }
 
+const DailyEngagementPanel = () => {
+    const context = useContext(AppContext);
+    if (!context || !context.currentUser) return null;
+    const { dailyEngagement, currentUser } = context;
+
+    return (
+        <>
+            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Daily Engagement</h3>
+            <Tabs defaultValue="quests">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="quests">Daily Quests</TabsTrigger>
+                    <TabsTrigger value="streaks">Login Streak</TabsTrigger>
+                </TabsList>
+                <TabsContent value="quests" className="mt-4">
+                    <div className="space-y-3">
+                        {dailyEngagement.quests.filter(q => q.isActive).map(quest => {
+                            const userQuest = currentUser.dailyQuests?.find(uq => uq.questId === quest.id);
+                            const progress = userQuest ? (userQuest.progress / quest.targetValue) * 100 : 0;
+                            const isCompleted = userQuest?.isCompleted || false;
+                            return (
+                                <Card key={quest.id} className="p-4 bg-black/20">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <p className="font-bold text-lg text-amber-400">{quest.title}</p>
+                                            <p className="text-sm text-gray-400">{quest.description}</p>
+                                        </div>
+                                        <Badge variant={isCompleted ? "default" : "secondary"}>
+                                            {isCompleted ? <CheckCircle className="mr-1" /> : <Star className="mr-1" />}
+                                            {quest.rewardAmount} USDT
+                                        </Badge>
+                                    </div>
+                                    {!isCompleted && (
+                                        <div className="mt-2">
+                                            <Progress value={progress} />
+                                            <p className="text-xs text-right text-gray-400 mt-1">{userQuest?.progress || 0} / {quest.targetValue}</p>
+                                        </div>
+                                    )}
+                                </Card>
+                            )
+                        })}
+                    </div>
+                </TabsContent>
+                <TabsContent value="streaks" className="mt-4">
+                    <p className="text-center text-gray-300 mb-2">Current Login Streak:</p>
+                    <p className="text-center font-bold text-5xl text-purple-400 mb-4">{currentUser.loginStreak || 0} Days</p>
+                    <div className="space-y-2">
+                        {dailyEngagement.loginStreakRewards.map(reward => (
+                            <div key={reward.day} className={cn(
+                                "flex justify-between items-center p-2 rounded-md",
+                                (currentUser.loginStreak || 0) >= reward.day ? "bg-green-800/50" : "bg-black/20"
+                            )}>
+                                <p>Day {reward.day} Reward</p>
+                                <p>{reward.rewardAmount} USDT</p>
+                            </div>
+                        ))}
+                    </div>
+                </TabsContent>
+            </Tabs>
+        </>
+    );
+};
+
+const LeaderboardsPanel = () => {
+    const context = useContext(AppContext);
+    if (!context) return null;
+    const { leaderboards } = context;
+    const activeLeaderboards = leaderboards.filter(lb => lb.isEnabled);
+
+    return (
+        <>
+            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Leaderboards</h3>
+            <Tabs defaultValue={activeLeaderboards[0]?.category || ''}>
+                <TabsList>
+                    {activeLeaderboards.map(lb => (
+                        <TabsTrigger key={lb.category} value={lb.category}>{lb.title}</TabsTrigger>
+                    ))}
+                </TabsList>
+                {activeLeaderboards.map(lb => (
+                     <TabsContent key={lb.category} value={lb.category} className="mt-4">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Rank</TableHead>
+                                    <TableHead>User</TableHead>
+                                    <TableHead className="text-right">Value</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {lb.data.map((entry, index) => (
+                                    <TableRow key={entry.userId}>
+                                        <TableCell>{index + 1}</TableCell>
+                                        <TableCell>{entry.email}</TableCell>
+                                        <TableCell className="text-right">{entry.value.toLocaleString()}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                     </TabsContent>
+                ))}
+            </Tabs>
+        </>
+    );
+};
+
 const CustomPanel = ({ panel }: { panel: DashboardPanel }) => (
     <>
         <h3 className="text-2xl font-semibold mb-4 text-blue-300">{panel.title}</h3>
@@ -1128,7 +1234,10 @@ type ModalView =
     | 'vaults'
     | 'team'
     | 'inbox'
-    | 'team_layers';
+    | 'team_layers'
+    | 'daily_engagement'
+    | 'leaderboards';
+
 
 // Main Dashboard Component
 const UserDashboard = () => {
@@ -1193,6 +1302,8 @@ const UserDashboard = () => {
         case 'pools': return <StakingPoolsPanel />;
         case 'vaults': return <StakingVaultsPanel />;
         case 'inbox': return <InboxPanel />;
+        case 'daily_engagement': return <DailyEngagementPanel />;
+        case 'leaderboards': return <LeaderboardsPanel />;
         default: return null;
     }
   };
@@ -1213,6 +1324,8 @@ const UserDashboard = () => {
         pools: 'Staking Pools',
         vaults: 'Staking Vaults',
         inbox: 'Inbox',
+        daily_engagement: 'Daily Engagement',
+        leaderboards: 'Leaderboards',
     };
     return titles[modalView];
   };
@@ -1222,9 +1335,11 @@ const UserDashboard = () => {
     { view: 'withdraw', label: 'Withdraw', icon: Send },
     { view: 'history', label: 'History', icon: BarChart },
     { view: 'inbox', label: 'Inbox', icon: MessageSquare },
+    { view: 'daily_engagement', label: 'Daily', icon: Star },
     { view: 'referrals', label: 'Referrals', icon: UserCheck },
     { view: 'team', label: 'Team', icon: Users },
     { view: 'team_layers', label: 'Team Layers', icon: Layers },
+    { view: 'leaderboards', label: 'Leaderboards', icon: Trophy },
     { view: 'levels', label: 'Levels', icon: Layers },
     { view: 'vaults', label: 'Vaults', icon: PiggyBank },
     { view: 'boosters', label: 'Boosters', icon: Gift },
@@ -1364,3 +1479,4 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 
 export default UserDashboard;
 
+    

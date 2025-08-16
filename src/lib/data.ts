@@ -118,7 +118,6 @@ export const initialAppSettings: AppSettings = {
 
     teamCommissionSettings: {
         isEnabled: true,
-        minDirectReferrals: 3,
         rates: {
             level1: 0.10, // 10% of Level 1's interest earnings
             level2: 0.05, // 5%
@@ -146,6 +145,7 @@ export const initialAppSettings: AppSettings = {
         { id: 'p1', title: 'Your Staking Overview', componentKey: 'UserOverview', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p2', title: 'Your Staking Level', componentKey: 'StakingLevel', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p3', title: 'Daily Interest Credit', componentKey: 'InterestCredit', isVisible: true, isDeletable: false, isEditable: true },
+        { id: 'p18', title: 'Daily Engagement', componentKey: 'DailyEngagement', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p4', title: 'Transaction History', componentKey: 'TransactionHistory', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p5', title: 'Recharge USDT (BEP-20)', componentKey: 'Recharge', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p6', title: 'Withdraw USDT', componentKey: 'Withdraw', isVisible: true, isDeletable: false, isEditable: true },
@@ -153,6 +153,7 @@ export const initialAppSettings: AppSettings = {
         { id: 'p8', title: 'Your Referral Network', componentKey: 'ReferralNetwork', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p17', title: 'Team Layers', componentKey: 'TeamLayers', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p15', title: 'Your Team', componentKey: 'Team', isVisible: true, isDeletable: false, isEditable: true },
+        { id: 'p19', title: 'Leaderboards', componentKey: 'Leaderboards', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p9', title: 'Staking Level Details', componentKey: 'LevelDetails', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p11', title: 'Notices', componentKey: 'Notices', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p12', title: 'Booster Store', componentKey: 'BoosterStore', isVisible: true, isDeletable: false, isEditable: true },
@@ -180,6 +181,28 @@ export const initialAppSettings: AppSettings = {
         { id: 'sv_2', name: '30-Day Marathon', termDays: 30, interestRate: 0.15, minInvestment: 100, maxInvestment: 5000, totalInvested: 0, totalInvestors: 0, isActive: true },
     ],
 
+    dailyEngagement: {
+        quests: [
+            { id: 'q1', type: 'login', title: 'Daily Login', description: 'Log in to your account.', targetValue: 1, rewardAmount: 0.1, isActive: true },
+            { id: 'q2', type: 'deposit_amount', title: 'Stake USDT', description: 'Make a new deposit of any amount.', targetValue: 1, rewardAmount: 0.5, isActive: true },
+        ],
+        loginStreakRewards: [
+            { day: 1, rewardAmount: 0.1 },
+            { day: 2, rewardAmount: 0.2 },
+            { day: 3, rewardAmount: 0.3 },
+            { day: 4, rewardAmount: 0.4 },
+            { day: 5, rewardAmount: 0.5 },
+            { day: 6, rewardAmount: 0.6 },
+            { day: 7, rewardAmount: 1.0 },
+        ]
+    },
+
+    leaderboards: [
+        { category: 'top_earners', title: 'Top Earners (Weekly)', data: [], lastUpdated: 0, isEnabled: true },
+        { category: 'top_recruiters', title: 'Top Recruiters (Weekly)', data: [], lastUpdated: 0, isEnabled: true },
+        { category: 'highest_balance', title: 'Highest Balance', data: [], lastUpdated: 0, isEnabled: true },
+    ],
+
     active3DTheme: 'FloatingCrystals',
 
     themeColors: {
@@ -187,3 +210,5 @@ export const initialAppSettings: AppSettings = {
         accent: '#7c3aed',
     }
 };
+
+    

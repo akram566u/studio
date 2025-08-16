@@ -40,7 +40,7 @@ export interface AppLinks {
     supportUrl: string;
 }
 
-export type TransactionType = 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created' | 'info' | 'booster_purchase' | 'pool_join' | 'pool_payout' | 'vault_investment' | 'vault_payout' | 'team_commission' | 'team_size_reward' | 'team_business_reward';
+export type TransactionType = 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created' | 'info' | 'booster_purchase' | 'pool_join' | 'pool_payout' | 'vault_investment' | 'vault_payout' | 'team_commission' | 'team_size_reward' | 'team_business_reward' | 'quest_reward' | 'login_reward';
 
 export interface Transaction {
   id: string;
@@ -101,6 +101,12 @@ export interface Message {
   read: boolean;
 }
 
+export interface UserDailyQuest {
+    questId: string;
+    progress: number;
+    isCompleted: boolean;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -128,6 +134,10 @@ export interface User {
   claimedTeamBusinessRewards?: string[]; // Array of claimed reward IDs
   announcements?: UserAnnouncement[];
   messages?: Message[];
+  lastLoginTime?: number;
+  loginStreak?: number;
+  dailyQuests?: UserDailyQuest[];
+  lastQuestResetTime?: number;
 }
 
 export interface Level {
@@ -214,7 +224,6 @@ export interface ReferralBonusSettings {
 
 export interface TeamCommissionSettings {
     isEnabled: boolean;
-    minDirectReferrals: number;
     rates: {
         level1: number;
         level2: number;
@@ -244,12 +253,48 @@ export interface StartScreenSettings {
 export interface DashboardPanel {
   id: string;
   title: string;
-  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices' | 'BoosterStore' | 'StakingPools' | 'StakingVaults' | 'Team' | 'Settings';
+  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices' | 'BoosterStore' | 'StakingPools' | 'StakingVaults' | 'Team' | 'Settings' | 'DailyEngagement' | 'Leaderboards';
   isVisible: boolean;
   isDeletable: boolean;
   isEditable: boolean;
   content?: string; // For custom panels
 }
+
+// Daily Engagement Features
+export type QuestType = 'login' | 'deposit_amount' | 'refer_users';
+export interface DailyQuest {
+    id: string;
+    type: QuestType;
+    title: string;
+    description: string;
+    targetValue: number; // e.g., 1 for login, 100 for deposit, 3 for referrals
+    rewardAmount: number; // USDT
+    isActive: boolean;
+}
+export interface LoginStreakReward {
+    day: number;
+    rewardAmount: number; // USDT
+}
+export interface DailyEngagementSettings {
+    quests: DailyQuest[];
+    loginStreakRewards: LoginStreakReward[];
+}
+
+// Leaderboard Features
+export type LeaderboardCategory = 'top_earners' | 'top_recruiters' | 'highest_balance';
+export interface LeaderboardEntry {
+    userId: string;
+    email: string;
+    value: number;
+}
+export interface Leaderboard {
+    category: LeaderboardCategory;
+    title: string;
+    data: LeaderboardEntry[];
+    lastUpdated: number;
+    isEnabled: boolean;
+}
+
 
 // Single document in Firestore to hold all settings
 export interface AppSettings {
@@ -273,6 +318,8 @@ export interface AppSettings {
     boosterPacks: BoosterPack[];
     stakingPools: StakingPool[];
     stakingVaults: StakingVault[];
+    dailyEngagement: DailyEngagementSettings;
+    leaderboards: Leaderboard[];
 }
 
 
@@ -326,3 +373,5 @@ export const PrioritizeMessageOutputSchema = z.object({
     announcementId: z.string().optional().describe("The ID of the admin announcement, if applicable."),
 });
 export type PrioritizeMessageOutput = z.infer<typeof PrioritizeMessageOutputSchema>;
+
+    

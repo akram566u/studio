@@ -6,7 +6,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe, runTransaction, deleteDoc, collectionGroup, limit } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification, deleteUser } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message, ScreenLayoutSettings, FABSettings } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message, ScreenLayoutSettings, FABSettings, DailyEngagementSettings, DailyQuest, LoginStreakReward, Leaderboard, LeaderboardCategory, UserDailyQuest } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
@@ -130,6 +130,10 @@ export interface AppContextType {
   deactivateCurrentUserAccount: (password: string) => Promise<void>;
   deactivateUserAccount: (userId: string) => Promise<void>;
   getDownline: () => Promise<{downline: Record<string, DownlineUser[]>, rechargedTodayCount: number}>;
+  dailyEngagement: DailyEngagementSettings;
+  updateDailyEngagement: (settings: DailyEngagementSettings) => void;
+  leaderboards: Leaderboard[];
+  updateLeaderboardSettings: (category: LeaderboardCategory, updates: Partial<Leaderboard>) => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -184,6 +188,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     boosterPacks,
     stakingPools,
     stakingVaults,
+    dailyEngagement,
+    leaderboards,
   } = appSettings;
 
   // Effect to fetch and listen for real-time AppSettings from Firestore
@@ -230,6 +236,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const initialUserDoc = await getDoc(userDocRef);
     if (initialUserDoc.exists()) {
         await processMaturedVaults(initialUserDoc.id, initialUserDoc.data() as User);
+        await processDailyLogin(initialUserDoc.id, initialUserDoc.data() as User);
     }
     
     const unsubscribe = onSnapshot(userDocRef, (userDocSnap) => {
@@ -415,6 +422,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             claimedTeamBusinessRewards: [],
             announcements: [],
             messages: [],
+            lastLoginTime: 0,
+            loginStreak: 0,
+            dailyQuests: [],
+            lastQuestResetTime: 0,
         };
 
         const batch = writeBatch(db);
@@ -659,6 +670,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 }
             }
             await checkAndApplyLevelUp(userDocId);
+            await checkQuestProgress(userDocId, 'deposit_amount', originalRequest.amount);
         }
 
         toast({ title: "Success", description: `${type.replace('_', ' ')} request has been ${newStatus}.` });
@@ -1289,40 +1301,44 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             teamCommissionSettings.rates.level2,
             teamCommissionSettings.rates.level3,
         ];
-
-        // referralPath is from direct referrer to top-level.
-        // We only need to go up 3 levels.
+        
         const upline = userData.referralPath.slice(0, 3);
         
         for (let i = 0; i < upline.length; i++) {
             const referrerId = upline[i];
             const commissionRate = rates[i];
-            const commissionAmount = interestEarned * commissionRate;
-
-            if (commissionAmount > 0) {
+            
+            await runTransaction(db, async (transaction) => {
                 const referrerRef = doc(db, 'users', referrerId);
-                await runTransaction(db, async (transaction) => {
-                    const referrerSnap = await transaction.get(referrerRef);
-                    if (!referrerSnap.exists()) return;
+                const referrerSnap = await transaction.get(referrerRef);
+                if (!referrerSnap.exists()) return;
 
-                    const referrerData = referrerSnap.data() as User;
-                    // Check if the referrer meets the minimum referral count
-                    if ((referrerData.directReferrals || 0) < teamCommissionSettings.minDirectReferrals) {
-                        return; // Skip commission if requirement not met
-                    }
-                    
+                const referrerData = referrerSnap.data() as User;
+                const activeReferrals = (referrerData.referredUsers || []).filter(u => u.isActivated).length;
+
+                // Check eligibility: Must be level 1 and have enough active referrals for the specific commission tier.
+                if (referrerData.level === 0 || activeReferrals < (i + 1)) {
+                    return;
+                }
+                
+                const commissionAmount = interestEarned * commissionRate;
+                if (commissionAmount > 0) {
                     const newBalance = referrerData.balance + commissionAmount;
                     transaction.update(referrerRef, { balance: newBalance });
-                });
 
-                await addTransaction(referrerId, {
-                    id: generateTxnId(),
-                    type: 'team_commission',
-                    amount: commissionAmount,
-                    status: 'credited',
-                    description: `Received ${commissionAmount.toFixed(4)} USDT commission from L${i + 1} member ${userData.email}.`
-                });
-            }
+                    const commissionTx = {
+                      userId: referrerId,
+                      timestamp: Date.now(),
+                      id: generateTxnId(),
+                      type: 'team_commission',
+                      amount: commissionAmount,
+                      status: 'credited',
+                      description: `Received ${commissionAmount.toFixed(4)} USDT commission from L${i + 1} member ${userData.email}.`
+                    } as Transaction;
+
+                    transaction.update(referrerRef, { transactions: arrayUnion(commissionTx) });
+                }
+            });
         }
     };
     
@@ -1944,6 +1960,91 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     }, [currentUser]);
 
+    const updateDailyEngagement = (settings: DailyEngagementSettings) => updateFirestoreSettings({ dailyEngagement: settings });
+
+    const checkQuestProgress = async (userId: string, type: QuestType, value: number) => {
+        const userRef = doc(db, 'users', userId);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) return;
+        const userData = userSnap.data() as User;
+
+        const activeQuests = (dailyEngagement.quests || []).filter(q => q.isActive && q.type === type);
+        let userQuests = userData.dailyQuests || [];
+        let needsUpdate = false;
+
+        for(const quest of activeQuests) {
+            let userQuest = userQuests.find(uq => uq.questId === quest.id);
+            if (userQuest && !userQuest.isCompleted) {
+                userQuest.progress += value;
+                if (userQuest.progress >= quest.targetValue) {
+                    userQuest.isCompleted = true;
+                    await updateDoc(userRef, { balance: userData.balance + quest.rewardAmount });
+                    await addTransaction(userId, {
+                        id: generateTxnId(),
+                        type: 'quest_reward',
+                        amount: quest.rewardAmount,
+                        status: 'credited',
+                        description: `Completed quest: ${quest.title}`
+                    });
+                    toast({title: 'Quest Completed!', description: `You earned ${quest.rewardAmount} USDT!`});
+                }
+                needsUpdate = true;
+            }
+        }
+        if(needsUpdate) {
+            await updateDoc(userRef, { dailyQuests: userQuests });
+        }
+    }
+
+    const processDailyLogin = async (userId: string, userData: User) => {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const lastLoginDate = userData.lastLoginTime ? new Date(new Date(userData.lastLoginTime).getFullYear(), new Date(userData.lastLoginTime).getMonth(), new Date(userData.lastLoginTime).getDate()).getTime() : 0;
+
+        if (today > lastLoginDate) {
+            const yesterday = today - 24 * 60 * 60 * 1000;
+            const newStreak = lastLoginDate === yesterday ? (userData.loginStreak || 0) + 1 : 1;
+            
+            const updates: any = { 
+                lastLoginTime: now.getTime(),
+                loginStreak: newStreak,
+            };
+
+            // Reset quests if it's a new day
+            const lastReset = userData.lastQuestResetTime ? new Date(new Date(userData.lastQuestResetTime).getFullYear(), new Date(userData.lastQuestResetTime).getMonth(), new Date(userData.lastQuestResetTime).getDate()).getTime() : 0;
+            if (today > lastReset) {
+                updates.lastQuestResetTime = now.getTime();
+                updates.dailyQuests = (dailyEngagement.quests || []).filter(q => q.isActive).map(q => ({
+                    questId: q.id,
+                    progress: 0,
+                    isCompleted: false
+                }));
+            }
+            
+            await updateDoc(doc(db, 'users', userId), updates);
+            
+            // Check for login streak reward
+            const streakReward = (dailyEngagement.loginStreakRewards || []).find(r => r.day === newStreak);
+            if (streakReward && streakReward.rewardAmount > 0) {
+                await updateDoc(doc(db, 'users', userId), { balance: userData.balance + streakReward.rewardAmount });
+                await addTransaction(userId, {
+                    id: generateTxnId(),
+                    type: 'login_reward',
+                    amount: streakReward.rewardAmount,
+                    status: 'credited',
+                    description: `Day ${newStreak} login streak reward!`
+                });
+            }
+
+            await checkQuestProgress(userId, 'login', 1);
+        }
+    };
+    
+    const updateLeaderboardSettings = (category: LeaderboardCategory, updates: Partial<Leaderboard>) => {
+        const newLeaderboards = leaderboards.map(lb => lb.category === category ? {...lb, ...updates} : lb);
+        updateFirestoreSettings({ leaderboards: newLeaderboards });
+    }
+
   if (loading) {
     return (
         <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
@@ -2056,6 +2157,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     deactivateCurrentUserAccount,
     deactivateUserAccount,
     getDownline,
+    dailyEngagement,
+    updateDailyEngagement,
+    leaderboards,
+    updateLeaderboardSettings,
   };
 
   return (
@@ -2080,3 +2185,4 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
+    
