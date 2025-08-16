@@ -1,14 +1,14 @@
 
 "use client";
 import React, { useContext, useState, useEffect, useRef } from 'react';
-import { AppContext } from '@/components/providers/AppProvider';
+import { AppContext, DownlineUser } from '@/components/providers/AppProvider';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent, MessageSquare, UserX as UserXIcon } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent, MessageSquare, UserX as UserXIcon, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -43,7 +43,7 @@ import { Textarea } from '../ui/textarea';
 
 
 // Individual Panel Components (for use in Dialogs)
-const UserOverviewPanel = ({ currentUser, levels }: { currentUser: any, levels: { [key: number]: Level } }) => {
+const UserOverviewPanel = ({ currentUser, levels, todaysCommission }: { currentUser: any, levels: { [key: number]: Level }, todaysCommission: number }) => {
     const context = useContext(AppContext);
     if (!context) return null;
 
@@ -68,6 +68,10 @@ const UserOverviewPanel = ({ currentUser, levels }: { currentUser: any, levels: 
                     {(totalInterest * 100).toFixed(3)}%
                     {interestBoost > 0 && <Rocket className="text-orange-400" />}
                 </p>
+            </div>
+             <div className="flex items-center justify-between">
+                <p className="text-lg text-gray-200">Today's Team Commission:</p>
+                <p className="text-2xl font-bold text-teal-400">{todaysCommission.toFixed(4)}</p>
             </div>
             {activeBoosters.length > 0 && (
                 <div className="mt-2 text-xs text-orange-300 space-y-1">
@@ -597,6 +601,81 @@ const ReferralNetworkPanel = ({ currentUser }: { currentUser: any }) => {
     );
 }
 
+const TeamLayersPanel = () => {
+    const context = useContext(AppContext);
+    const [downline, setDownline] = useState<Record<string, DownlineUser[]>>({});
+    const [rechargedTodayCount, setRechargedTodayCount] = useState(0);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        if (context?.currentUser) {
+            context.getDownline().then(result => {
+                setDownline(result.downline);
+                setRechargedTodayCount(result.rechargedTodayCount);
+                setIsLoading(false);
+            });
+        }
+    }, [context?.currentUser?.id]);
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <Loader2 className="animate-spin text-purple-400" size={32} />
+                <p className="ml-4">Loading Team Layers...</p>
+            </div>
+        );
+    }
+    
+    const renderUserTable = (users: DownlineUser[]) => (
+        <ScrollArea className="h-80 custom-scrollbar pr-2">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>User ID</TableHead>
+                        <TableHead>Email</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {users.map(user => (
+                        <TableRow key={user.id}>
+                            <TableCell className="font-mono text-xs">{user.id}</TableCell>
+                            <TableCell>{user.email}</TableCell>
+                        </TableRow>
+                    ))}
+                    {users.length === 0 && (
+                         <TableRow>
+                            <TableCell colSpan={2} className="text-center text-gray-400">No users in this layer yet.</TableCell>
+                         </TableRow>
+                    )}
+                </TableBody>
+            </Table>
+        </ScrollArea>
+    );
+    
+    return (
+      <>
+        <div className="flex justify-between items-center mb-4">
+            <h3 className="text-2xl font-semibold text-blue-300">Team Layers</h3>
+            <div className="text-right">
+                <p className="font-bold text-green-400 text-2xl">{rechargedTodayCount}</p>
+                <p className="text-sm text-gray-400">New Activations Today</p>
+            </div>
+        </div>
+
+        <Tabs defaultValue="l1">
+            <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="l1">Layer 1 ({downline.L1?.length || 0})</TabsTrigger>
+                <TabsTrigger value="l2">Layer 2 ({downline.L2?.length || 0})</TabsTrigger>
+                <TabsTrigger value="l3">Layer 3 ({downline.L3?.length || 0})</TabsTrigger>
+            </TabsList>
+            <TabsContent value="l1" className="mt-4">{renderUserTable(downline.L1 || [])}</TabsContent>
+            <TabsContent value="l2" className="mt-4">{renderUserTable(downline.L2 || [])}</TabsContent>
+            <TabsContent value="l3" className="mt-4">{renderUserTable(downline.L3 || [])}</TabsContent>
+        </Tabs>
+      </>
+    );
+}
+
 const LevelDetailsPanel = ({ levels }: { levels: { [key: number]: Level } }) => (
     <>
         <h3 className="text-2xl font-semibold mb-4 text-blue-300">Staking Level Details</h3>
@@ -1048,7 +1127,8 @@ type ModalView =
     | 'pools'
     | 'vaults'
     | 'team'
-    | 'inbox';
+    | 'inbox'
+    | 'team_layers';
 
 // Main Dashboard Component
 const UserDashboard = () => {
@@ -1056,6 +1136,7 @@ const UserDashboard = () => {
   const [modalView, setModalView] = useState<ModalView | null>(null);
   const [showBoosterPopup, setShowBoosterPopup] = useState(false);
   const [prioritizedMessage, setPrioritizedMessage] = useState<PrioritizeMessageOutput | null>(null);
+  const [todaysCommission, setTodaysCommission] = useState(0);
 
   useEffect(() => {
     if (context?.currentUser) {
@@ -1068,6 +1149,15 @@ const UserDashboard = () => {
 
         // Fetch prioritized message
         context.getPrioritizedMessage().then(setPrioritizedMessage);
+        
+        // Calculate today's commission
+        const now = Date.now();
+        const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
+        const commission = context.currentUser.transactions
+            .filter(tx => tx.type === 'team_commission' && tx.timestamp >= twentyFourHoursAgo)
+            .reduce((sum, tx) => sum + tx.amount, 0);
+        setTodaysCommission(commission);
+
     }
   }, [context?.currentUser?.id, context?.boosterPacks]);
 
@@ -1095,6 +1185,7 @@ const UserDashboard = () => {
         case 'history': return <TransactionHistoryPanel />;
         case 'referrals': return <ReferralNetworkPanel currentUser={currentUser} />;
         case 'team': return <TeamPanel />;
+        case 'team_layers': return <TeamLayersPanel />;
         case 'levels': return <LevelDetailsPanel levels={levels} />;
         case 'settings': return <SettingsPanel />;
         case 'notices': return <NoticesPanel />;
@@ -1114,6 +1205,7 @@ const UserDashboard = () => {
         history: 'History',
         referrals: 'Referral Network',
         team: 'Your Team',
+        team_layers: 'Team Layers',
         levels: 'Level Details',
         settings: 'Settings',
         notices: 'Notices',
@@ -1132,6 +1224,7 @@ const UserDashboard = () => {
     { view: 'inbox', label: 'Inbox', icon: MessageSquare },
     { view: 'referrals', label: 'Referrals', icon: UserCheck },
     { view: 'team', label: 'Team', icon: Users },
+    { view: 'team_layers', label: 'Team Layers', icon: Layers },
     { view: 'levels', label: 'Levels', icon: Layers },
     { view: 'vaults', label: 'Vaults', icon: PiggyBank },
     { view: 'boosters', label: 'Boosters', icon: Gift },
@@ -1165,7 +1258,7 @@ const UserDashboard = () => {
             </Alert>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <UserOverviewPanel currentUser={currentUser} levels={levels} />
+            <UserOverviewPanel currentUser={currentUser} levels={levels} todaysCommission={todaysCommission} />
             <StakingLevelPanel currentUser={currentUser} currentLevelDetails={currentLevelDetails} />
             <div className='md:col-span-2'>
                 <InterestCountdownPanel/>
@@ -1270,3 +1363,4 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
+

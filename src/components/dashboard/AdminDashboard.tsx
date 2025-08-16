@@ -797,7 +797,7 @@ const ContentUIPanel = () => {
         if(context?.screenLayoutSettings) setLocalScreenLayout(context.screenLayoutSettings);
     }, [context]);
 
-    if(!context || !localFabSettings) return null;
+    if(!context) return null;
     const { 
         updateWebsiteTitle,
         updateStartScreenContent,
@@ -890,10 +890,13 @@ const ContentUIPanel = () => {
     };
 
     const FabEditor = ({ screen }: { screen: keyof FABSettings }) => {
+        if (!localFabSettings) {
+            return <div>Loading FAB settings...</div>;
+        }
         const settings = localFabSettings[screen];
 
         if (!settings) {
-            return <div>Loading settings...</div>;
+            return <div>Settings for this screen could not be loaded.</div>;
         }
 
         return (

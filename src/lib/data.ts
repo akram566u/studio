@@ -150,6 +150,7 @@ export const initialAppSettings: AppSettings = {
         { id: 'p6', title: 'Withdraw USDT', componentKey: 'Withdraw', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p16', title: 'Settings', componentKey: 'Settings', isVisible: true, isDeletable: false, isEditable: false },
         { id: 'p8', title: 'Your Referral Network', componentKey: 'ReferralNetwork', isVisible: true, isDeletable: false, isEditable: true },
+        { id: 'p17', title: 'Team Layers', componentKey: 'TeamLayers', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p15', title: 'Your Team', componentKey: 'Team', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p9', title: 'Staking Level Details', componentKey: 'LevelDetails', isVisible: true, isDeletable: false, isEditable: true },
         { id: 'p11', title: 'Notices', componentKey: 'Notices', isVisible: true, isDeletable: false, isEditable: true },

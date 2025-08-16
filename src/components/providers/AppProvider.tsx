@@ -3,7 +3,7 @@
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe, runTransaction, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe, runTransaction, deleteDoc, collectionGroup, limit } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification, deleteUser } from "firebase/auth";
 import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message, ScreenLayoutSettings, FABSettings } from '@/lib/types';
@@ -19,6 +19,11 @@ import { prioritizeMessage } from '@/ai/flows/prioritize-message-flow';
 
 // A version of the User type that is safe to expose to the admin panel
 export type UserForAdmin = Pick<User, 'id' | 'email' | 'balance' | 'level' | 'primaryWithdrawalAddress' | 'directReferrals' | 'messages'>;
+
+export interface DownlineUser {
+  id: string;
+  email: string;
+}
 
 export interface AppContextType {
   currentUser: User | null;
@@ -123,6 +128,7 @@ export interface AppContextType {
   sendMessageToAdmin: (content: string) => void;
   deactivateCurrentUserAccount: (password: string) => Promise<void>;
   deactivateUserAccount: (userId: string) => Promise<void>;
+  getDownline: () => Promise<{downline: Record<string, DownlineUser[]>, rechargedTodayCount: number}>;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -1867,6 +1873,64 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
+    const getDownline = useCallback(async (): Promise<{downline: Record<string, DownlineUser[]>, rechargedTodayCount: number}> => {
+        if (!currentUser) return { downline: {}, rechargedTodayCount: 0 };
+    
+        const usersRef = collection(db, "users");
+        const downline: Record<string, DownlineUser[]> = { L1: [], L2: [], L3: [] };
+        let allDownlineIds: string[] = [];
+        let rechargedTodayCount = 0;
+    
+        // Level 1
+        const l1Query = query(usersRef, where("referredBy", "==", currentUser.id));
+        const l1Snap = await getDocs(l1Query);
+        const l1Ids: string[] = [];
+        l1Snap.forEach(doc => {
+            const userData = doc.data() as User;
+            downline.L1.push({ id: doc.id, email: userData.email });
+            l1Ids.push(doc.id);
+            allDownlineIds.push(doc.id);
+        });
+    
+        // Level 2
+        if (l1Ids.length > 0) {
+            const l2Query = query(usersRef, where("referredBy", "in", l1Ids));
+            const l2Snap = await getDocs(l2Query);
+            const l2Ids: string[] = [];
+            l2Snap.forEach(doc => {
+                const userData = doc.data() as User;
+                downline.L2.push({ id: doc.id, email: userData.email });
+                l2Ids.push(doc.id);
+                allDownlineIds.push(doc.id);
+            });
+    
+            // Level 3
+            if (l2Ids.length > 0) {
+                const l3Query = query(usersRef, where("referredBy", "in", l2Ids));
+                const l3Snap = await getDocs(l3Query);
+                l3Snap.forEach(doc => {
+                     const userData = doc.data() as User;
+                    downline.L3.push({ id: doc.id, email: userData.email });
+                    allDownlineIds.push(doc.id);
+                });
+            }
+        }
+        
+        // Calculate recharged today
+        const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+        for (const userId of allDownlineIds) {
+            const userDoc = await getDoc(doc(db, "users", userId));
+            if (userDoc.exists()) {
+                const userData = userDoc.data() as User;
+                if (userData.firstDepositTime && userData.firstDepositTime >= twentyFourHoursAgo) {
+                    rechargedTodayCount++;
+                }
+            }
+        }
+    
+        return { downline, rechargedTodayCount };
+    
+    }, [currentUser]);
 
   if (loading) {
     return (
@@ -1979,6 +2043,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     sendMessageToAdmin,
     deactivateCurrentUserAccount,
     deactivateUserAccount,
+    getDownline,
   };
 
   return (
@@ -2002,3 +2067,4 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
+
