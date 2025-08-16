@@ -78,7 +78,7 @@ export interface AppContextType {
   rechargeAddresses: RechargeAddress[];
   addRechargeAddress: () => void;
   updateRechargeAddress: (id: string, updates: Partial<RechargeAddress>) => void;
-  deleteRechargeAddress: (id: string) => void;
+  deleteRechargeAddress: () => void;
   forgotPassword: (email: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
   appLinks: AppLinks;
@@ -102,7 +102,7 @@ export interface AppContextType {
   boosterPurchaseHistory: AugmentedTransaction[];
   addBoosterPack: () => void;
   updateBoosterPack: (id: string, updates: Partial<BoosterPack>) => void;
-  deleteBoosterPack: (id: string) => void;
+  deleteBoosterPack: () => void;
   purchaseBooster: (boosterId: string) => Promise<void>;
   stakingPools: StakingPool[];
   addStakingPool: () => void;
@@ -690,8 +690,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const holdMsg = applicableRestrictions.find(m => m.type === 'withdrawal_hold');
     if (holdMsg && (holdMsg.durationDays || 0) > 0 && currentUser.lastWithdrawalTime) {
       const holdDuration = (holdMsg.durationDays || 0) * 24 * 60 * 60 * 1000;
-      if (Date.now() - currentUser.lastWithdrawalTime < holdDuration) {
-        return `Please wait for the ${holdMsg.durationDays}-day withdrawal cooldown period to end.`;
+      const timeSinceLast = Date.now() - currentUser.lastWithdrawalTime;
+
+      if (timeSinceLast < holdDuration) {
+        const remainingTime = holdDuration - timeSinceLast;
+        const remainingDays = Math.floor(remainingTime / (24 * 60 * 60 * 1000));
+        const remainingHours = Math.floor((remainingTime % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+        const countdown = `${remainingDays}d ${remainingHours}h`;
+        
+        let message = holdMsg.message.replace('{durationDays}', (holdMsg.durationDays || 0).toString());
+        message = message.replace('{countdown}', countdown);
+        return message;
       }
     }
     
@@ -1993,3 +2002,5 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
+
+    
