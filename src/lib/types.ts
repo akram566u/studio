@@ -214,6 +214,7 @@ export interface ReferralBonusSettings {
 
 export interface TeamCommissionSettings {
     isEnabled: boolean;
+    minDirectReferrals: number;
     rates: {
         level1: number;
         level2: number;

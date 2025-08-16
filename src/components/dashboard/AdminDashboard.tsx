@@ -890,14 +890,10 @@ const ContentUIPanel = () => {
     };
 
     const FabEditor = ({ screen }: { screen: keyof FABSettings }) => {
-        if (!localFabSettings) {
-            return <div>Loading FAB settings...</div>;
-        }
+        if (!localFabSettings) return <div>Loading FAB settings...</div>;
+        
         const settings = localFabSettings[screen];
-
-        if (!settings) {
-            return <div>Settings for this screen could not be loaded.</div>;
-        }
+        if (!settings) return <div>Settings for this screen could not be loaded.</div>;
 
         return (
             <div className="space-y-6">
@@ -1134,7 +1130,7 @@ const SystemSettingsPanel = () => {
     const [localReferralBonusSettings, setLocalReferralBonusSettings] = useState<ReferralBonusSettings>({ isEnabled: true, bonusAmount: 5, minDeposit: 100 });
     const [localRechargeAddresses, setLocalRechargeAddresses] = useState<RechargeAddress[]>([]);
     const [localAppLinks, setLocalAppLinks] = useState<AppLinks>({ downloadUrl: '', supportUrl: '' });
-    const [localTeamCommissionSettings, setLocalTeamCommissionSettings] = useState<TeamCommissionSettings>({ isEnabled: false, rates: { level1: 0, level2: 0, level3: 0 } });
+    const [localTeamCommissionSettings, setLocalTeamCommissionSettings] = useState<TeamCommissionSettings>({ isEnabled: false, minDirectReferrals: 3, rates: { level1: 0, level2: 0, level3: 0 } });
     const [localTeamSizeRewards, setLocalTeamSizeRewards] = useState<TeamSizeReward[]>([]);
     const [localTeamBusinessRewards, setLocalTeamBusinessRewards] = useState<TeamBusinessReward[]>([]);
     
@@ -1187,12 +1183,14 @@ const SystemSettingsPanel = () => {
     };
     const handleSaveReferralBonusSettings = () => updateReferralBonusSettings(localReferralBonusSettings);
     
-    const handleTeamCommissionChange = (field: 'isEnabled' | keyof TeamCommissionSettings['rates'], value: any) => {
-        if(field === 'isEnabled') {
-            setLocalTeamCommissionSettings(prev => ({...prev, isEnabled: value}));
-        } else {
-            setLocalTeamCommissionSettings(prev => ({ ...prev, rates: { ...prev.rates, [field]: value }}));
-        }
+    const handleTeamCommissionChange = (field: keyof TeamCommissionSettings | keyof TeamCommissionSettings['rates'], value: any) => {
+        setLocalTeamCommissionSettings(prev => {
+            if (field === 'isEnabled' || field === 'minDirectReferrals') {
+                return { ...prev, [field]: value };
+            } else {
+                return { ...prev, rates: { ...prev.rates, [field as keyof TeamCommissionSettings['rates']]: value }};
+            }
+        });
     };
     const handleSaveTeamCommissionSettings = () => updateTeamCommissionSettings(localTeamCommissionSettings);
     
@@ -1302,11 +1300,17 @@ const SystemSettingsPanel = () => {
                     {/* Team Commission Settings */}
                     <div className='p-4 rounded-lg bg-black/20'>
                         <div className="flex items-center justify-between"><Label htmlFor="team-commission-enabled" className="text-lg">Enable Team Commissions</Label><Switch id="team-commission-enabled" checked={localTeamCommissionSettings.isEnabled} onCheckedChange={checked => handleTeamCommissionChange('isEnabled', checked)} /></div>
-                        <div className="grid grid-cols-3 gap-4 mt-4">
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                            <div className="md:col-span-1">
+                                <Label htmlFor="min-referrals">Min Direct Referrals</Label>
+                                <Input id="min-referrals" type="number" value={localTeamCommissionSettings.minDirectReferrals} onChange={e => handleTeamCommissionChange('minDirectReferrals', Number(e.target.value))} disabled={!localTeamCommissionSettings.isEnabled} />
+                            </div>
                             <div><Label htmlFor="l1-rate">L1 Rate (%)</Label><Input id="l1-rate" type="number" value={localTeamCommissionSettings.rates.level1 * 100} onChange={e => handleTeamCommissionChange('level1', Number(e.target.value) / 100)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
                             <div><Label htmlFor="l2-rate">L2 Rate (%)</Label><Input id="l2-rate" type="number" value={localTeamCommissionSettings.rates.level2 * 100} onChange={e => handleTeamCommissionChange('level2', Number(e.target.value) / 100)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
                             <div><Label htmlFor="l3-rate">L3 Rate (%)</Label><Input id="l3-rate" type="number" value={localTeamCommissionSettings.rates.level3 * 100} onChange={e => handleTeamCommissionChange('level3', Number(e.target.value) / 100)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
                         </div>
+
                         <Button onClick={handleSaveTeamCommissionSettings} className="mt-4">Save Commission Settings</Button>
                     </div>
 

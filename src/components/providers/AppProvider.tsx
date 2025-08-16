@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Progress } from '../ui/progress';
 import { formatDistanceToNow } from 'date-fns';
 import { prioritizeMessage } from '@/ai/flows/prioritize-message-flow';
+import { produce } from 'immer';
 
 
 // A version of the User type that is safe to expose to the admin panel
@@ -191,19 +192,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     const unsubscribe = onSnapshot(settingsDocRef, (docSnap) => {
       if (docSnap.exists()) {
-        const data = docSnap.data() as AppSettings;
-        // Ensure arrays exist to prevent crashes
-        const sanitizedData = {
-            ...initialAppSettings, // Start with defaults
-            ...data, // Override with DB data
-            notices: data.notices || [],
-            boosterPacks: data.boosterPacks || [],
-            stakingPools: data.stakingPools || [],
-            stakingVaults: data.stakingVaults || [],
-            teamSizeRewards: data.teamSizeRewards || [],
-            teamBusinessRewards: data.teamBusinessRewards || [],
-        };
-        setAppSettings(sanitizedData);
+        const data = docSnap.data();
+        
+        // Deep merge fetched data with initial defaults to prevent crashes
+        const mergedSettings = produce(initialAppSettings, draft => {
+            for (const key in data) {
+                if (Object.prototype.hasOwnProperty.call(data, key)) {
+                    const typedKey = key as keyof AppSettings;
+                    if (typeof data[typedKey] === 'object' && !Array.isArray(data[typedKey]) && data[typedKey] !== null && draft[typedKey] !== null && typeof draft[typedKey] === 'object') {
+                        Object.assign(draft[typedKey] as object, data[typedKey]);
+                    } else {
+                        (draft as any)[typedKey] = data[typedKey];
+                    }
+                }
+            }
+        });
+        setAppSettings(mergedSettings);
+
       } else {
         // If no settings doc, create one from initial data
         console.log("No settings document found, creating one from initial data.");
@@ -1299,7 +1304,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 await runTransaction(db, async (transaction) => {
                     const referrerSnap = await transaction.get(referrerRef);
                     if (!referrerSnap.exists()) return;
-                    const newBalance = referrerSnap.data().balance + commissionAmount;
+
+                    const referrerData = referrerSnap.data() as User;
+                    // Check if the referrer meets the minimum referral count
+                    if ((referrerData.directReferrals || 0) < teamCommissionSettings.minDirectReferrals) {
+                        return; // Skip commission if requirement not met
+                    }
+                    
+                    const newBalance = referrerData.balance + commissionAmount;
                     transaction.update(referrerRef, { balance: newBalance });
                 });
 

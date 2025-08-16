@@ -118,6 +118,7 @@ export const initialAppSettings: AppSettings = {
 
     teamCommissionSettings: {
         isEnabled: true,
+        minDirectReferrals: 3,
         rates: {
             level1: 0.10, // 10% of Level 1's interest earnings
             level2: 0.05, // 5%
