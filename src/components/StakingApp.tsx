@@ -9,7 +9,7 @@ import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from './ui/scroll-area';
-import { FloatingActionItem } from '@/lib/types';
+import { FloatingActionItem, FloatingActionButtonSettings } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 import Header from './layout/Header';
@@ -78,18 +78,19 @@ const ForgotPasswordDialog = ({ open, onOpenChange }: { open: boolean, onOpenCha
     );
 };
 
-const GlobalFloatingActionButton = () => {
+
+const ScreenSpecificFAB = ({ settings }: { settings: FloatingActionButtonSettings | undefined }) => {
     const context = useContext(AppContext);
     const { toast } = useToast();
     const [isOpen, setIsOpen] = useState(false);
     const [isForgotPassOpen, setIsForgotPassOpen] = useState(false);
 
-    if (!context || !context.floatingActionButtonSettings.isEnabled) {
+    if (!context || !settings || !settings.isEnabled) {
         return null;
     }
 
-    const { floatingActionButtonSettings, appLinks } = context;
-    const visibleItems = floatingActionButtonSettings.items.filter(item => item.isEnabled);
+    const { appLinks } = context;
+    const visibleItems = settings.items.filter(item => item.isEnabled);
 
     if (visibleItems.length === 0) return null;
 
@@ -143,15 +144,15 @@ const GlobalFloatingActionButton = () => {
 
     return (
         <>
-        <div className={cn("fixed z-50", positionClasses[floatingActionButtonSettings.position])}>
+        <div className={cn("fixed z-50", positionClasses[settings.position])}>
             <Popover open={isOpen} onOpenChange={setIsOpen}>
                 <PopoverTrigger asChild>
                     <Button 
                         variant="outline" 
                         size="icon" 
-                        className={cn("rounded-full bg-accent/50 backdrop-blur-sm border-accent/20 hover:bg-accent/80", sizeClasses[floatingActionButtonSettings.size])}
+                        className={cn("rounded-full bg-accent/50 backdrop-blur-sm border-accent/20 hover:bg-accent/80", sizeClasses[settings.size])}
                     >
-                        <MainIcon className={cn(floatingActionButtonSettings.size === 'large' ? "size-10" : "size-8")} />
+                        <MainIcon className={cn(settings.size === 'large' ? "size-10" : "size-8")} />
                     </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-80 mr-4 mb-2 p-0">
@@ -199,7 +200,15 @@ export default function StakingApp() {
     // This can happen briefly on the very first load.
     return <div>Loading Context...</div>;
   }
-  const { currentUser, isAdmin } = context;
+  const { currentUser, isAdmin, floatingActionButtonSettings } = context;
+
+  const getActiveView = (): View => {
+    if (isAdmin) return 'admin_dashboard';
+    if (currentUser) return 'user_dashboard';
+    return view;
+  }
+
+  const activeView = getActiveView();
 
   const renderView = () => {
     // Prevent rendering any view until client is mounted and auth state is known
@@ -207,14 +216,11 @@ export default function StakingApp() {
         return <div>Loading...</div>;
     }
     
-    if (isAdmin) {
+    switch (activeView) {
+      case 'admin_dashboard':
         return <AdminDashboard />;
-    }
-    if (currentUser) {
+      case 'user_dashboard':
         return <UserDashboard />;
-    }
-
-    switch (view) {
       case 'start':
         return <StartScreen setView={setView} />;
       case 'signup':
@@ -227,6 +233,18 @@ export default function StakingApp() {
         return <StartScreen setView={setView} />;
     }
   };
+
+  const getFabSettings = () => {
+    if (!isClient) return undefined;
+    switch(activeView) {
+      case 'admin_dashboard':
+        return floatingActionButtonSettings?.adminDashboard;
+      case 'user_dashboard':
+        return floatingActionButtonSettings?.userDashboard;
+      default: // start, signin, signup, verify_email
+        return floatingActionButtonSettings?.startScreen;
+    }
+  }
   
   return (
     <>
@@ -235,7 +253,7 @@ export default function StakingApp() {
       <main className="flex-grow flex items-center justify-center p-4 z-10">
         {renderView()}
       </main>
-      {isClient && <GlobalFloatingActionButton />}
+      <ScreenSpecificFAB settings={getFabSettings()} />
     </>
   );
 }

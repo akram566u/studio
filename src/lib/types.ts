@@ -27,6 +27,9 @@ export interface FloatingActionButtonSettings {
   items: FloatingActionItem[];
 }
 
+export type FABSettings = Record<'startScreen' | 'userDashboard' | 'adminDashboard', FloatingActionButtonSettings>;
+
+
 export interface ScreenLayoutSettings {
     mobileMaxWidth: 'sm' | 'md' | 'lg' | 'full';
     desktopMaxWidth: 'md' | 'lg' | 'xl' | '2xl' | 'full';
@@ -261,7 +264,7 @@ export interface AppSettings {
     active3DTheme: BackgroundTheme;
     rechargeAddresses: RechargeAddress[];
     appLinks: AppLinks;
-    floatingActionButtonSettings: FloatingActionButtonSettings;
+    floatingActionButtonSettings: FABSettings;
     screenLayoutSettings: ScreenLayoutSettings;
     tawkToSrcUrl: string;
     themeColors: { primary: string; accent: string };

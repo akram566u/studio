@@ -31,9 +31,10 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
 import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle, MessageSquare, UserX as UserXIcon } from 'lucide-react';
-import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, ScreenLayoutSettings } from '@/lib/types';
+import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, ScreenLayoutSettings, FABSettings } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { analyzeTeam } from '@/ai/flows/analyze-team-flow';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 
 
 type AdminModalView =
@@ -783,7 +784,7 @@ const ContentUIPanel = () => {
     const [localStartScreenTitle, setLocalStartScreenTitle] = useState('');
     const [localStartScreenSubtitle, setLocalStartScreenSubtitle] = useState('');
     const [themeColors, setThemeColors] = useState({ primary: '#2563eb', accent: '#7c3aed' });
-    const [localFabSettings, setLocalFabSettings] = useState<FloatingActionButtonSettings>({ isEnabled: true, items: [], position: 'bottom-right', size: 'medium' });
+    const [localFabSettings, setLocalFabSettings] = useState<FABSettings | null>(null);
     const [localScreenLayout, setLocalScreenLayout] = useState<ScreenLayoutSettings>({ mobileMaxWidth: 'sm', desktopMaxWidth: '7xl' });
     
     useEffect(() => {
@@ -796,7 +797,7 @@ const ContentUIPanel = () => {
         if(context?.screenLayoutSettings) setLocalScreenLayout(context.screenLayoutSettings);
     }, [context]);
 
-    if(!context) return null;
+    if(!context || !localFabSettings) return null;
     const { 
         updateWebsiteTitle,
         updateStartScreenContent,
@@ -811,35 +812,73 @@ const ContentUIPanel = () => {
     const handleStartScreenContentSave = () => updateStartScreenContent({ title: localStartScreenTitle, subtitle: localStartScreenSubtitle });
     const handleApplyTheme = () => applyTheme(themeColors);
     
-    const handleFabSettingsChange = (field: keyof FloatingActionButtonSettings, value: any) => {
-        setLocalFabSettings(prev => ({ ...prev, [field]: value }));
+    const handleFabSettingsChange = (screen: keyof FABSettings, field: keyof FloatingActionButtonSettings, value: any) => {
+        setLocalFabSettings(prev => {
+            if (!prev) return null;
+            return {
+                ...prev,
+                [screen]: {
+                    ...prev[screen],
+                    [field]: value,
+                }
+            };
+        });
     };
     
-    const handleFabItemChange = (id: string, field: keyof FloatingActionItem, value: string | boolean | undefined) => {
-        setLocalFabSettings(prev => ({
-            ...prev,
-            items: prev.items.map(item => item.id === id ? { ...item, [field]: value } : item)
-        }));
+    const handleFabItemChange = (screen: keyof FABSettings, id: string, field: keyof FloatingActionItem, value: string | boolean | undefined) => {
+        setLocalFabSettings(prev => {
+            if (!prev) return null;
+            const screenSettings = prev[screen];
+            return {
+                ...prev,
+                [screen]: {
+                    ...screenSettings,
+                    items: screenSettings.items.map(item => item.id === id ? { ...item, [field]: value } : item)
+                }
+            };
+        });
     };
     
-    const handleAddFabItem = () => {
+    const handleAddFabItem = (screen: keyof FABSettings) => {
         const newItem: FloatingActionItem = {
-            id: `fab_${Date.now()}`,
+            id: `fab_${screen}_${Date.now()}`,
             label: 'New Action',
             icon: 'PlusCircle',
             action: 'custom_link',
             url: '#',
             isEnabled: true,
         };
-        setLocalFabSettings(prev => ({ ...prev, items: [...prev.items, newItem] }));
+        setLocalFabSettings(prev => {
+            if (!prev) return null;
+            const screenSettings = prev[screen];
+            return {
+                ...prev,
+                [screen]: {
+                    ...screenSettings,
+                    items: [...screenSettings.items, newItem]
+                }
+            };
+        });
     };
     
-    const handleDeleteFabItem = (id: string) => {
-        setLocalFabSettings(prev => ({ ...prev, items: prev.items.filter(item => item.id !== id)}));
+    const handleDeleteFabItem = (screen: keyof FABSettings, id: string) => {
+        setLocalFabSettings(prev => {
+            if (!prev) return null;
+            const screenSettings = prev[screen];
+            return {
+                ...prev,
+                [screen]: {
+                    ...screenSettings,
+                    items: screenSettings.items.filter(item => item.id !== id)
+                }
+            };
+        });
     };
 
     const handleSaveFabSettings = () => {
-        updateFloatingActionButtonSettings(localFabSettings);
+        if(localFabSettings) {
+            updateFloatingActionButtonSettings(localFabSettings);
+        }
     };
 
     const handleLayoutChange = (field: keyof ScreenLayoutSettings, value: string) => {
@@ -849,6 +888,109 @@ const ContentUIPanel = () => {
     const handleSaveLayoutSettings = () => {
         updateScreenLayoutSettings(localScreenLayout);
     };
+
+    const FabEditor = ({ screen }: { screen: keyof FABSettings }) => {
+        const settings = localFabSettings[screen];
+
+        return (
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <Label htmlFor={`fab-enabled-${screen}`} className="text-lg">Enable Floating Button</Label>
+                    <Switch
+                        id={`fab-enabled-${screen}`}
+                        checked={settings.isEnabled}
+                        onCheckedChange={checked => handleFabSettingsChange(screen, 'isEnabled', checked)}
+                    />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <Label>Position</Label>
+                        <Select value={settings.position} onValueChange={(v) => handleFabSettingsChange(screen, 'position', v)}>
+                            <SelectTrigger><SelectValue/></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="bottom-right">Bottom Right</SelectItem>
+                                <SelectItem value="bottom-left">Bottom Left</SelectItem>
+                                <SelectItem value="top-right">Top Right</SelectItem>
+                                <SelectItem value="top-left">Top Left</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div>
+                        <Label>Size</Label>
+                        <Select value={settings.size} onValueChange={(v) => handleFabSettingsChange(screen, 'size', v)}>
+                            <SelectTrigger><SelectValue/></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="small">Small</SelectItem>
+                                <SelectItem value="medium">Medium</SelectItem>
+                                <SelectItem value="large">Large</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+                
+                <ScrollArea className="h-auto max-h-[40vh] custom-scrollbar">
+                <div className="space-y-4 pr-4">
+                    {settings.items.map((item) => (
+                        <div key={item.id} className="bg-black/20 p-4 rounded-lg space-y-2">
+                            <div className="flex items-center gap-2">
+                                <GripVertical className="cursor-grab text-gray-400" />
+                                <div className="flex-1 grid grid-cols-2 gap-2">
+                                    <div className="col-span-2 flex items-center gap-2">
+                                        <Label htmlFor={`fab-item-enabled-${item.id}`} className='text-sm'>Enabled</Label>
+                                        <Switch
+                                            id={`fab-item-enabled-${item.id}`}
+                                            checked={item.isEnabled}
+                                            onCheckedChange={checked => handleFabItemChange(screen, item.id, 'isEnabled', checked)}
+                                        />
+                                    </div>
+                                    <Input 
+                                        placeholder="Label" 
+                                        value={item.label} 
+                                        onChange={e => handleFabItemChange(screen, item.id, 'label', e.target.value)}
+                                    />
+                                    <Input 
+                                        placeholder="Icon Name (lucide-react)" 
+                                        value={item.icon} 
+                                        onChange={e => handleFabItemChange(screen, item.id, 'icon', e.target.value)}
+                                    />
+                                    <div className="col-span-2">
+                                        <Select value={item.action} onValueChange={(value: FloatingActionItem['action']) => handleFabItemChange(screen, item.id, 'action', value)}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select action" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="forgot_password">Forgot Password</SelectItem>
+                                                <SelectItem value="download_app">Download App</SelectItem>
+                                                <SelectItem value="customer_support">Customer Support</SelectItem>
+                                                <SelectItem value="custom_link">Custom Link</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    {item.action === 'custom_link' && (
+                                        <div className="col-span-2">
+                                            <Input
+                                                placeholder="https://example.com"
+                                                value={item.url}
+                                                onChange={e => handleFabItemChange(screen, item.id, 'url', e.target.value)}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                                <Button variant="destructive" size="icon" onClick={() => handleDeleteFabItem(screen, item.id)}>
+                                    <Trash2 />
+                                </Button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                </ScrollArea>
+
+                <div className="flex gap-4">
+                    <Button onClick={() => handleAddFabItem(screen)} variant="secondary">Add New Action</Button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -947,107 +1089,27 @@ const ContentUIPanel = () => {
             </Card>
             <Card className="card-gradient-yellow-pink p-6">
                 <CardHeader>
-                    <CardTitle>Floating Action Button</CardTitle>
-                    <CardDescription>Manage the floating helper button on the start screen.</CardDescription>
+                    <CardTitle>Floating Action Buttons</CardTitle>
+                    <CardDescription>Manage the floating helper button for each app screen.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                    <div className="flex items-center justify-between">
-                        <Label htmlFor="fab-enabled" className="text-lg">Enable Floating Button</Label>
-                        <Switch
-                            id="fab-enabled"
-                            checked={localFabSettings.isEnabled}
-                            onCheckedChange={checked => handleFabSettingsChange('isEnabled', checked)}
-                        />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <Label>Position</Label>
-                            <Select value={localFabSettings.position} onValueChange={(v) => handleFabSettingsChange('position', v)}>
-                                <SelectTrigger><SelectValue/></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="bottom-right">Bottom Right</SelectItem>
-                                    <SelectItem value="bottom-left">Bottom Left</SelectItem>
-                                    <SelectItem value="top-right">Top Right</SelectItem>
-                                    <SelectItem value="top-left">Top Left</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div>
-                            <Label>Size</Label>
-                            <Select value={localFabSettings.size} onValueChange={(v) => handleFabSettingsChange('size', v)}>
-                                <SelectTrigger><SelectValue/></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="small">Small</SelectItem>
-                                    <SelectItem value="medium">Medium</SelectItem>
-                                    <SelectItem value="large">Large</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    
-                    <ScrollArea className="h-auto max-h-[40vh] custom-scrollbar">
-                    <div className="space-y-4 pr-4">
-                        {localFabSettings.items.map((item) => (
-                            <div key={item.id} className="bg-black/20 p-4 rounded-lg space-y-2">
-                                <div className="flex items-center gap-2">
-                                    <GripVertical className="cursor-grab text-gray-400" />
-                                    <div className="flex-1 grid grid-cols-2 gap-2">
-                                        <div className="col-span-2 flex items-center gap-2">
-                                            <Label htmlFor={`fab-item-enabled-${item.id}`} className='text-sm'>Enabled</Label>
-                                            <Switch
-                                                id={`fab-item-enabled-${item.id}`}
-                                                checked={item.isEnabled}
-                                                onCheckedChange={checked => handleFabItemChange(item.id, 'isEnabled', checked)}
-                                            />
-                                        </div>
-                                        <Input 
-                                            placeholder="Label" 
-                                            value={item.label} 
-                                            onChange={e => handleFabItemChange(item.id, 'label', e.target.value)}
-                                        />
-                                        <Input 
-                                            placeholder="Icon Name (lucide-react)" 
-                                            value={item.icon} 
-                                            onChange={e => handleFabItemChange(item.id, 'icon', e.target.value)}
-                                        />
-                                        <div className="col-span-2">
-                                            <Select value={item.action} onValueChange={(value: FloatingActionItem['action']) => handleFabItemChange(item.id, 'action', value)}>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Select action" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="switch_view_desktop">Switch View to Desktop</SelectItem>
-                                                    <SelectItem value="switch_view_mobile">Switch View to Mobile</SelectItem>
-                                                    <SelectItem value="forgot_password">Forgot Password</SelectItem>
-                                                    <SelectItem value="download_app">Download App</SelectItem>
-                                                    <SelectItem value="customer_support">Customer Support</SelectItem>
-                                                    <SelectItem value="custom_link">Custom Link</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        {item.action === 'custom_link' && (
-                                            <div className="col-span-2">
-                                                <Input
-                                                    placeholder="https://example.com"
-                                                    value={item.url}
-                                                    onChange={e => handleFabItemChange(item.id, 'url', e.target.value)}
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
-                                    <Button variant="destructive" size="icon" onClick={() => handleDeleteFabItem(item.id)}>
-                                        <Trash2 />
-                                    </Button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    </ScrollArea>
-
-                    <div className="flex gap-4">
-                        <Button onClick={handleSaveFabSettings}>Save FAB Settings</Button>
-                        <Button onClick={handleAddFabItem} variant="secondary">Add New Action</Button>
-                    </div>
+                <CardContent>
+                    <Tabs defaultValue="startScreen" className="w-full">
+                        <TabsList className="grid w-full grid-cols-3">
+                            <TabsTrigger value="startScreen">Start Screen</TabsTrigger>
+                            <TabsTrigger value="userDashboard">User Dashboard</TabsTrigger>
+                            <TabsTrigger value="adminDashboard">Admin Dashboard</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="startScreen" className="pt-4">
+                           <FabEditor screen="startScreen" />
+                        </TabsContent>
+                        <TabsContent value="userDashboard" className="pt-4">
+                           <FabEditor screen="userDashboard" />
+                        </TabsContent>
+                        <TabsContent value="adminDashboard" className="pt-4">
+                           <FabEditor screen="adminDashboard" />
+                        </TabsContent>
+                    </Tabs>
+                    <Button onClick={handleSaveFabSettings} className="mt-6 w-full">Save All FAB Settings</Button>
                 </CardContent>
             </Card>
         </div>

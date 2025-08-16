@@ -6,7 +6,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe, runTransaction, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification, deleteUser } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message, ScreenLayoutSettings } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message, ScreenLayoutSettings, FABSettings } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
@@ -78,13 +78,13 @@ export interface AppContextType {
   rechargeAddresses: RechargeAddress[];
   addRechargeAddress: () => void;
   updateRechargeAddress: (id: string, updates: Partial<RechargeAddress>) => void;
-  deleteRechargeAddress: () => void;
+  deleteRechargeAddress: (id: string) => void;
   forgotPassword: (email: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
   appLinks: AppLinks;
   updateAppLinks: (links: AppLinks) => void;
-  floatingActionButtonSettings: FloatingActionButtonSettings;
-  updateFloatingActionButtonSettings: (settings: FloatingActionButtonSettings) => void;
+  floatingActionButtonSettings: FABSettings;
+  updateFloatingActionButtonSettings: (settings: FABSettings) => void;
   screenLayoutSettings: ScreenLayoutSettings;
   updateScreenLayoutSettings: (settings: ScreenLayoutSettings) => void;
   tawkToSrcUrl: string;
@@ -102,7 +102,7 @@ export interface AppContextType {
   boosterPurchaseHistory: AugmentedTransaction[];
   addBoosterPack: () => void;
   updateBoosterPack: (id: string, updates: Partial<BoosterPack>) => void;
-  deleteBoosterPack: () => void;
+  deleteBoosterPack: (id: string) => void;
   purchaseBooster: (boosterId: string) => Promise<void>;
   stakingPools: StakingPool[];
   addStakingPool: () => void;
@@ -1051,7 +1051,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       updateFirestoreSettings({ rechargeAddresses: rechargeAddresses.filter(addr => addr.id !== id) });
     };
     const updateAppLinks = (links: AppLinks) => updateFirestoreSettings({ appLinks: links });
-    const updateFloatingActionButtonSettings = (settings: FloatingActionButtonSettings) => updateFirestoreSettings({ floatingActionButtonSettings: settings });
+    const updateFloatingActionButtonSettings = (settings: FABSettings) => updateFirestoreSettings({ floatingActionButtonSettings: settings });
     const updateScreenLayoutSettings = (settings: ScreenLayoutSettings) => updateFirestoreSettings({ screenLayoutSettings: settings });
     const addNotice = () => {
         const newNotice: Notice = {
@@ -2002,5 +2002,3 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
-
-    

@@ -36,16 +36,30 @@ export const initialAppSettings: AppSettings = {
     },
 
     floatingActionButtonSettings: {
-        isEnabled: true,
-        position: 'bottom-right',
-        size: 'medium',
-        items: [
-            { id: 'fab_1', label: 'Desktop View', icon: 'Monitor', action: 'switch_view_desktop', isEnabled: true },
-            { id: 'fab_5', label: 'Mobile View', icon: 'Smartphone', action: 'switch_view_mobile', isEnabled: true },
-            { id: 'fab_2', label: 'Forgot Password', icon: 'KeyRound', action: 'forgot_password', isEnabled: true },
-            { id: 'fab_3', label: 'Download App', icon: 'Download', action: 'download_app', isEnabled: true },
-            { id: 'fab_4', label: 'Customer Support', icon: 'MessageSquare', action: 'customer_support', isEnabled: true },
-        ]
+        startScreen: {
+            isEnabled: true,
+            position: 'bottom-right',
+            size: 'medium',
+            items: [
+                { id: 'fab_1', label: 'Forgot Password', icon: 'KeyRound', action: 'forgot_password', isEnabled: true },
+                { id: 'fab_2', label: 'Download App', icon: 'Download', action: 'download_app', isEnabled: true },
+                { id: 'fab_3', label: 'Customer Support', icon: 'MessageSquare', action: 'customer_support', isEnabled: true },
+            ]
+        },
+        userDashboard: {
+            isEnabled: false,
+            position: 'bottom-right',
+            size: 'medium',
+            items: [
+                { id: 'fab_ud_1', label: 'Customer Support', icon: 'MessageSquare', action: 'customer_support', isEnabled: true },
+            ]
+        },
+        adminDashboard: {
+            isEnabled: false,
+            position: 'bottom-right',
+            size: 'medium',
+            items: []
+        }
     },
 
     screenLayoutSettings: {
