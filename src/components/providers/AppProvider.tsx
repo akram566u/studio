@@ -6,7 +6,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe, runTransaction, deleteDoc, collectionGroup, limit } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification, deleteUser } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message, ScreenLayoutSettings, FABSettings, DailyEngagementSettings, DailyQuest, LoginStreakReward, Leaderboard, LeaderboardCategory, UserDailyQuest } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message, ScreenLayoutSettings, FABSettings, DailyEngagementSettings, DailyQuest, LoginStreakReward, Leaderboard, LeaderboardCategory, UserDailyQuest, AdminDashboardLayout } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
@@ -93,6 +93,8 @@ export interface AppContextType {
   updateFloatingActionButtonSettings: (settings: FABSettings) => void;
   screenLayoutSettings: ScreenLayoutSettings;
   updateScreenLayoutSettings: (settings: ScreenLayoutSettings) => void;
+  adminDashboardLayout: AdminDashboardLayout;
+  updateAdminDashboardLayout: (layout: AdminDashboardLayout) => void;
   tawkToSrcUrl: string;
   notices: Notice[];
   addNotice: () => void;
@@ -183,6 +185,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     appLinks,
     floatingActionButtonSettings,
     screenLayoutSettings,
+    adminDashboardLayout,
     tawkToSrcUrl,
     notices,
     boosterPacks,
@@ -205,9 +208,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             for (const key in data) {
                 if (Object.prototype.hasOwnProperty.call(data, key)) {
                     const typedKey = key as keyof AppSettings;
-                    if (typeof data[typedKey] === 'object' && !Array.isArray(data[typedKey]) && data[typedKey] !== null && draft[typedKey] !== null && typeof draft[typedKey] === 'object') {
+                    if (draft[typedKey] !== undefined && typeof data[typedKey] === 'object' && !Array.isArray(data[typedKey]) && data[typedKey] !== null && typeof draft[typedKey] === 'object' && !Array.isArray(draft[typedKey])) {
                         Object.assign(draft[typedKey] as object, data[typedKey]);
-                    } else {
+                    } else if (data[typedKey] !== undefined) {
                         (draft as any)[typedKey] = data[typedKey];
                     }
                 }
@@ -1076,6 +1079,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const updateAppLinks = (links: AppLinks) => updateFirestoreSettings({ appLinks: links });
     const updateFloatingActionButtonSettings = (settings: FABSettings) => updateFirestoreSettings({ floatingActionButtonSettings: settings });
     const updateScreenLayoutSettings = (settings: ScreenLayoutSettings) => updateFirestoreSettings({ screenLayoutSettings: settings });
+    const updateAdminDashboardLayout = (layout: AdminDashboardLayout) => updateFirestoreSettings({ adminDashboardLayout: layout });
     const addNotice = () => {
         const newNotice: Notice = {
             id: `notice_${Date.now()}`,
@@ -1306,7 +1310,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         
         for (let i = 0; i < upline.length; i++) {
             const referrerId = upline[i];
-            const commissionRate = rates[i];
             
             await runTransaction(db, async (transaction) => {
                 const referrerRef = doc(db, 'users', referrerId);
@@ -1316,12 +1319,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 const referrerData = referrerSnap.data() as User;
                 const activeReferrals = (referrerData.referredUsers || []).filter(u => u.isActivated).length;
 
-                // Check eligibility: Must be level 1 and have enough active referrals for the specific commission tier.
+                // Check eligibility: Must be level 1+ and have enough active referrals for the specific commission tier.
                 if (referrerData.level === 0 || activeReferrals < (i + 1)) {
                     return;
                 }
                 
+                const commissionRate = rates[i];
                 const commissionAmount = interestEarned * commissionRate;
+
                 if (commissionAmount > 0) {
                     const newBalance = referrerData.balance + commissionAmount;
                     transaction.update(referrerRef, { balance: newBalance });
@@ -2120,6 +2125,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateFloatingActionButtonSettings,
     screenLayoutSettings,
     updateScreenLayoutSettings,
+    adminDashboardLayout,
+    updateAdminDashboardLayout,
     tawkToSrcUrl,
     notices,
     addNotice,

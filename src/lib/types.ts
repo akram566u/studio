@@ -35,6 +35,8 @@ export interface ScreenLayoutSettings {
     desktopMaxWidth: 'md' | 'lg' | 'xl' | '2xl' | 'full';
 }
 
+export type AdminDashboardLayout = 'floating' | 'sidebar' | 'grid';
+
 export interface AppLinks {
     downloadUrl: string;
     supportUrl: string;
@@ -229,6 +231,7 @@ export interface TeamCommissionSettings {
         level2: number;
         level3: number;
     };
+    minDirectReferrals: number;
 }
 
 export interface TeamSizeReward {
@@ -253,7 +256,7 @@ export interface StartScreenSettings {
 export interface DashboardPanel {
   id: string;
   title: string;
-  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices' | 'BoosterStore' | 'StakingPools' | 'StakingVaults' | 'Team' | 'Settings' | 'DailyEngagement' | 'Leaderboards';
+  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices' | 'BoosterStore' | 'StakingPools' | 'StakingVaults' | 'Team' | 'Settings' | 'DailyEngagement' | 'Leaderboards' | 'Inbox' | 'TeamLayers';
   isVisible: boolean;
   isDeletable: boolean;
   isEditable: boolean;
@@ -312,6 +315,7 @@ export interface AppSettings {
     appLinks: AppLinks;
     floatingActionButtonSettings: FABSettings;
     screenLayoutSettings: ScreenLayoutSettings;
+    adminDashboardLayout: AdminDashboardLayout;
     tawkToSrcUrl: string;
     themeColors: { primary: string; accent: string };
     notices: Notice[];

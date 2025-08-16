@@ -30,8 +30,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle, MessageSquare, UserX as UserXIcon } from 'lucide-react';
-import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, ScreenLayoutSettings, FABSettings, DailyQuest, QuestType, LoginStreakReward, Leaderboard, LeaderboardCategory } from '@/lib/types';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle, MessageSquare, UserX as UserXIcon, LayoutGrid, Sidebar } from 'lucide-react';
+import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, ScreenLayoutSettings, FABSettings, DailyQuest, QuestType, LoginStreakReward, Leaderboard, LeaderboardCategory, AdminDashboardLayout } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { analyzeTeam } from '@/ai/flows/analyze-team-flow';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -52,38 +52,36 @@ type AdminModalView =
     | 'daily_engagement'
     | 'leaderboards';
 
-// Main Dashboard Component
-const AdminDashboard = () => {
-  const context = useContext(AppContext);
-  const [modalView, setModalView] = useState<AdminModalView | null>(null);
-  
-  if (!context || !context.isAdmin) {
-    return <div>Access Denied.</div>;
-  }
+type MenuItem = {
+    view: AdminModalView,
+    label: string,
+    icon: React.ElementType
+};
 
-  const { totalUsers, totalDepositAmount, totalWithdrawalAmount, totalReferralBonusPaid, allPendingRequests, allOnHoldRequests, adminReferrals, allUsersForAdmin, findUser } = context;
-
-  const firebaseProjectId = "staking-hub-3";
-  
-  const handleReplyToUser = async (email: string) => {
-    const userToChat = await findUser(email);
-    if(userToChat) {
-        // This is a bit of a workaround to open the user management panel and pre-fill it
-        // The proper way would be a shared state management for the selected user
-        const searchInput = document.querySelector('input[placeholder="Search by user email..."]') as HTMLInputElement;
-        const searchButton = document.querySelector('button[type="submit"]') as HTMLButtonElement;
-        if(searchInput && searchButton) {
-            // A more robust solution would be to pass the user object directly
-            // For now, we simulate the search
-            setModalView('users'); 
-        }
-    }
-  }
+const menuItems: MenuItem[] = [
+    { view: 'history', label: 'Activity Log', icon: FileText },
+    { view: 'users', label: 'User Management', icon: Users2 },
+    { view: 'content_ui', label: 'Content & UI', icon: Palette },
+    { view: 'system', label: 'System Settings', icon: Settings },
+    { view: 'panels', label: 'User Panels', icon: PanelTop },
+    { view: 'notices', label: 'Notices', icon: Megaphone },
+    { view: 'daily_engagement', label: 'Daily Engagement', icon: Star },
+    { view: 'leaderboards', label: 'Leaderboards', icon: Trophy },
+    { view: 'boosters', label: 'Boosters', icon: Gift },
+    { view: 'booster_analytics', label: 'Booster Analytics', icon: BarChart },
+    { view: 'pools', label: 'Pools', icon: Layers },
+    { view: 'vaults', label: 'Vaults', icon: PiggyBank },
+    { view: 'view_examples', label: 'View Examples', icon: BarChart },
+];
 
 
-  const renderModalContent = () => {
-    if (!modalView) return null;
-    switch(modalView) {
+const getModalTitle = (view: AdminModalView) => {
+    const item = menuItems.find(item => item.view === view);
+    return item ? item.label : 'Admin Panel';
+}
+
+const renderModalContent = (view: AdminModalView) => {
+    switch(view) {
         case 'history': return <ActivityLogPanel />;
         case 'users': return <UserManagementPanel />;
         case 'content_ui': return <ContentUIPanel />;
@@ -99,60 +97,127 @@ const AdminDashboard = () => {
         case 'leaderboards': return <LeaderboardsPanel />;
         default: return null;
     }
-  };
+};
 
-  const getModalTitle = (view: AdminModalView) => {
-    const titles: Record<AdminModalView, string> = {
-        history: 'Activity Log',
-        users: 'User Management',
-        content_ui: 'Content & UI Customization',
-        system: 'System Settings & Rules',
-        panels: 'User Dashboard Panels',
-        notices: 'Manage Notices & Events',
-        boosters: 'Manage Booster Packs',
-        booster_analytics: 'Booster Pack Analytics',
-        pools: 'Manage Staking Pools',
-        vaults: 'Manage Staking Vaults',
-        view_examples: 'Request View Examples',
-        daily_engagement: 'Daily Engagement Settings',
-        leaderboards: 'Leaderboard Management',
-    };
-    return titles[view];
+const AdminDashboard = () => {
+  const context = useContext(AppContext);
+  const [activePanel, setActivePanel] = useState<AdminModalView | 'home'>('home');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  useEffect(() => {
+    // Open modal when activePanel is set to something other than 'home'
+    // for layouts that use modals (grid, floating)
+    if (activePanel !== 'home' && (context?.adminDashboardLayout !== 'sidebar')) {
+        setIsModalOpen(true);
+    } else {
+        setIsModalOpen(false);
+    }
+  }, [activePanel, context?.adminDashboardLayout]);
+
+  const handlePanelSelect = (view: AdminModalView) => {
+      setActivePanel(view);
+  };
+  
+  const handleModalClose = () => {
+    setIsModalOpen(false);
+    // Reset to home view after modal closes to avoid re-opening on layout change
+    if (context?.adminDashboardLayout !== 'sidebar') {
+      setActivePanel('home');
+    }
+  }
+
+  if (!context || !context.isAdmin) {
+    return <div>Access Denied.</div>;
   }
   
-  const menuItems: { view: AdminModalView, label: string, icon: React.ElementType }[] = [
-      { view: 'history', label: 'Activity Log', icon: FileText },
-      { view: 'users', label: 'User Management', icon: Users2 },
-      { view: 'content_ui', label: 'Content & UI', icon: Palette },
-      { view: 'system', label: 'System Settings', icon: Settings },
-      { view: 'panels', label: 'User Panels', icon: PanelTop },
-      { view: 'notices', label: 'Notices', icon: Megaphone },
-      { view: 'daily_engagement', label: 'Daily Engagement', icon: Star },
-      { view: 'leaderboards', label: 'Leaderboards', icon: Trophy },
-      { view: 'boosters', label: 'Boosters', icon: Gift },
-      { view: 'booster_analytics', label: 'Booster Analytics', icon: BarChart },
-      { view: 'pools', label: 'Pools', icon: Layers },
-      { view: 'vaults', label: 'Vaults', icon: PiggyBank },
-      { view: 'view_examples', label: 'View Examples', icon: BarChart },
-  ];
+  const { adminDashboardLayout } = context;
 
-  const getRequestIcon = (type: string) => {
-      switch(type) {
-          case 'deposit': return <ArrowDownCircle className="text-green-400 mt-1 size-6" />;
-          case 'withdrawal': return <ArrowUpCircle className="text-red-400 mt-1 size-6" />;
-          case 'team_size_reward': return <Trophy className="text-amber-400 mt-1 size-6" />;
-          case 'team_business_reward': return <BadgePercent className="text-cyan-400 mt-1 size-6" />;
-          default: return <CheckCircle className="text-gray-400 mt-1 size-6" />;
-      }
+  const renderDashboardContent = () => {
+    if (activePanel === 'home') {
+        return <AdminHomePanel onReply={handlePanelSelect} />;
+    }
+    // For sidebar layout, render content directly
+    if (adminDashboardLayout === 'sidebar') {
+        return (
+            <GlassPanel className="w-full h-full p-6 custom-scrollbar overflow-y-auto">
+                <h2 className='text-2xl text-purple-400 font-bold mb-4'>{getModalTitle(activePanel)}</h2>
+                {renderModalContent(activePanel)}
+            </GlassPanel>
+        );
+    }
+    return <AdminHomePanel onReply={handlePanelSelect} />;
   }
 
   return (
     <>
-      <GlassPanel className="w-full max-w-7xl p-8 custom-scrollbar overflow-y-auto max-h-[calc(100vh-120px)]">
+      <div className={cn("w-full max-w-7xl h-[calc(100vh-120px)] flex gap-6", adminDashboardLayout !== 'sidebar' && "p-8")}>
+          {adminDashboardLayout === 'sidebar' && <AdminSidebar items={menuItems} onSelect={handlePanelSelect} activeItem={activePanel} />}
+          <div className="flex-grow h-full custom-scrollbar overflow-y-auto">
+              {renderDashboardContent()}
+          </div>
+      </div>
+      
+      {adminDashboardLayout === 'floating' && <FloatingMenu items={menuItems} onSelect={handlePanelSelect} />}
+
+      <Dialog open={isModalOpen && adminDashboardLayout !== 'sidebar'} onOpenChange={handleModalClose}>
+        <DialogContent className='max-w-4xl max-h-[90vh] flex flex-col'>
+            <DialogHeader>
+                <DialogTitle className='text-2xl text-purple-400'>{activePanel !== 'home' && getModalTitle(activePanel)}</DialogTitle>
+            </DialogHeader>
+            <div className='flex-grow overflow-y-auto custom-scrollbar -mr-6 pr-6'>
+                {activePanel !== 'home' && renderModalContent(activePanel)}
+            </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+};
+
+
+// Home Panel
+const AdminHomePanel = ({ onReply }: { onReply: (view: AdminModalView) => void }) => {
+    const context = useContext(AppContext);
+    if (!context) return <div>Loading context...</div>;
+
+    const { totalUsers, totalDepositAmount, totalWithdrawalAmount, totalReferralBonusPaid, allPendingRequests, allOnHoldRequests, adminReferrals, allUsersForAdmin, adminDashboardLayout } = context;
+    const firebaseProjectId = "staking-hub-3";
+    
+    const handleReplyToUser = async (email: string) => {
+        // Logic to switch to user management panel
+        onReply('users');
+        // You might need a way to pass the selected email to the UserManagementPanel
+        // e.g. via a shared state in a parent component or context.
+        // For now, it just opens the panel.
+        setTimeout(() => {
+             const searchInput = document.querySelector('input[placeholder="Search by user email..."]') as HTMLInputElement;
+             const searchButton = document.querySelector('button[type="submit"]') as HTMLButtonElement;
+             if(searchInput && searchButton) {
+                searchInput.value = email;
+                const event = new Event('input', { bubbles: true });
+                searchInput.dispatchEvent(event);
+                searchButton.click();
+             }
+        }, 100);
+    }
+  
+    const getRequestIcon = (type: string) => {
+        switch(type) {
+            case 'deposit': return <ArrowDownCircle className="text-green-400 mt-1 size-6" />;
+            case 'withdrawal': return <ArrowUpCircle className="text-red-400 mt-1 size-6" />;
+            case 'team_size_reward': return <Trophy className="text-amber-400 mt-1 size-6" />;
+            case 'team_business_reward': return <BadgePercent className="text-cyan-400 mt-1 size-6" />;
+            default: return <CheckCircle className="text-gray-400 mt-1 size-6" />;
+        }
+    }
+
+    return (
+      <GlassPanel className="w-full p-0 md:p-8 custom-scrollbar overflow-y-auto h-full bg-transparent border-none shadow-none">
         <h2 className="text-3xl font-bold text-purple-400 mb-2 text-center">Admin Panel</h2>
         <p className="text-center text-gray-400 mb-6">Manage all user deposit, withdrawal, and referral bonus requests.</p>
         
-        <div className="space-y-6">
+        {adminDashboardLayout === 'grid' && <GridMenu items={menuItems} onSelect={onReply} />}
+
+        <div className="space-y-6 mt-6">
             <Card className="card-gradient-blue-purple p-6">
                 <CardHeader>
                     <CardTitle className="text-purple-300">Admin Overview</CardTitle>
@@ -326,19 +391,7 @@ const AdminDashboard = () => {
             </Card>
         </div>
       </GlassPanel>
-      <FloatingMenu items={menuItems} onSelect={setModalView} />
-       <Dialog open={!!modalView} onOpenChange={(isOpen) => !isOpen && setModalView(null)}>
-        <DialogContent className='max-w-4xl max-h-[90vh] flex flex-col'>
-            <DialogHeader>
-                <DialogTitle className='text-2xl text-purple-400'>{modalView && getModalTitle(modalView)}</DialogTitle>
-            </DialogHeader>
-            <div className='flex-grow overflow-y-auto custom-scrollbar -mr-6 pr-6'>
-                {renderModalContent()}
-            </div>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
+    );
 };
 
 
@@ -378,7 +431,7 @@ const AdminChatPanel = ({ allUsers, onReply }: { allUsers: UserForAdmin[], onRep
                             </div>
                             <p className="text-sm text-gray-200 mt-2 truncate">{message.content}</p>
                              <Button size="sm" className="mt-2" onClick={() => onReply(user.email)}>
-                                <Send className="mr-2"/> Reply in User Management
+                                <Send className="mr-2"/> Reply
                             </Button>
                         </div>
                     ))}
@@ -794,6 +847,7 @@ const ContentUIPanel = () => {
     const [themeColors, setThemeColors] = useState({ primary: '#2563eb', accent: '#7c3aed' });
     const [localFabSettings, setLocalFabSettings] = useState<FABSettings | null>(null);
     const [localScreenLayout, setLocalScreenLayout] = useState<ScreenLayoutSettings>({ mobileMaxWidth: 'sm', desktopMaxWidth: '7xl' });
+    const [localAdminLayout, setLocalAdminLayout] = useState<AdminDashboardLayout>('floating');
     
     useEffect(() => {
         if(context?.websiteTitle) setLocalWebsiteTitle(context.websiteTitle);
@@ -803,6 +857,7 @@ const ContentUIPanel = () => {
         }
         if(context?.floatingActionButtonSettings) setLocalFabSettings(context.floatingActionButtonSettings);
         if(context?.screenLayoutSettings) setLocalScreenLayout(context.screenLayoutSettings);
+        if(context?.adminDashboardLayout) setLocalAdminLayout(context.adminDashboardLayout);
     }, [context]);
 
     if(!context) return null;
@@ -814,6 +869,7 @@ const ContentUIPanel = () => {
         setActive3DTheme,
         updateFloatingActionButtonSettings,
         updateScreenLayoutSettings,
+        updateAdminDashboardLayout,
     } = context;
 
     const handleWebsiteTitleSave = () => updateWebsiteTitle(localWebsiteTitle);
@@ -1045,10 +1101,10 @@ const ContentUIPanel = () => {
                     <Button onClick={handleApplyTheme}>Apply Theme</Button>
                 </CardContent>
             </Card>
-             <Card className="card-gradient-orange-red p-6">
+            <Card className="card-gradient-orange-red p-6">
                 <CardHeader>
-                    <CardTitle className="text-purple-300">Screen Layout & Resolution</CardTitle>
-                    <CardDescription>Control the max width of the main content area on different screen sizes.</CardDescription>
+                    <CardTitle className="text-purple-300">Layout &amp; Navigation</CardTitle>
+                    <CardDescription>Control the max width and admin navigation style.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1078,7 +1134,22 @@ const ContentUIPanel = () => {
                             </Select>
                         </div>
                     </div>
-                    <Button onClick={handleSaveLayoutSettings}>Save Layout Settings</Button>
+                    <Button onClick={handleSaveLayoutSettings}>Save Screen Width Settings</Button>
+                    <hr className="border-white/10" />
+                     <div>
+                        <Label htmlFor="admin-layout">Admin Dashboard Layout</Label>
+                        <Select value={localAdminLayout} onValueChange={(v: AdminDashboardLayout) => {
+                            setLocalAdminLayout(v);
+                            updateAdminDashboardLayout(v);
+                        }}>
+                            <SelectTrigger id="admin-layout"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="floating">Floating Menu</SelectItem>
+                                <SelectItem value="sidebar">Sidebar</SelectItem>
+                                <SelectItem value="grid">Grid Menu</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </CardContent>
             </Card>
             <Card className="card-gradient-green-cyan p-6">
@@ -1138,7 +1209,7 @@ const SystemSettingsPanel = () => {
     const [localReferralBonusSettings, setLocalReferralBonusSettings] = useState<ReferralBonusSettings>({ isEnabled: true, bonusAmount: 5, minDeposit: 100 });
     const [localRechargeAddresses, setLocalRechargeAddresses] = useState<RechargeAddress[]>([]);
     const [localAppLinks, setLocalAppLinks] = useState<AppLinks>({ downloadUrl: '', supportUrl: '' });
-    const [localTeamCommissionSettings, setLocalTeamCommissionSettings] = useState<TeamCommissionSettings>({ isEnabled: false, rates: { level1: 0, level2: 0, level3: 0 } });
+    const [localTeamCommissionSettings, setLocalTeamCommissionSettings] = useState<TeamCommissionSettings>({ isEnabled: false, rates: { level1: 0, level2: 0, level3: 0 }, minDirectReferrals: 3 });
     const [localTeamSizeRewards, setLocalTeamSizeRewards] = useState<TeamSizeReward[]>([]);
     const [localTeamBusinessRewards, setLocalTeamBusinessRewards] = useState<TeamBusinessReward[]>([]);
     
@@ -1194,7 +1265,9 @@ const SystemSettingsPanel = () => {
     const handleTeamCommissionChange = (field: keyof TeamCommissionSettings | keyof TeamCommissionSettings['rates'], value: any) => {
         setLocalTeamCommissionSettings(prev => {
             if (field === 'isEnabled') {
-                return { ...prev, [field]: value };
+                return { ...prev, isEnabled: value };
+            } else if (field === 'minDirectReferrals') {
+                 return { ...prev, minDirectReferrals: Number(value) };
             } else {
                 return { ...prev, rates: { ...prev.rates, [field as keyof TeamCommissionSettings['rates']]: Number(value) / 100 }};
             }
@@ -1308,6 +1381,14 @@ const SystemSettingsPanel = () => {
                     {/* Team Commission Settings */}
                     <div className='p-4 rounded-lg bg-black/20'>
                         <div className="flex items-center justify-between"><Label htmlFor="team-commission-enabled" className="text-lg">Enable Team Commissions</Label><Switch id="team-commission-enabled" checked={localTeamCommissionSettings.isEnabled} onCheckedChange={checked => handleTeamCommissionChange('isEnabled', checked)} /></div>
+                        
+                        <div className='mt-4'>
+                            <Label htmlFor="min-referrals">Min Direct Referrals to Earn Commission</Label>
+                            <Input id="min-referrals" type="number" value={localTeamCommissionSettings.minDirectReferrals} onChange={e => handleTeamCommissionChange('minDirectReferrals', e.target.value)} disabled={!localTeamCommissionSettings.isEnabled} />
+                             <p className="text-xs text-gray-400 mt-1">
+                                A user must have this many active L1 referrals to earn commissions. The commission tiers (L1/L2/L3) are then unlocked sequentially with each new active referral up to this number.
+                            </p>
+                        </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                             <div><Label htmlFor="l1-rate">L1 Rate (%)</Label><Input id="l1-rate" type="number" value={localTeamCommissionSettings.rates.level1 * 100} onChange={e => handleTeamCommissionChange('level1', e.target.value)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
@@ -1925,7 +2006,9 @@ const LeaderboardsPanel = () => {
 };
 
 
-const FloatingMenu = ({ items, onSelect }: { items: { view: AdminModalView, label: string, icon: React.ElementType }[], onSelect: (view: AdminModalView) => void }) => {
+// Navigation Components
+
+const FloatingMenu = ({ items, onSelect }: { items: MenuItem[], onSelect: (view: AdminModalView) => void }) => {
     const [isOpen, setIsOpen] = useState(false);
 
     return (
@@ -1985,9 +2068,44 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: AdminModalView, labe
     );
 }
 
+const GridMenu = ({ items, onSelect }: { items: MenuItem[], onSelect: (view: AdminModalView) => void }) => {
+    return (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
+            {items.map(item => (
+                <Card key={item.view} onClick={() => onSelect(item.view)} className="card-gradient-blue-purple p-4 flex flex-col items-center justify-center text-center cursor-pointer hover:scale-105 transition-transform duration-200">
+                    <item.icon className="size-10 mb-2 text-purple-300" />
+                    <p className="font-semibold">{item.label}</p>
+                </Card>
+            ))}
+        </div>
+    );
+}
+
+const AdminSidebar = ({ items, onSelect, activeItem }: { items: MenuItem[], onSelect: (view: AdminModalView) => void, activeItem: AdminModalView | 'home' }) => {
+    return (
+        <GlassPanel className="w-64 p-4 flex-shrink-0 flex flex-col gap-2">
+            <h3 className="text-xl font-bold text-center text-purple-300 mb-2">Admin Menu</h3>
+            <ScrollArea className="flex-grow">
+                <Button 
+                    variant={activeItem === 'home' ? 'secondary' : 'ghost'}
+                    className="w-full justify-start"
+                    onClick={() => onSelect('home' as any)} // A bit of a hack, but makes it work
+                >
+                    <LayoutGrid className="mr-2" /> Dashboard Home
+                </Button>
+                {items.map(item => (
+                    <Button 
+                        key={item.view}
+                        variant={activeItem === item.view ? 'secondary' : 'ghost'}
+                        className="w-full justify-start"
+                        onClick={() => onSelect(item.view)}
+                    >
+                        <item.icon className="mr-2" /> {item.label}
+                    </Button>
+                ))}
+            </ScrollArea>
+        </GlassPanel>
+    )
+}
+
 export default AdminDashboard;
-
-    
-    
-
-    

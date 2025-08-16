@@ -67,6 +67,8 @@ export const initialAppSettings: AppSettings = {
         desktopMaxWidth: '7xl'
     },
 
+    adminDashboardLayout: 'floating',
+
     restrictionMessages: [
         {
             id: 'deposit_no_address_1',
@@ -122,7 +124,8 @@ export const initialAppSettings: AppSettings = {
             level1: 0.10, // 10% of Level 1's interest earnings
             level2: 0.05, // 5%
             level3: 0.02, // 2%
-        }
+        },
+        minDirectReferrals: 3,
     },
 
     teamSizeRewards: [
