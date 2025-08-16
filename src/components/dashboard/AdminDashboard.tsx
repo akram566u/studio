@@ -892,6 +892,10 @@ const ContentUIPanel = () => {
     const FabEditor = ({ screen }: { screen: keyof FABSettings }) => {
         const settings = localFabSettings[screen];
 
+        if (!settings) {
+            return <div>Loading settings...</div>;
+        }
+
         return (
             <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -1844,3 +1848,5 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: AdminModalView, labe
 }
 
 export default AdminDashboard;
+
+    
