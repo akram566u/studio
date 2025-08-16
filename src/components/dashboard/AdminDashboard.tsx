@@ -31,7 +31,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
 import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle, MessageSquare, UserX as UserXIcon } from 'lucide-react';
-import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message } from '@/lib/types';
+import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, ScreenLayoutSettings } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { analyzeTeam } from '@/ai/flows/analyze-team-flow';
 
@@ -53,14 +53,30 @@ type AdminModalView =
 const AdminDashboard = () => {
   const context = useContext(AppContext);
   const [modalView, setModalView] = useState<AdminModalView | null>(null);
-
+  
   if (!context || !context.isAdmin) {
     return <div>Access Denied.</div>;
   }
 
-  const { totalUsers, totalDepositAmount, totalWithdrawalAmount, totalReferralBonusPaid, allPendingRequests, allOnHoldRequests, adminReferrals } = context;
+  const { totalUsers, totalDepositAmount, totalWithdrawalAmount, totalReferralBonusPaid, allPendingRequests, allOnHoldRequests, adminReferrals, allUsersForAdmin, findUser } = context;
 
   const firebaseProjectId = "staking-hub-3";
+  
+  const handleReplyToUser = async (email: string) => {
+    const userToChat = await findUser(email);
+    if(userToChat) {
+        // This is a bit of a workaround to open the user management panel and pre-fill it
+        // The proper way would be a shared state management for the selected user
+        const searchInput = document.querySelector('input[placeholder="Search by user email..."]') as HTMLInputElement;
+        const searchButton = document.querySelector('button[type="submit"]') as HTMLButtonElement;
+        if(searchInput && searchButton) {
+            // A more robust solution would be to pass the user object directly
+            // For now, we simulate the search
+            setModalView('users'); 
+        }
+    }
+  }
+
 
   const renderModalContent = () => {
     if (!modalView) return null;
@@ -154,6 +170,8 @@ const AdminDashboard = () => {
                 </CardContent>
             </Card>
 
+            <AdminChatPanel allUsers={allUsersForAdmin} onReply={handleReplyToUser} />
+
             <Card className="card-gradient-green-cyan p-6">
                 <CardHeader>
                     <CardTitle className="text-purple-300">Unified Pending Requests</CardTitle>
@@ -227,6 +245,15 @@ const AdminDashboard = () => {
                                                 </div>
                                                 <p className="text-xs text-gray-400">{format(new Date(request.timestamp), 'PPpp')}</p>
                                             </div>
+
+                                            <div className="text-xs text-gray-400 space-y-1">
+                                                <p>
+                                                    Lvl: {request.userLevel} | Deposits: {request.userDepositCount} | Withdrawals: {request.userWithdrawalCount} | Referrals: {request.directReferrals}
+                                                </p>
+                                                <p className="break-all">Address: {request.walletAddress || request.userWithdrawalAddress}</p>
+                                                {request.note && <p className="text-yellow-300">Note: {request.note}</p>}
+                                            </div>
+                                            
                                             <div className="flex gap-2 pt-2">
                                                 <Button onClick={() => context.approveRequest(request.id, request.type)} size="sm">Approve</Button>
                                                 <Button onClick={() => context.declineRequest(request.id, request.type)} variant="destructive" size="sm">Decline</Button>
@@ -307,6 +334,51 @@ const AdminDashboard = () => {
 
 
 // Panel Components
+
+const AdminChatPanel = ({ allUsers, onReply }: { allUsers: UserForAdmin[], onReply: (email: string) => void }) => {
+    const [recentMessages, setRecentMessages] = useState<({ user: UserForAdmin, message: Message })[]>([]);
+
+    useEffect(() => {
+        const unreadMessages: ({ user: UserForAdmin, message: Message })[] = [];
+        allUsers.forEach(user => {
+            const userMessages = (user.messages || [])
+                .filter(m => m.sender === 'user' && !m.read)
+                .sort((a,b) => b.timestamp - a.timestamp); // get latest
+            if(userMessages.length > 0) {
+                 unreadMessages.push({ user, message: userMessages[0] });
+            }
+        });
+        // Sort by most recent message across all users
+        setRecentMessages(unreadMessages.sort((a,b) => b.message.timestamp - a.message.timestamp));
+    }, [allUsers]);
+
+    if (recentMessages.length === 0) return null;
+
+    return (
+         <Card className="card-gradient-blue-purple p-6">
+            <CardHeader>
+                <CardTitle className="text-purple-300">Recent User Messages</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <ScrollArea className="h-60 custom-scrollbar">
+                    {recentMessages.map(({ user, message }) => (
+                        <div key={message.id} className="bg-black/20 p-4 rounded-lg mb-4">
+                            <div className="flex justify-between items-start">
+                                <p className="font-bold text-lg text-yellow-300">{user.email}</p>
+                                <p className="text-xs text-gray-400">{format(new Date(message.timestamp), 'PPpp')}</p>
+                            </div>
+                            <p className="text-sm text-gray-200 mt-2 truncate">{message.content}</p>
+                             <Button size="sm" className="mt-2" onClick={() => onReply(user.email)}>
+                                <Send className="mr-2"/> Reply in User Management
+                            </Button>
+                        </div>
+                    ))}
+                </ScrollArea>
+            </CardContent>
+        </Card>
+    )
+}
+
 const ActivityLogPanel = () => {
     const context = useContext(AppContext);
     if (!context) return null;
@@ -711,7 +783,8 @@ const ContentUIPanel = () => {
     const [localStartScreenTitle, setLocalStartScreenTitle] = useState('');
     const [localStartScreenSubtitle, setLocalStartScreenSubtitle] = useState('');
     const [themeColors, setThemeColors] = useState({ primary: '#2563eb', accent: '#7c3aed' });
-    const [localFabSettings, setLocalFabSettings] = useState<FloatingActionButtonSettings>({ isEnabled: true, items: [] });
+    const [localFabSettings, setLocalFabSettings] = useState<FloatingActionButtonSettings>({ isEnabled: true, items: [], position: 'bottom-right', size: 'medium' });
+    const [localScreenLayout, setLocalScreenLayout] = useState<ScreenLayoutSettings>({ mobileMaxWidth: 'sm', desktopMaxWidth: '7xl' });
     
     useEffect(() => {
         if(context?.websiteTitle) setLocalWebsiteTitle(context.websiteTitle);
@@ -720,7 +793,8 @@ const ContentUIPanel = () => {
             setLocalStartScreenSubtitle(context.startScreenContent.subtitle);
         }
         if(context?.floatingActionButtonSettings) setLocalFabSettings(context.floatingActionButtonSettings);
-    }, [context?.websiteTitle, context?.startScreenContent, context?.floatingActionButtonSettings]);
+        if(context?.screenLayoutSettings) setLocalScreenLayout(context.screenLayoutSettings);
+    }, [context]);
 
     if(!context) return null;
     const { 
@@ -730,6 +804,7 @@ const ContentUIPanel = () => {
         active3DTheme,
         setActive3DTheme,
         updateFloatingActionButtonSettings,
+        updateScreenLayoutSettings,
     } = context;
 
     const handleWebsiteTitleSave = () => updateWebsiteTitle(localWebsiteTitle);
@@ -765,6 +840,14 @@ const ContentUIPanel = () => {
 
     const handleSaveFabSettings = () => {
         updateFloatingActionButtonSettings(localFabSettings);
+    };
+
+    const handleLayoutChange = (field: keyof ScreenLayoutSettings, value: string) => {
+        setLocalScreenLayout(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleSaveLayoutSettings = () => {
+        updateScreenLayoutSettings(localScreenLayout);
     };
 
     return (
@@ -805,6 +888,42 @@ const ContentUIPanel = () => {
                     <Button onClick={handleApplyTheme}>Apply Theme</Button>
                 </CardContent>
             </Card>
+             <Card className="card-gradient-orange-red p-6">
+                <CardHeader>
+                    <CardTitle className="text-purple-300">Screen Layout & Resolution</CardTitle>
+                    <CardDescription>Control the max width of the main content area on different screen sizes.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <Label htmlFor="desktop-layout">Desktop Max Width</Label>
+                             <Select value={localScreenLayout.desktopMaxWidth} onValueChange={(v) => handleLayoutChange('desktopMaxWidth', v)}>
+                                <SelectTrigger id="desktop-layout"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="md">Medium (768px)</SelectItem>
+                                    <SelectItem value="lg">Large (1024px)</SelectItem>
+                                    <SelectItem value="xl">Extra Large (1280px)</SelectItem>
+                                    <SelectItem value="2xl">2x Extra Large (1536px)</SelectItem>
+                                    <SelectItem value="full">Full Width</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                         <div>
+                            <Label htmlFor="mobile-layout">Mobile Max Width</Label>
+                             <Select value={localScreenLayout.mobileMaxWidth} onValueChange={(v) => handleLayoutChange('mobileMaxWidth', v)}>
+                                <SelectTrigger id="mobile-layout"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="sm">Small (640px)</SelectItem>
+                                    <SelectItem value="md">Medium (768px)</SelectItem>
+                                    <SelectItem value="lg">Large (1024px)</SelectItem>
+                                    <SelectItem value="full">Full Width</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <Button onClick={handleSaveLayoutSettings}>Save Layout Settings</Button>
+                </CardContent>
+            </Card>
             <Card className="card-gradient-green-cyan p-6">
                 <CardHeader>
                     <CardTitle className="text-purple-300">3D Animated Background</CardTitle>
@@ -839,6 +958,31 @@ const ContentUIPanel = () => {
                             checked={localFabSettings.isEnabled}
                             onCheckedChange={checked => handleFabSettingsChange('isEnabled', checked)}
                         />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <Label>Position</Label>
+                            <Select value={localFabSettings.position} onValueChange={(v) => handleFabSettingsChange('position', v)}>
+                                <SelectTrigger><SelectValue/></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="bottom-right">Bottom Right</SelectItem>
+                                    <SelectItem value="bottom-left">Bottom Left</SelectItem>
+                                    <SelectItem value="top-right">Top Right</SelectItem>
+                                    <SelectItem value="top-left">Top Left</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label>Size</Label>
+                            <Select value={localFabSettings.size} onValueChange={(v) => handleFabSettingsChange('size', v)}>
+                                <SelectTrigger><SelectValue/></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="small">Small</SelectItem>
+                                    <SelectItem value="medium">Medium</SelectItem>
+                                    <SelectItem value="large">Large</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
                     
                     <ScrollArea className="h-auto max-h-[40vh] custom-scrollbar">

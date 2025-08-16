@@ -22,7 +22,14 @@ export interface FloatingActionItem {
 
 export interface FloatingActionButtonSettings {
   isEnabled: boolean;
+  position: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
+  size: 'small' | 'medium' | 'large';
   items: FloatingActionItem[];
+}
+
+export interface ScreenLayoutSettings {
+    mobileMaxWidth: 'sm' | 'md' | 'lg' | 'full';
+    desktopMaxWidth: 'md' | 'lg' | 'xl' | '2xl' | 'full';
 }
 
 export interface AppLinks {
@@ -255,6 +262,7 @@ export interface AppSettings {
     rechargeAddresses: RechargeAddress[];
     appLinks: AppLinks;
     floatingActionButtonSettings: FloatingActionButtonSettings;
+    screenLayoutSettings: ScreenLayoutSettings;
     tawkToSrcUrl: string;
     themeColors: { primary: string; accent: string };
     notices: Notice[];

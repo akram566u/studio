@@ -37,6 +37,8 @@ export const initialAppSettings: AppSettings = {
 
     floatingActionButtonSettings: {
         isEnabled: true,
+        position: 'bottom-right',
+        size: 'medium',
         items: [
             { id: 'fab_1', label: 'Desktop View', icon: 'Monitor', action: 'switch_view_desktop', isEnabled: true },
             { id: 'fab_5', label: 'Mobile View', icon: 'Smartphone', action: 'switch_view_mobile', isEnabled: true },
@@ -44,6 +46,11 @@ export const initialAppSettings: AppSettings = {
             { id: 'fab_3', label: 'Download App', icon: 'Download', action: 'download_app', isEnabled: true },
             { id: 'fab_4', label: 'Customer Support', icon: 'MessageSquare', action: 'customer_support', isEnabled: true },
         ]
+    },
+
+    screenLayoutSettings: {
+        mobileMaxWidth: 'sm',
+        desktopMaxWidth: '7xl'
     },
 
     restrictionMessages: [
