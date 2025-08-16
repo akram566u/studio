@@ -2,6 +2,15 @@
 'use client';
 import { useState, useContext, useEffect } from 'react';
 import { AppContext } from './providers/AppProvider';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import * as LucideIcons from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './ui/dialog';
+import { Label } from './ui/label';
+import { Input } from './ui/input';
+import { useToast } from '@/hooks/use-toast';
+import { ScrollArea } from './ui/scroll-area';
+import { FloatingActionItem } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 import Header from './layout/Header';
 import ThreeBackground from './layout/ThreeBackground';
@@ -26,6 +35,154 @@ const VerifyEmailView: React.FC<{ setView: React.Dispatch<React.SetStateAction<V
         <Button onClick={() => setView('signin')}>Back to Sign In</Button>
     </GlassPanel>
 );
+
+const ForgotPasswordDialog = ({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) => {
+    const context = useContext(AppContext);
+    const [email, setEmail] = useState('');
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (context && email) {
+            context.forgotPassword(email);
+            onOpenChange(false); // Close dialog on submit
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Forgot Your Password?</DialogTitle>
+                    <DialogDescription>
+                        Enter your email address below. If an account exists, we will send you a link to reset your password.
+                    </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4 py-4">
+                    <div>
+                        <Label htmlFor="forgot-email">Email Address</Label>
+                        <Input
+                            id="forgot-email"
+                            type="email"
+                            value={email}
+                            onChange={e => setEmail(e.target.value)}
+                            placeholder="your@example.com"
+                            required
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button type="submit">Send Reset Link</Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
+const GlobalFloatingActionButton = () => {
+    const context = useContext(AppContext);
+    const { toast } = useToast();
+    const [isOpen, setIsOpen] = useState(false);
+    const [isForgotPassOpen, setIsForgotPassOpen] = useState(false);
+
+    if (!context || !context.floatingActionButtonSettings.isEnabled) {
+        return null;
+    }
+
+    const { floatingActionButtonSettings, appLinks } = context;
+    const visibleItems = floatingActionButtonSettings.items.filter(item => item.isEnabled);
+
+    if (visibleItems.length === 0) return null;
+
+
+    const handleActionClick = (item: FloatingActionItem) => {
+        switch (item.action) {
+            case 'forgot_password':
+                setIsForgotPassOpen(true);
+                break;
+            case 'download_app':
+                if (appLinks.downloadUrl && appLinks.downloadUrl !== '#') {
+                    window.open(appLinks.downloadUrl, '_blank');
+                } else {
+                    toast({ title: "Not Available", description: "Download link has not been configured.", variant: "destructive" });
+                }
+                break;
+            case 'customer_support':
+                if (appLinks.supportUrl && appLinks.supportUrl !== '#') {
+                    window.open(appLinks.supportUrl, '_blank');
+                } else {
+                    toast({ title: "Not Available", description: "Support link has not been configured.", variant: "destructive" });
+                }
+                break;
+            case 'custom_link':
+                if (item.url && item.url !== '#') {
+                    window.open(item.url, '_blank');
+                } else {
+                    toast({ title: "Not Available", description: "Custom link has not been configured.", variant: "destructive" });
+                }
+                break;
+             default:
+                toast({ title: "Action not configured", description: "This button's action is not available on this screen.", variant: "destructive" });
+        }
+        setIsOpen(false);
+    };
+
+    const MainIcon = (LucideIcons as any)[visibleItems[0]?.icon || 'HelpCircle'] || LucideIcons.HelpCircle;
+
+    const positionClasses = {
+        'bottom-right': 'bottom-8 right-8',
+        'bottom-left': 'bottom-8 left-8',
+        'top-right': 'top-24 right-8',
+        'top-left': 'top-24 left-8',
+    };
+    
+    const sizeClasses = {
+        'small': 'size-12',
+        'medium': 'size-16',
+        'large': 'size-20',
+    };
+
+    return (
+        <>
+        <div className={cn("fixed z-50", positionClasses[floatingActionButtonSettings.position])}>
+            <Popover open={isOpen} onOpenChange={setIsOpen}>
+                <PopoverTrigger asChild>
+                    <Button 
+                        variant="outline" 
+                        size="icon" 
+                        className={cn("rounded-full bg-accent/50 backdrop-blur-sm border-accent/20 hover:bg-accent/80", sizeClasses[floatingActionButtonSettings.size])}
+                    >
+                        <MainIcon className={cn(floatingActionButtonSettings.size === 'large' ? "size-10" : "size-8")} />
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 mr-4 mb-2 p-0">
+                     <div className="p-4">
+                        <h4 className="font-medium leading-none">Help & Actions</h4>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            Select an option below.
+                        </p>
+                    </div>
+                    <ScrollArea className="h-auto max-h-[60vh]">
+                        <div className="grid gap-2 p-2">
+                            {visibleItems.map(item => {
+                                // Exclude view switchers from the global FAB
+                                if(item.action === 'switch_view_desktop' || item.action === 'switch_view_mobile') return null;
+
+                                const ItemIcon = (LucideIcons as any)[item.icon] || LucideIcons.AlertCircle;
+                                return (
+                                    <Button key={item.id} variant="ghost" className="justify-start" onClick={() => handleActionClick(item)}>
+                                        <ItemIcon className="mr-2"/> {item.label}
+                                    </Button>
+                                );
+                            })}
+                        </div>
+                    </ScrollArea>
+                </PopoverContent>
+            </Popover>
+        </div>
+        <ForgotPasswordDialog open={isForgotPassOpen} onOpenChange={setIsForgotPassOpen} />
+        </>
+    );
+};
 
 
 export default function StakingApp() {
@@ -78,6 +235,7 @@ export default function StakingApp() {
       <main className="flex-grow flex items-center justify-center p-4 z-10">
         {renderView()}
       </main>
+      {isClient && <GlobalFloatingActionButton />}
     </>
   );
 }
