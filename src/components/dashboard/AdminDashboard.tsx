@@ -999,6 +999,10 @@ const ContentUIPanel = () => {
         );
     }
 
+    if (!localFabSettings) {
+        return <p>Loading settings...</p>
+    }
+
     return (
         <div className="space-y-6">
             <Card className="card-gradient-indigo-fuchsia p-6">
@@ -1852,4 +1856,5 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: AdminModalView, labe
 
 export default AdminDashboard;
 
+    
     
