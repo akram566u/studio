@@ -89,7 +89,7 @@ const ScreenSpecificFAB = ({ settings }: { settings: FloatingActionButtonSetting
         return null;
     }
 
-    const { appLinks } = context;
+    const { appLinks, layoutSettings } = context;
     const visibleItems = settings.items.filter(item => item.isEnabled);
 
     if (visibleItems.length === 0) return null;
@@ -141,6 +141,8 @@ const ScreenSpecificFAB = ({ settings }: { settings: FloatingActionButtonSetting
         'medium': 'size-16',
         'large': 'size-20',
     };
+    
+    const maxHeight = window.innerWidth < 768 ? layoutSettings.fabMobileMaxHeight : layoutSettings.fabDesktopMaxHeight;
 
     return (
         <>
@@ -162,7 +164,7 @@ const ScreenSpecificFAB = ({ settings }: { settings: FloatingActionButtonSetting
                             Select an option below.
                         </p>
                     </div>
-                    <ScrollArea className="h-auto max-h-[60vh]">
+                    <ScrollArea style={{ maxHeight }} className="custom-scrollbar">
                         <div className="grid gap-2 p-2">
                             {visibleItems.map(item => {
                                 // Exclude view switchers from the global FAB
@@ -200,7 +202,7 @@ export default function StakingApp() {
     // This can happen briefly on the very first load.
     return <div>Loading Context...</div>;
   }
-  const { currentUser, isAdmin, floatingActionButtonSettings } = context;
+  const { currentUser, isAdmin, floatingActionButtonSettings, layoutSettings } = context;
 
   const getActiveView = (): View => {
     if (isAdmin) return 'admin_dashboard';
@@ -246,11 +248,17 @@ export default function StakingApp() {
     }
   }
   
+  const contentWidthClass = isClient
+    ? window.innerWidth < 768
+      ? `max-w-${layoutSettings.mobileMaxWidth}`
+      : `max-w-${layoutSettings.desktopMaxWidth}`
+    : 'max-w-7xl';
+  
   return (
     <>
       {isClient && <ThreeBackground />}
       <Header setView={setView} />
-      <main className="flex-grow flex items-center justify-center p-4 z-10">
+      <main className={cn("flex-grow flex items-center justify-center p-4 z-10 w-full", contentWidthClass)}>
         {renderView()}
       </main>
       <ScreenSpecificFAB settings={getFabSettings()} />

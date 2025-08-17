@@ -31,7 +31,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
 import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle, MessageSquare, UserX as UserXIcon, LayoutGrid, Sidebar } from 'lucide-react';
-import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, ScreenLayoutSettings, FABSettings, DailyQuest, QuestType, LoginStreakReward, Leaderboard, LeaderboardCategory, AdminDashboardLayout } from '@/lib/types';
+import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, LayoutSettings, FABSettings, DailyQuest, QuestType, LoginStreakReward, Leaderboard, LeaderboardCategory, AdminDashboardLayout } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { analyzeTeam } from '@/ai/flows/analyze-team-flow';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -846,7 +846,7 @@ const ContentUIPanel = () => {
     const [localStartScreenSubtitle, setLocalStartScreenSubtitle] = useState('');
     const [themeColors, setThemeColors] = useState({ primary: '#2563eb', accent: '#7c3aed' });
     const [localFabSettings, setLocalFabSettings] = useState<FABSettings | null>(null);
-    const [localScreenLayout, setLocalScreenLayout] = useState<ScreenLayoutSettings>({ mobileMaxWidth: 'sm', desktopMaxWidth: '7xl' });
+    const [localLayout, setLocalLayout] = useState<LayoutSettings | null>(null);
     const [localAdminLayout, setLocalAdminLayout] = useState<AdminDashboardLayout>('floating');
     
     useEffect(() => {
@@ -856,7 +856,7 @@ const ContentUIPanel = () => {
             setLocalStartScreenSubtitle(context.startScreenContent.subtitle);
         }
         if(context?.floatingActionButtonSettings) setLocalFabSettings(context.floatingActionButtonSettings);
-        if(context?.screenLayoutSettings) setLocalScreenLayout(context.screenLayoutSettings);
+        if(context?.layoutSettings) setLocalLayout(context.layoutSettings);
         if(context?.adminDashboardLayout) setLocalAdminLayout(context.adminDashboardLayout);
     }, [context]);
 
@@ -868,7 +868,7 @@ const ContentUIPanel = () => {
         active3DTheme,
         setActive3DTheme,
         updateFloatingActionButtonSettings,
-        updateScreenLayoutSettings,
+        updateLayoutSettings,
         updateAdminDashboardLayout,
     } = context;
 
@@ -945,12 +945,14 @@ const ContentUIPanel = () => {
         }
     };
 
-    const handleLayoutChange = (field: keyof ScreenLayoutSettings, value: string) => {
-        setLocalScreenLayout(prev => ({ ...prev, [field]: value }));
+    const handleLayoutChange = (field: keyof LayoutSettings, value: string) => {
+        setLocalLayout(prev => (prev ? { ...prev, [field]: value } : null));
     };
 
     const handleSaveLayoutSettings = () => {
-        updateScreenLayoutSettings(localScreenLayout);
+        if (localLayout) {
+            updateLayoutSettings(localLayout);
+        }
     };
 
     const FabEditor = ({ screen }: { screen: keyof FABSettings }) => {
@@ -1059,7 +1061,7 @@ const ContentUIPanel = () => {
         );
     }
 
-    if (!localFabSettings) {
+    if (!localFabSettings || !localLayout) {
         return <p>Loading settings...</p>
     }
 
@@ -1101,16 +1103,16 @@ const ContentUIPanel = () => {
                     <Button onClick={handleApplyTheme}>Apply Theme</Button>
                 </CardContent>
             </Card>
-            <Card className="card-gradient-orange-red p-6">
+             <Card className="card-gradient-orange-red p-6">
                 <CardHeader>
-                    <CardTitle className="text-purple-300">Layout &amp; Navigation</CardTitle>
-                    <CardDescription>Control the max width and admin navigation style.</CardDescription>
+                    <CardTitle className="text-purple-300">Layout &amp; Sizing</CardTitle>
+                    <CardDescription>Control the max width and FAB scroller height.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <Label htmlFor="desktop-layout">Desktop Max Width</Label>
-                             <Select value={localScreenLayout.desktopMaxWidth} onValueChange={(v) => handleLayoutChange('desktopMaxWidth', v)}>
+                             <Select value={localLayout.desktopMaxWidth} onValueChange={(v) => handleLayoutChange('desktopMaxWidth', v)}>
                                 <SelectTrigger id="desktop-layout"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="md">Medium (768px)</SelectItem>
@@ -1123,7 +1125,7 @@ const ContentUIPanel = () => {
                         </div>
                          <div>
                             <Label htmlFor="mobile-layout">Mobile Max Width</Label>
-                             <Select value={localScreenLayout.mobileMaxWidth} onValueChange={(v) => handleLayoutChange('mobileMaxWidth', v)}>
+                             <Select value={localLayout.mobileMaxWidth} onValueChange={(v) => handleLayoutChange('mobileMaxWidth', v)}>
                                 <SelectTrigger id="mobile-layout"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="sm">Small (640px)</SelectItem>
@@ -1133,8 +1135,16 @@ const ContentUIPanel = () => {
                                 </SelectContent>
                             </Select>
                         </div>
+                        <div>
+                            <Label htmlFor="fab-desktop-height">FAB Scroller Height (Desktop)</Label>
+                            <Input id="fab-desktop-height" value={localLayout.fabDesktopMaxHeight} onChange={e => handleLayoutChange('fabDesktopMaxHeight', e.target.value)} />
+                        </div>
+                         <div>
+                            <Label htmlFor="fab-mobile-height">FAB Scroller Height (Mobile)</Label>
+                            <Input id="fab-mobile-height" value={localLayout.fabMobileMaxHeight} onChange={e => handleLayoutChange('fabMobileMaxHeight', e.target.value)} />
+                        </div>
                     </div>
-                    <Button onClick={handleSaveLayoutSettings}>Save Screen Width Settings</Button>
+                    <Button onClick={handleSaveLayoutSettings}>Save Layout &amp; Sizing Settings</Button>
                     <hr className="border-white/10" />
                      <div>
                         <Label htmlFor="admin-layout">Admin Dashboard Layout</Label>
@@ -2009,7 +2019,12 @@ const LeaderboardsPanel = () => {
 // Navigation Components
 
 const FloatingMenu = ({ items, onSelect }: { items: MenuItem[], onSelect: (view: AdminModalView) => void }) => {
+    const context = useContext(AppContext);
     const [isOpen, setIsOpen] = useState(false);
+
+    if (!context) return null;
+    const { layoutSettings } = context;
+    const maxHeight = window.innerWidth < 768 ? layoutSettings.fabMobileMaxHeight : layoutSettings.fabDesktopMaxHeight;
 
     return (
         <div className="fixed bottom-8 right-8 z-50">
@@ -2021,7 +2036,7 @@ const FloatingMenu = ({ items, onSelect }: { items: MenuItem[], onSelect: (view:
                         exit={{ opacity: 0, y: 10 }}
                         className="mb-4 flex flex-col items-end"
                     >
-                        <ScrollArea className="h-auto max-h-[60vh] pr-4 -mr-4 custom-scrollbar">
+                        <ScrollArea className="pr-4 -mr-4 custom-scrollbar" style={{ maxHeight }}>
                             <div className="flex flex-col items-end gap-3">
                                 {items.map((item) => (
                                     <div key={item.view} className="flex items-center gap-3">

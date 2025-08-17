@@ -62,9 +62,11 @@ export const initialAppSettings: AppSettings = {
         }
     },
 
-    screenLayoutSettings: {
+    layoutSettings: {
         mobileMaxWidth: 'sm',
-        desktopMaxWidth: '7xl'
+        desktopMaxWidth: '7xl',
+        fabMobileMaxHeight: '60vh',
+        fabDesktopMaxHeight: '60vh',
     },
 
     adminDashboardLayout: 'floating',
@@ -213,5 +215,3 @@ export const initialAppSettings: AppSettings = {
         accent: '#7c3aed',
     }
 };
-
-    

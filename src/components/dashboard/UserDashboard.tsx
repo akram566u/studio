@@ -1418,7 +1418,13 @@ const UserDashboard = () => {
 
 
 const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: string, icon: React.ElementType }[], onSelect: (view: ModalView) => void }) => {
+    const context = useContext(AppContext);
     const [isOpen, setIsOpen] = useState(false);
+
+    if (!context) return null;
+    const { layoutSettings } = context;
+    const maxHeight = window.innerWidth < 768 ? layoutSettings.fabMobileMaxHeight : layoutSettings.fabDesktopMaxHeight;
+
 
     return (
         <div className="fixed bottom-8 right-8 z-50">
@@ -1430,7 +1436,7 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
                         exit={{ opacity: 0, y: 10 }}
                         className="mb-4 flex flex-col items-end"
                     >
-                        <ScrollArea className="h-auto max-h-[60vh] pr-4 -mr-4 custom-scrollbar">
+                        <ScrollArea className="pr-4 -mr-4 custom-scrollbar" style={{ maxHeight }}>
                             <div className="flex flex-col items-end gap-3">
                                 {items.map((item) => (
                                     <div key={item.view} className="flex items-center gap-3">
@@ -1478,5 +1484,3 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
-
-    

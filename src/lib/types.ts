@@ -30,9 +30,11 @@ export interface FloatingActionButtonSettings {
 export type FABSettings = Record<'startScreen' | 'userDashboard' | 'adminDashboard', FloatingActionButtonSettings>;
 
 
-export interface ScreenLayoutSettings {
+export interface LayoutSettings {
     mobileMaxWidth: 'sm' | 'md' | 'lg' | 'full';
     desktopMaxWidth: 'md' | 'lg' | 'xl' | '2xl' | 'full';
+    fabMobileMaxHeight: string; // e.g., '60vh' or '400px'
+    fabDesktopMaxHeight: string; // e.g., '70vh' or '500px'
 }
 
 export type AdminDashboardLayout = 'floating' | 'sidebar' | 'grid';
@@ -314,7 +316,7 @@ export interface AppSettings {
     rechargeAddresses: RechargeAddress[];
     appLinks: AppLinks;
     floatingActionButtonSettings: FABSettings;
-    screenLayoutSettings: ScreenLayoutSettings;
+    layoutSettings: LayoutSettings;
     adminDashboardLayout: AdminDashboardLayout;
     tawkToSrcUrl: string;
     themeColors: { primary: string; accent: string };
@@ -377,5 +379,3 @@ export const PrioritizeMessageOutputSchema = z.object({
     announcementId: z.string().optional().describe("The ID of the admin announcement, if applicable."),
 });
 export type PrioritizeMessageOutput = z.infer<typeof PrioritizeMessageOutputSchema>;
-
-    
