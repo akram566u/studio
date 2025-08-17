@@ -6,14 +6,11 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe, runTransaction, deleteDoc, collectionGroup, limit } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification, deleteUser } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, FloatingActionItem, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message, ScreenLayoutSettings, FABSettings, DailyEngagementSettings, DailyQuest, LoginStreakReward, Leaderboard, LeaderboardCategory, UserDailyQuest, AdminDashboardLayout } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message, FABSettings, DailyEngagementSettings, DailyQuest, LoginStreakReward, Leaderboard, LeaderboardCategory, UserDailyQuest, AdminDashboardLayout, LayoutSettings } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
 import Script from 'next/script';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Progress } from '../ui/progress';
-import { formatDistanceToNow } from 'date-fns';
 import { prioritizeMessage } from '@/ai/flows/prioritize-message-flow';
 import { produce } from 'immer';
 
@@ -91,8 +88,8 @@ export interface AppContextType {
   updateAppLinks: (links: AppLinks) => void;
   floatingActionButtonSettings: FABSettings;
   updateFloatingActionButtonSettings: (settings: FABSettings) => void;
-  screenLayoutSettings: ScreenLayoutSettings;
-  updateScreenLayoutSettings: (settings: ScreenLayoutSettings) => void;
+  layoutSettings: LayoutSettings;
+  updateLayoutSettings: (settings: LayoutSettings) => void;
   adminDashboardLayout: AdminDashboardLayout;
   updateAdminDashboardLayout: (layout: AdminDashboardLayout) => void;
   tawkToSrcUrl: string;
@@ -184,7 +181,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     rechargeAddresses,
     appLinks,
     floatingActionButtonSettings,
-    screenLayoutSettings,
+    layoutSettings,
     adminDashboardLayout,
     tawkToSrcUrl,
     notices,
@@ -1078,7 +1075,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
     const updateAppLinks = (links: AppLinks) => updateFirestoreSettings({ appLinks: links });
     const updateFloatingActionButtonSettings = (settings: FABSettings) => updateFirestoreSettings({ floatingActionButtonSettings: settings });
-    const updateScreenLayoutSettings = (settings: ScreenLayoutSettings) => updateFirestoreSettings({ screenLayoutSettings: settings });
+    const updateLayoutSettings = (settings: LayoutSettings) => updateFirestoreSettings({ layoutSettings: settings });
     const updateAdminDashboardLayout = (layout: AdminDashboardLayout) => updateFirestoreSettings({ adminDashboardLayout: layout });
     const addNotice = () => {
         const newNotice: Notice = {
@@ -1319,8 +1316,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 const referrerData = referrerSnap.data() as User;
                 const activeReferrals = (referrerData.referredUsers || []).filter(u => u.isActivated).length;
 
-                // Check eligibility: Must be level 1+ and have enough active referrals for the specific commission tier.
-                if (referrerData.level === 0 || activeReferrals < (i + 1)) {
+                // NEW: Check eligibility based on active referrals and level
+                if (referrerData.level === 0 || activeReferrals < teamCommissionSettings.minDirectReferrals || activeReferrals < (i + 1)) {
                     return;
                 }
                 
@@ -2123,8 +2120,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateAppLinks,
     floatingActionButtonSettings,
     updateFloatingActionButtonSettings,
-    screenLayoutSettings,
-    updateScreenLayoutSettings,
+    layoutSettings,
+    updateLayoutSettings,
     adminDashboardLayout,
     updateAdminDashboardLayout,
     tawkToSrcUrl,
@@ -2191,5 +2188,3 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
-
-    

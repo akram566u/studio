@@ -248,7 +248,8 @@ export default function StakingApp() {
     }
   }
   
-  const contentWidthClass = isClient
+  // Safe access to layoutSettings
+  const contentWidthClass = isClient && layoutSettings
     ? window.innerWidth < 768
       ? `max-w-${layoutSettings.mobileMaxWidth}`
       : `max-w-${layoutSettings.desktopMaxWidth}`
@@ -258,7 +259,7 @@ export default function StakingApp() {
     <>
       {isClient && <ThreeBackground />}
       <Header setView={setView} />
-      <main className={cn("flex-grow flex items-center justify-center p-4 z-10 w-full", contentWidthClass)}>
+      <main className={cn("flex-grow flex items-center justify-center p-4 z-10 w-full mx-auto", contentWidthClass)}>
         {renderView()}
       </main>
       <ScreenSpecificFAB settings={getFabSettings()} />
