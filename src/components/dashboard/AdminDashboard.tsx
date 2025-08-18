@@ -1567,6 +1567,11 @@ const UserPanelsPanel = () => {
 const UserDashboardLayoutEditorPanel = () => {
     const context = useContext(AppContext);
     const [panels, setPanels] = useState<DashboardPanel[]>([]);
+    const [isClient, setIsClient] = useState(false);
+
+    useEffect(() => {
+      setIsClient(true);
+    }, []);
 
     useEffect(() => {
         if (context?.dashboardPanels) {
@@ -1574,7 +1579,13 @@ const UserDashboardLayoutEditorPanel = () => {
         }
     }, [context?.dashboardPanels]);
 
-    if (!context) return null;
+    if (!context || !isClient) {
+        return (
+            <div className="flex justify-center items-center h-full">
+                <Loader2 className="animate-spin text-purple-400" size={32} />
+            </div>
+        );
+    }
 
     const { updateDashboardPanels } = context;
 
