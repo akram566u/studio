@@ -1312,7 +1312,8 @@ const UserDashboard = () => {
     }
   };
 
-  const getModalTitle = (view: ModalView) => {
+  const getModalTitle = (view: ModalView | null) => {
+    if (!view) return "User Panel"; // Handle null case
     const panel = dashboardPanels.find(p => p.componentKey.toLowerCase() === view.replace(/_/g, '').toLowerCase());
     return panel ? panel.title : "User Panel";
   };
@@ -1366,7 +1367,7 @@ const UserDashboard = () => {
       <Dialog open={!!modalView} onOpenChange={(isOpen) => !isOpen && setModalView(null)}>
         <DialogContent className='max-w-2xl'>
             <DialogHeader>
-                <DialogTitle className='text-2xl text-purple-400'>{getModalTitle(modalView!)}</DialogTitle>
+                <DialogTitle className='text-2xl text-purple-400'>{getModalTitle(modalView)}</DialogTitle>
             </DialogHeader>
             <div className='py-4'>
                 {renderModalContent()}
