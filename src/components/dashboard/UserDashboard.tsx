@@ -32,7 +32,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format, formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, User, Message, DailyQuest, UserDailyQuest, Leaderboard } from '@/lib/types';
+import { BoosterPack, DashboardPanel, DashboardPanelComponentKey, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, User, Message, DailyQuest, UserDailyQuest, Leaderboard } from '@/lib/types';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -498,7 +498,7 @@ const ChangePasswordPanel = () => {
     );
 };
 
-const DeactivateAccountPanel = () => {
+const DeleteAccountPanel = () => {
     const context = useContext(AppContext);
     const [password, setPassword] = useState('');
 
@@ -512,7 +512,7 @@ const DeactivateAccountPanel = () => {
 
     return (
         <>
-        <h3 className="text-xl font-semibold mb-4 text-red-400">Deactivate Account</h3>
+        <h3 className="text-xl font-semibold mb-4 text-red-400">Delete Account</h3>
         <p className="text-sm text-gray-300 mb-4">
             This action is irreversible. All your data, including balance, referrals, and transaction history, will be permanently deleted.
         </p>
@@ -523,14 +523,14 @@ const DeactivateAccountPanel = () => {
         <AlertDialog>
             <AlertDialogTrigger asChild>
                 <Button variant="destructive" className="w-full mt-4" disabled={!password}>
-                    <UserXIcon /> Deactivate My Account
+                    <UserXIcon /> Delete My Account
                 </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        This is your final confirmation. Deactivating your account is permanent and cannot be undone. Are you sure you want to proceed?
+                        This is your final confirmation. Deleting your account is permanent and cannot be undone. Are you sure you want to proceed?
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -546,19 +546,15 @@ const DeactivateAccountPanel = () => {
 const SettingsPanel = () => {
     return (
         <Tabs defaultValue="address" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="address">Manage Address</TabsTrigger>
                 <TabsTrigger value="password">Change Password</TabsTrigger>
-                <TabsTrigger value="deactivate" className="text-red-400">Deactivate</TabsTrigger>
             </TabsList>
             <TabsContent value="address" className="mt-6">
                 <ManageAddressPanel />
             </TabsContent>
             <TabsContent value="password" className="mt-6">
                 <ChangePasswordPanel />
-            </TabsContent>
-            <TabsContent value="deactivate" className="mt-6">
-                <DeactivateAccountPanel />
             </TabsContent>
         </Tabs>
     )
@@ -1058,7 +1054,7 @@ const TeamPanel = () => {
     );
 };
 
-const InboxPanel = () => {
+const ChatWithAdminPanel = () => {
     const context = useContext(AppContext);
     const [newMessage, setNewMessage] = useState('');
     const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -1081,7 +1077,7 @@ const InboxPanel = () => {
 
     return (
         <>
-            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Inbox</h3>
+            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Chat With Admin</h3>
             <div ref={scrollAreaRef} className="h-96 overflow-y-auto custom-scrollbar bg-black/20 rounded-lg p-4 space-y-4 mb-4">
                  {(currentUser.messages || []).map((msg: Message) => (
                     <div key={msg.id} className={cn("flex flex-col", msg.sender === 'user' ? 'items-end' : 'items-start')}>
@@ -1233,10 +1229,11 @@ type ModalView =
     | 'pools'
     | 'vaults'
     | 'team'
-    | 'inbox'
     | 'team_layers'
     | 'daily_engagement'
-    | 'leaderboards';
+    | 'leaderboards'
+    | 'delete_account'
+    | 'chat_with_admin';
 
 
 // Main Dashboard Component
@@ -1273,7 +1270,7 @@ const UserDashboard = () => {
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;
   }
-  const { currentUser, levels, markAnnouncementAsRead } = context;
+  const { currentUser, levels, markAnnouncementAsRead, dashboardPanels } = context;
   
   const hasPendingRequests = currentUser.transactions.some(tx => tx.status === 'pending');
   const currentLevelDetails = levels[currentUser.level];
@@ -1301,52 +1298,35 @@ const UserDashboard = () => {
         case 'boosters': return <BoosterStorePanel />;
         case 'pools': return <StakingPoolsPanel />;
         case 'vaults': return <StakingVaultsPanel />;
-        case 'inbox': return <InboxPanel />;
+        case 'chat_with_admin': return <ChatWithAdminPanel />;
         case 'daily_engagement': return <DailyEngagementPanel />;
         case 'leaderboards': return <LeaderboardsPanel />;
-        default: return null;
+        case 'delete_account': return <DeleteAccountPanel />;
+        default: {
+            const panel = dashboardPanels.find(p => p.componentKey === (modalView as any));
+            if (panel?.componentKey === 'Custom') {
+                return <CustomPanel panel={panel} />;
+            }
+            return null;
+        }
     }
   };
 
-  const getModalTitle = () => {
-    if (!modalView) return '';
-    const titles: Record<ModalView, string> = {
-        recharge: 'Recharge',
-        withdraw: 'Withdraw',
-        history: 'History',
-        referrals: 'Referral Network',
-        team: 'Your Team',
-        team_layers: 'Team Layers',
-        levels: 'Level Details',
-        settings: 'Settings',
-        notices: 'Notices',
-        boosters: 'Booster Store',
-        pools: 'Staking Pools',
-        vaults: 'Staking Vaults',
-        inbox: 'Inbox',
-        daily_engagement: 'Daily Engagement',
-        leaderboards: 'Leaderboards',
-    };
-    return titles[modalView];
+  const getModalTitle = (view: ModalView) => {
+    const panel = dashboardPanels.find(p => p.componentKey.toLowerCase() === view.replace(/_/g, '').toLowerCase());
+    return panel ? panel.title : "User Panel";
   };
+  
+  const getPanelComponent = (key: DashboardPanelComponentKey) => {
+    switch(key) {
+        case 'UserOverview': return <UserOverviewPanel currentUser={currentUser} levels={levels} todaysCommission={todaysCommission} />;
+        case 'StakingLevel': return <StakingLevelPanel currentUser={currentUser} currentLevelDetails={currentLevelDetails} />;
+        case 'InterestCredit': return <InterestCountdownPanel />;
+        default: return null;
+    }
+  }
 
-  const dashboardItems: { view: ModalView, label: string, icon: React.ElementType }[] = [
-    { view: 'recharge', label: 'Recharge', icon: Briefcase },
-    { view: 'withdraw', label: 'Withdraw', icon: Send },
-    { view: 'history', label: 'History', icon: BarChart },
-    { view: 'inbox', label: 'Inbox', icon: MessageSquare },
-    { view: 'daily_engagement', label: 'Daily', icon: Star },
-    { view: 'referrals', label: 'Referrals', icon: UserCheck },
-    { view: 'team', label: 'Team', icon: Users },
-    { view: 'team_layers', label: 'Team Layers', icon: Layers },
-    { view: 'leaderboards', label: 'Leaderboards', icon: Trophy },
-    { view: 'levels', label: 'Levels', icon: Layers },
-    { view: 'vaults', label: 'Vaults', icon: PiggyBank },
-    { view: 'boosters', label: 'Boosters', icon: Gift },
-    { view: 'pools', label: 'Pools', icon: Star },
-    { view: 'notices', label: 'Notices', icon: Megaphone },
-    { view: 'settings', label: 'Settings', icon: Settings },
-  ];
+  const visiblePanels = dashboardPanels.filter(p => p.isVisible);
 
   return (
     <>
@@ -1373,20 +1353,20 @@ const UserDashboard = () => {
             </Alert>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <UserOverviewPanel currentUser={currentUser} levels={levels} todaysCommission={todaysCommission} />
-            <StakingLevelPanel currentUser={currentUser} currentLevelDetails={currentLevelDetails} />
-            <div className='md:col-span-2'>
-                <InterestCountdownPanel/>
-            </div>
+             {visiblePanels.slice(0, 3).map(panel => (
+                <div key={panel.id} className={cn(panel.componentKey === 'InterestCredit' && 'md:col-span-2')}>
+                    {getPanelComponent(panel.componentKey)}
+                </div>
+            ))}
         </div>
       </GlassPanel>
 
-      <FloatingMenu items={dashboardItems} onSelect={setModalView} />
+      <FloatingMenu panels={visiblePanels.slice(3)} onSelect={(key) => setModalView(key.toLowerCase().replace(/ /g, '_') as ModalView)} />
 
       <Dialog open={!!modalView} onOpenChange={(isOpen) => !isOpen && setModalView(null)}>
         <DialogContent className='max-w-2xl'>
             <DialogHeader>
-                <DialogTitle className='text-2xl text-purple-400'>{getModalTitle()}</DialogTitle>
+                <DialogTitle className='text-2xl text-purple-400'>{getModalTitle(modalView!)}</DialogTitle>
             </DialogHeader>
             <div className='py-4'>
                 {renderModalContent()}
@@ -1417,13 +1397,38 @@ const UserDashboard = () => {
 };
 
 
-const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: string, icon: React.ElementType }[], onSelect: (view: ModalView) => void }) => {
+const FloatingMenu = ({ panels, onSelect }: { panels: DashboardPanel[], onSelect: (view: DashboardPanelComponentKey) => void }) => {
     const context = useContext(AppContext);
     const [isOpen, setIsOpen] = useState(false);
 
     if (!context) return null;
     const { layoutSettings } = context;
     const maxHeight = window.innerWidth < 768 ? layoutSettings.fabMobileMaxHeight : layoutSettings.fabDesktopMaxHeight;
+
+    const iconMap: Record<DashboardPanelComponentKey, React.ElementType> = {
+        Recharge: Briefcase,
+        Withdraw: Send,
+        TransactionHistory: BarChart,
+        ChatWithAdmin: MessageSquare,
+        DailyEngagement: Star,
+        ReferralNetwork: UserCheck,
+        Team: Users,
+        TeamLayers: Layers,
+        Leaderboards: Trophy,
+        LevelDetails: Layers,
+        StakingVaults: PiggyBank,
+        BoosterStore: Gift,
+        StakingPools: Star,
+        Notices: Megaphone,
+        Settings: Settings,
+        DeleteAccount: UserXIcon,
+        // Default/fallback icons
+        UserOverview: UserCheck,
+        StakingLevel: Layers,
+        InterestCredit: TrendingUp,
+        Custom: Info,
+        ChangePassword: KeyRound,
+    };
 
 
     return (
@@ -1438,23 +1443,25 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
                     >
                         <ScrollArea className="pr-4 -mr-4 custom-scrollbar" style={{ maxHeight }}>
                             <div className="flex flex-col items-end gap-3">
-                                {items.map((item) => (
-                                    <div key={item.view} className="flex items-center gap-3">
+                                {panels.map((panel) => {
+                                    const ItemIcon = iconMap[panel.componentKey] || Info;
+                                    return (
+                                     <div key={panel.id} className="flex items-center gap-3">
                                         <span className="bg-card/50 backdrop-blur-md text-white px-3 py-1 rounded-md shadow-lg text-sm">
-                                            {item.label}
+                                            {panel.title}
                                         </span>
                                         <Button
                                             size="icon"
                                             className="rounded-full size-12 bg-secondary/80 hover:bg-secondary"
                                             onClick={() => {
-                                                onSelect(item.view);
+                                                onSelect(panel.componentKey);
                                                 setIsOpen(false);
                                             }}
                                         >
-                                            <item.icon className="size-6" />
+                                            <ItemIcon className="size-6" />
                                         </Button>
                                     </div>
-                                ))}
+                                )})}
                             </div>
                         </ScrollArea>
                     </motion.div>

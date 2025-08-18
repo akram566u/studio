@@ -1,6 +1,29 @@
 
 
-import { AppSettings } from '@/lib/types';
+import { AppSettings, DashboardPanel, DashboardPanelComponentKey } from '@/lib/types';
+
+const defaultUserDashboardPanels: DashboardPanel[] = [
+    { id: 'p1', title: 'Your Staking Overview', componentKey: 'UserOverview', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p2', title: 'Your Staking Level', componentKey: 'StakingLevel', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p3', title: 'Daily Interest Credit', componentKey: 'InterestCredit', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p18', title: 'Daily Engagement', componentKey: 'DailyEngagement', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p4', title: 'Transaction History', componentKey: 'TransactionHistory', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p5', title: 'Recharge USDT (BEP-20)', componentKey: 'Recharge', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p6', title: 'Withdraw USDT', componentKey: 'Withdraw', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p16', title: 'Settings', componentKey: 'Settings', isVisible: true, isDeletable: false, isEditable: false },
+    { id: 'p7', title: 'Chat With Admin', componentKey: 'ChatWithAdmin', isVisible: true, isDeletable: false, isEditable: false },
+    { id: 'p20', title: 'Delete Account', componentKey: 'DeleteAccount', isVisible: true, isDeletable: false, isEditable: false },
+    { id: 'p8', title: 'Your Referral Network', componentKey: 'ReferralNetwork', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p17', title: 'Team Layers', componentKey: 'TeamLayers', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p15', title: 'Your Team', componentKey: 'Team', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p19', title: 'Leaderboards', componentKey: 'Leaderboards', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p9', title: 'Staking Level Details', componentKey: 'LevelDetails', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p11', title: 'Notices', componentKey: 'Notices', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p12', title: 'Booster Store', componentKey: 'BoosterStore', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p13', title: 'Staking Pools', componentKey: 'StakingPools', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p14', title: 'Staking Vaults', componentKey: 'StakingVaults', isVisible: true, isDeletable: false, isEditable: true },
+];
+
 
 // This object now defines the INITIAL state of the settings.
 // After the first run, these values will be read from and managed in Firestore.
@@ -146,25 +169,7 @@ export const initialAppSettings: AppSettings = {
         subtitle: 'Unlock Your Financial Potential. Securely stake USDT and earn daily rewards.',
     },
 
-    dashboardPanels: [
-        { id: 'p1', title: 'Your Staking Overview', componentKey: 'UserOverview', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p2', title: 'Your Staking Level', componentKey: 'StakingLevel', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p3', title: 'Daily Interest Credit', componentKey: 'InterestCredit', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p18', title: 'Daily Engagement', componentKey: 'DailyEngagement', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p4', title: 'Transaction History', componentKey: 'TransactionHistory', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p5', title: 'Recharge USDT (BEP-20)', componentKey: 'Recharge', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p6', title: 'Withdraw USDT', componentKey: 'Withdraw', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p16', title: 'Settings', componentKey: 'Settings', isVisible: true, isDeletable: false, isEditable: false },
-        { id: 'p8', title: 'Your Referral Network', componentKey: 'ReferralNetwork', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p17', title: 'Team Layers', componentKey: 'TeamLayers', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p15', title: 'Your Team', componentKey: 'Team', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p19', title: 'Leaderboards', componentKey: 'Leaderboards', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p9', title: 'Staking Level Details', componentKey: 'LevelDetails', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p11', title: 'Notices', componentKey: 'Notices', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p12', title: 'Booster Store', componentKey: 'BoosterStore', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p13', title: 'Staking Pools', componentKey: 'StakingPools', isVisible: true, isDeletable: false, isEditable: true },
-        { id: 'p14', title: 'Staking Vaults', componentKey: 'StakingVaults', isVisible: true, isDeletable: false, isEditable: true },
-    ],
+    dashboardPanels: defaultUserDashboardPanels,
 
     notices: [
         { id: 'notice_1', title: 'Welcome to Staking Hub!', content: 'We are excited to have you here. Start staking today to earn daily rewards.', isActive: true },

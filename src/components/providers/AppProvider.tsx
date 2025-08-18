@@ -61,6 +61,7 @@ export interface AppContextType {
   applyTheme: (theme: {primary: string, accent: string}) => void;
   dashboardPanels: DashboardPanel[];
   updateDashboardPanel: (id: string, updates: Partial<DashboardPanel>) => void;
+  updateDashboardPanels: (panels: DashboardPanel[]) => void;
   addDashboardPanel: () => void;
   deleteDashboardPanel: (id: string) => void;
   referralBonusSettings: ReferralBonusSettings;
@@ -1026,6 +1027,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const newPanels = dashboardPanels.map(p => p.id === id ? { ...p, ...updates } : p);
         updateFirestoreSettings({ dashboardPanels: newPanels });
     };
+    const updateDashboardPanels = (panels: DashboardPanel[]) => {
+        updateFirestoreSettings({ dashboardPanels: panels });
+    }
     const addDashboardPanel = () => {
         const newPanel: DashboardPanel = {
             id: `custom_${Date.now()}`,
@@ -2093,6 +2097,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     applyTheme,
     dashboardPanels,
     updateDashboardPanel,
+    updateDashboardPanels,
     addDashboardPanel,
     deleteDashboardPanel,
     referralBonusSettings,
