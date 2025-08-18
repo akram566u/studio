@@ -15,11 +15,11 @@ const StartScreen: React.FC<StartScreenProps> = ({ setView }) => {
   const [mockupView, setMockupView] = useState<'desktop' | 'mobile'>('desktop');
 
   if (!context) return null; // Should be handled by parent, but good practice
-  const { startScreenContent, screenLayoutSettings } = context;
+  const { startScreenContent, layoutSettings } = context;
 
   const contentWidth = mockupView === 'desktop' 
-    ? `max-w-${screenLayoutSettings.desktopMaxWidth}` 
-    : `max-w-${screenLayoutSettings.mobileMaxWidth}`;
+    ? `max-w-${layoutSettings.desktopMaxWidth}` 
+    : `max-w-${layoutSettings.mobileMaxWidth}`;
 
   return (
     <>
