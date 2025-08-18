@@ -36,6 +36,12 @@ import { cn } from '@/lib/utils';
 import { analyzeTeam } from '@/ai/flows/analyze-team-flow';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
+import dynamic from 'next/dynamic';
+
+const UserDashboardLayoutEditorPanel = dynamic(
+    () => Promise.resolve(UserDashboardLayoutEditorPanelComponent), 
+    { ssr: false, loading: () => <div className="flex justify-center items-center h-full"><Loader2 className="animate-spin text-purple-400" size={32} /></div> }
+);
 
 
 type AdminModalView =
@@ -1564,14 +1570,9 @@ const UserPanelsPanel = () => {
     )
 };
 
-const UserDashboardLayoutEditorPanel = () => {
+const UserDashboardLayoutEditorPanelComponent = () => {
     const context = useContext(AppContext);
     const [panels, setPanels] = useState<DashboardPanel[]>([]);
-    const [isClient, setIsClient] = useState(false);
-
-    useEffect(() => {
-      setIsClient(true);
-    }, []);
 
     useEffect(() => {
         if (context?.dashboardPanels) {
@@ -1579,7 +1580,7 @@ const UserDashboardLayoutEditorPanel = () => {
         }
     }, [context?.dashboardPanels]);
 
-    if (!context || !isClient) {
+    if (!context) {
         return (
             <div className="flex justify-center items-center h-full">
                 <Loader2 className="animate-spin text-purple-400" size={32} />
@@ -2221,3 +2222,5 @@ const AdminSidebar = ({ items, onSelect, activeItem }: { items: MenuItem[], onSe
 }
 
 export default AdminDashboard;
+
+    
