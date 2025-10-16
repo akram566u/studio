@@ -1334,12 +1334,15 @@ const UserDashboard = () => {
         case 'daily_engagement': return <DailyEngagementPanel />;
         case 'leaderboards': return <LeaderboardsPanel />;
         case 'profile': return <ProfilePanel currentUser={currentUser} />;
-        default: return null;
+        default: 
+            const panel = dashboardPanels.find(p => p.componentKey.toLowerCase() === modalView);
+            if (panel?.componentKey === 'Custom') return <CustomPanel panel={panel} />;
+            return null;
     }
   };
 
-  const getModalTitle = (key: DashboardPanel['componentKey']): string => {
-    const panel = dashboardPanels.find(p => p.componentKey === key);
+  const getModalTitle = (view: ModalView): string => {
+    const panel = dashboardPanels.find(p => p.componentKey.toLowerCase() === view.toLowerCase());
     return panel ? panel.title : 'Staking Hub';
   }
 
@@ -1361,6 +1364,7 @@ const UserDashboard = () => {
         Notices: Megaphone,
         Settings: Settings,
         Profile: UserIcon,
+        Custom: Info,
     };
     return {
         view: panel.componentKey.toLowerCase() as ModalView,
@@ -1406,12 +1410,16 @@ const UserDashboard = () => {
 
       <Dialog open={!!modalView} onOpenChange={(isOpen) => !isOpen && setModalView(null)}>
         <DialogContent className='max-w-2xl'>
-            <DialogHeader>
-                <DialogTitle className='text-2xl text-purple-400'>{getModalTitle(modalView!.charAt(0).toUpperCase() + modalView!.slice(1) as DashboardPanel['componentKey'])}</DialogTitle>
-            </DialogHeader>
-            <div className='py-4'>
-                {renderModalContent()}
-            </div>
+            {modalView && (
+              <>
+                <DialogHeader>
+                    <DialogTitle className='text-2xl text-purple-400'>{getModalTitle(modalView)}</DialogTitle>
+                </DialogHeader>
+                <div className='py-4'>
+                    {renderModalContent()}
+                </div>
+              </>
+            )}
         </DialogContent>
       </Dialog>
       <AlertDialog open={showBoosterPopup} onOpenChange={setShowBoosterPopup}>
@@ -1505,5 +1513,7 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
+
+    
 
     
