@@ -8,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent, MessageSquare, UserX as UserXIcon, Loader2, CalendarCheck, ShieldCheck } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent, MessageSquare, UserX as UserXIcon, Loader2, CalendarCheck, ShieldCheck, User as UserIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -54,10 +54,13 @@ const UserOverviewPanel = ({ currentUser, levels, todaysCommission }: { currentU
     const activeBoosters = (currentUser.activeBoosters || []).filter((b: ActiveBooster) => b.type === 'interest_boost' && b.expiresAt > now);
     const interestBoost = activeBoosters.reduce((acc: number, b: ActiveBooster) => acc + b.effectValue, 0);
     const totalInterest = baseInterest + interestBoost;
+    
+    const userName = currentUser.email.split('@')[0];
 
     return (
         <Card className="card-gradient-blue-purple p-6">
-            <h3 className="text-xl font-semibold mb-3 text-blue-300">Your Staking Overview</h3>
+            <h3 className="text-xl font-semibold mb-1 text-blue-300">Your Staking Overview</h3>
+            <p className="text-sm text-gray-400 mb-4">{currentUser.email}</p>
             <div className="flex items-center justify-between mb-4">
             <p className="text-xl text-gray-200">Total USDT Balance:</p>
             <p className="text-4xl font-bold text-green-400">{currentUser.balance.toFixed(2)}</p>
@@ -1220,6 +1223,24 @@ const CustomPanel = ({ panel }: { panel: DashboardPanel }) => (
     </>
 );
 
+const ProfilePanel = ({ currentUser }: { currentUser: User }) => {
+    const userName = currentUser.email.split('@')[0];
+    return (
+        <>
+            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Your Profile</h3>
+            <div className="flex flex-col items-center text-center space-y-4">
+                <UserIcon className="size-24 text-purple-400" />
+                <h4 className="text-2xl font-bold capitalize text-white">{userName}</h4>
+                <p className="text-lg text-gray-400">{currentUser.email}</p>
+                <div className="flex items-center gap-4">
+                    <p className="text-lg text-gray-200">Current Level:</p>
+                    <LevelBadge level={currentUser.level} className="size-12 text-xl" />
+                </div>
+            </div>
+        </>
+    )
+}
+
 
 type ModalView = 
     | 'recharge' 
@@ -1236,7 +1257,8 @@ type ModalView =
     | 'inbox'
     | 'team_layers'
     | 'daily_engagement'
-    | 'leaderboards';
+    | 'leaderboards'
+    | 'profile';
 
 
 // Main Dashboard Component
@@ -1273,7 +1295,7 @@ const UserDashboard = () => {
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;
   }
-  const { currentUser, levels, markAnnouncementAsRead } = context;
+  const { currentUser, levels, markAnnouncementAsRead, dashboardPanels } = context;
   
   const hasPendingRequests = currentUser.transactions.some(tx => tx.status === 'pending');
   const currentLevelDetails = levels[currentUser.level];
@@ -1284,6 +1306,13 @@ const UserDashboard = () => {
     }
     setPrioritizedMessage(null); // Dismiss from view
   }
+  
+  // Filter out the main grid panels from the floating menu
+    const mainPanelKeys: DashboardPanel['componentKey'][] = ['UserOverview', 'StakingLevel', 'InterestCredit'];
+    const visiblePanels = dashboardPanels.filter(p => p.isVisible);
+    const mainGridPanels = visiblePanels.filter(p => mainPanelKeys.includes(p.componentKey));
+    const floatingMenuItems = visiblePanels.filter(p => !mainPanelKeys.includes(p.componentKey));
+
 
   const renderModalContent = () => {
     if (!modalView) return null;
@@ -1304,49 +1333,41 @@ const UserDashboard = () => {
         case 'inbox': return <InboxPanel />;
         case 'daily_engagement': return <DailyEngagementPanel />;
         case 'leaderboards': return <LeaderboardsPanel />;
+        case 'profile': return <ProfilePanel currentUser={currentUser} />;
         default: return null;
     }
   };
 
-  const getModalTitle = () => {
-    if (!modalView) return '';
-    const titles: Record<ModalView, string> = {
-        recharge: 'Recharge',
-        withdraw: 'Withdraw',
-        history: 'History',
-        referrals: 'Referral Network',
-        team: 'Your Team',
-        team_layers: 'Team Layers',
-        levels: 'Level Details',
-        settings: 'Settings',
-        notices: 'Notices',
-        boosters: 'Booster Store',
-        pools: 'Staking Pools',
-        vaults: 'Staking Vaults',
-        inbox: 'Inbox',
-        daily_engagement: 'Daily Engagement',
-        leaderboards: 'Leaderboards',
-    };
-    return titles[modalView];
-  };
+  const getModalTitle = (key: DashboardPanel['componentKey']): string => {
+    const panel = dashboardPanels.find(p => p.componentKey === key);
+    return panel ? panel.title : 'Staking Hub';
+  }
 
-  const dashboardItems: { view: ModalView, label: string, icon: React.ElementType }[] = [
-    { view: 'recharge', label: 'Recharge', icon: Briefcase },
-    { view: 'withdraw', label: 'Withdraw', icon: Send },
-    { view: 'history', label: 'History', icon: BarChart },
-    { view: 'inbox', label: 'Inbox', icon: MessageSquare },
-    { view: 'daily_engagement', label: 'Daily', icon: Star },
-    { view: 'referrals', label: 'Referrals', icon: UserCheck },
-    { view: 'team', label: 'Team', icon: Users },
-    { view: 'team_layers', label: 'Team Layers', icon: Layers },
-    { view: 'leaderboards', label: 'Leaderboards', icon: Trophy },
-    { view: 'levels', label: 'Levels', icon: Layers },
-    { view: 'vaults', label: 'Vaults', icon: PiggyBank },
-    { view: 'boosters', label: 'Boosters', icon: Gift },
-    { view: 'pools', label: 'Pools', icon: Star },
-    { view: 'notices', label: 'Notices', icon: Megaphone },
-    { view: 'settings', label: 'Settings', icon: Settings },
-  ];
+  const dashboardItems = floatingMenuItems.map(panel => {
+    const icons: Record<string, React.ElementType> = {
+        Recharge: Briefcase,
+        Withdraw: Send,
+        TransactionHistory: BarChart,
+        Inbox: MessageSquare,
+        DailyEngagement: Star,
+        ReferralNetwork: UserCheck,
+        Team: Users,
+        TeamLayers: Layers,
+        Leaderboards: Trophy,
+        LevelDetails: Layers,
+        StakingVaults: PiggyBank,
+        BoosterStore: Gift,
+        StakingPools: Star,
+        Notices: Megaphone,
+        Settings: Settings,
+        Profile: UserIcon,
+    };
+    return {
+        view: panel.componentKey.toLowerCase() as ModalView,
+        label: panel.title,
+        icon: icons[panel.componentKey] || Info,
+    };
+});
 
   return (
     <>
@@ -1386,7 +1407,7 @@ const UserDashboard = () => {
       <Dialog open={!!modalView} onOpenChange={(isOpen) => !isOpen && setModalView(null)}>
         <DialogContent className='max-w-2xl'>
             <DialogHeader>
-                <DialogTitle className='text-2xl text-purple-400'>{getModalTitle()}</DialogTitle>
+                <DialogTitle className='text-2xl text-purple-400'>{getModalTitle(modalView!.charAt(0).toUpperCase() + modalView!.slice(1) as DashboardPanel['componentKey'])}</DialogTitle>
             </DialogHeader>
             <div className='py-4'>
                 {renderModalContent()}
@@ -1484,3 +1505,5 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
+
+    
