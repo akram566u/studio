@@ -187,9 +187,10 @@ const AdminDashboard = () => {
 // Home Panel
 const AdminHomePanel = ({ onReply }: { onReply: (view: AdminModalView) => void }) => {
     const context = useContext(AppContext);
+    const { toast } = useToast();
     if (!context) return <div>Loading context...</div>;
 
-    const { totalUsers, totalDepositAmount, totalWithdrawalAmount, totalReferralBonusPaid, allPendingRequests, allOnHoldRequests, adminReferrals, allUsersForAdmin, adminDashboardLayout } = context;
+    const { totalUsers, totalDepositAmount, totalWithdrawalAmount, totalReferralBonusPaid, allPendingRequests, allOnHoldRequests, adminReferrals, allUsersForAdmin, adminDashboardLayout, adminReferralCode } = context;
     const firebaseProjectId = "staking-hub-3";
     
     const handleReplyToUser = async (email: string) => {
@@ -219,6 +220,11 @@ const AdminHomePanel = ({ onReply }: { onReply: (view: AdminModalView) => void }
             default: return <CheckCircle className="text-gray-400 mt-1 size-6" />;
         }
     }
+
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text);
+        toast({ title: 'Copied to clipboard!' });
+    };
 
     return (
       <GlassPanel className="w-full p-0 md:p-8 custom-scrollbar overflow-y-auto h-full bg-transparent border-none shadow-none">
@@ -250,6 +256,18 @@ const AdminHomePanel = ({ onReply }: { onReply: (view: AdminModalView) => void }
                             <p className="text-sm text-gray-300">Total Referral Bonuses Paid</p>
                             <p className="text-xl font-bold text-orange-400">{totalReferralBonusPaid.toFixed(2)} USDT</p>
                         </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card className="card-gradient-yellow-pink p-6">
+                <CardHeader>
+                    <CardTitle className="text-purple-300">Admin Referral Code</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="bg-black/20 p-3 rounded-lg flex items-center justify-between">
+                        <span className="font-mono text-lg text-yellow-300">{adminReferralCode}</span>
+                        <Button onClick={() => copyToClipboard(adminReferralCode)}>Copy Code</Button>
                     </div>
                 </CardContent>
             </Card>
