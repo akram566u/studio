@@ -255,10 +255,12 @@ export interface StartScreenSettings {
   subtitle: string;
 }
 
+export type DashboardPanelComponentKey = 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices' | 'BoosterStore' | 'StakingPools' | 'StakingVaults' | 'Team' | 'Settings' | 'DailyEngagement' | 'Leaderboards' | 'Inbox' | 'TeamLayers' | 'DeleteAccount' | 'ChatWithAdmin';
+
 export interface DashboardPanel {
   id: string;
   title: string;
-  componentKey: 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices' | 'BoosterStore' | 'StakingPools' | 'StakingVaults' | 'Team' | 'Settings' | 'DailyEngagement' | 'Leaderboards' | 'Inbox' | 'TeamLayers';
+  componentKey: DashboardPanelComponentKey;
   isVisible: boolean;
   isDeletable: boolean;
   isEditable: boolean;

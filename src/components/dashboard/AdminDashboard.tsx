@@ -30,11 +30,18 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle, MessageSquare, UserX as UserXIcon, LayoutGrid, Sidebar } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle, MessageSquare, UserX as UserXIcon, LayoutGrid, Sidebar, Eye, EyeOff } from 'lucide-react';
 import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, LayoutSettings, FABSettings, DailyQuest, QuestType, LoginStreakReward, Leaderboard, LeaderboardCategory, AdminDashboardLayout } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { analyzeTeam } from '@/ai/flows/analyze-team-flow';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
+import dynamic from 'next/dynamic';
+
+const UserDashboardLayoutEditorPanel = dynamic(
+    () => Promise.resolve(UserDashboardLayoutEditorPanelComponent), 
+    { ssr: false, loading: () => <div className="flex justify-center items-center h-full"><Loader2 className="animate-spin text-purple-400" size={32} /></div> }
+);
 
 
 type AdminModalView =
@@ -43,6 +50,7 @@ type AdminModalView =
     | 'content_ui'
     | 'system'
     | 'panels'
+    | 'user_dashboard_layout'
     | 'notices'
     | 'boosters'
     | 'booster_analytics'
@@ -64,6 +72,7 @@ const menuItems: MenuItem[] = [
     { view: 'content_ui', label: 'Content & UI', icon: Palette },
     { view: 'system', label: 'System Settings', icon: Settings },
     { view: 'panels', label: 'User Panels', icon: PanelTop },
+    { view: 'user_dashboard_layout', label: 'User Dashboard Layout', icon: LayoutGrid },
     { view: 'notices', label: 'Notices', icon: Megaphone },
     { view: 'daily_engagement', label: 'Daily Engagement', icon: Star },
     { view: 'leaderboards', label: 'Leaderboards', icon: Trophy },
@@ -87,6 +96,7 @@ const renderModalContent = (view: AdminModalView) => {
         case 'content_ui': return <ContentUIPanel />;
         case 'system': return <SystemSettingsPanel />;
         case 'panels': return <UserPanelsPanel />;
+        case 'user_dashboard_layout': return <UserDashboardLayoutEditorPanel />;
         case 'notices': return <NoticesPanel />;
         case 'boosters': return <BoostersPanel />;
         case 'booster_analytics': return <BoosterAnalyticsPanel />;
@@ -1560,6 +1570,94 @@ const UserPanelsPanel = () => {
     )
 };
 
+const UserDashboardLayoutEditorPanelComponent = () => {
+    const context = useContext(AppContext);
+    const [panels, setPanels] = useState<DashboardPanel[]>([]);
+
+    useEffect(() => {
+        if (context?.dashboardPanels) {
+            setPanels(context.dashboardPanels);
+        }
+    }, [context?.dashboardPanels]);
+
+    if (!context) {
+        return (
+            <div className="flex justify-center items-center h-full">
+                <Loader2 className="animate-spin text-purple-400" size={32} />
+            </div>
+        );
+    }
+
+    const { updateDashboardPanels } = context;
+
+    const onDragEnd = (result: DropResult) => {
+        if (!result.destination) {
+            return;
+        }
+
+        const items = Array.from(panels);
+        const [reorderedItem] = items.splice(result.source.index, 1);
+        items.splice(result.destination.index, 0, reorderedItem);
+
+        setPanels(items);
+    };
+
+    const handleVisibilityToggle = (id: string) => {
+        const newPanels = panels.map(panel => {
+            if (panel.id === id) {
+                return { ...panel, isVisible: !panel.isVisible };
+            }
+            return panel;
+        });
+        setPanels(newPanels);
+    };
+
+    const handleSaveChanges = () => {
+        updateDashboardPanels(panels);
+    };
+
+    return (
+        <Card className="card-gradient-blue-purple p-6">
+            <CardHeader>
+                <CardTitle>User Dashboard Layout</CardTitle>
+                <CardDescription>Drag and drop to reorder panels. Toggle visibility for each panel.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <DragDropContext onDragEnd={onDragEnd}>
+                    <Droppable droppableId="dashboardPanels">
+                        {(provided) => (
+                            <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-3">
+                                {panels.map((panel, index) => (
+                                    <Draggable key={panel.id} draggableId={panel.id} index={index}>
+                                        {(provided) => (
+                                            <div
+                                                ref={provided.innerRef}
+                                                {...provided.draggableProps}
+                                                {...provided.dragHandleProps}
+                                                className="bg-black/20 p-4 rounded-lg flex items-center justify-between"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <GripVertical className="text-gray-400" />
+                                                    <span className={cn(panel.isVisible ? "text-white" : "text-gray-500 line-through")}>{panel.title}</span>
+                                                </div>
+                                                <Button size="icon" variant="ghost" onClick={() => handleVisibilityToggle(panel.id)}>
+                                                    {panel.isVisible ? <Eye /> : <EyeOff />}
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </Draggable>
+                                ))}
+                                {provided.placeholder}
+                            </div>
+                        )}
+                    </Droppable>
+                </DragDropContext>
+                <Button className="mt-6 w-full" onClick={handleSaveChanges}>Save Layout</Button>
+            </CardContent>
+        </Card>
+    );
+};
+
 const NoticesPanel = () => {
     const context = useContext(AppContext);
     const [localNotices, setLocalNotices] = useState<Notice[]>([]);
@@ -2124,3 +2222,5 @@ const AdminSidebar = ({ items, onSelect, activeItem }: { items: MenuItem[], onSe
 }
 
 export default AdminDashboard;
+
+    

@@ -32,7 +32,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format, formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { BoosterPack, DashboardPanel, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, User, Message, DailyQuest, UserDailyQuest, Leaderboard } from '@/lib/types';
+import { BoosterPack, DashboardPanel, DashboardPanelComponentKey, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, User, Message, DailyQuest, UserDailyQuest, Leaderboard } from '@/lib/types';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -236,6 +236,11 @@ const RechargePanel = () => {
     const { currentUser, submitDepositRequest, restrictionMessages, rechargeAddresses } = context;
     const activeAddress = rechargeAddresses.find(a => a.isActive);
 
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text);
+        toast({ title: 'Copied to clipboard!' });
+    };
+
     const handleDepositRequest = () => {
         if (!activeAddress) {
             toast({ title: "Error", description: "No active deposit address. Please contact support.", variant: "destructive" });
@@ -270,11 +275,6 @@ const RechargePanel = () => {
             setDepositAmount('');
         }
     };
-
-        const copyToClipboard = (text: string) => {
-            navigator.clipboard.writeText(text);
-            toast({ title: 'Copied to clipboard!' });
-        };
     
     return (
         <>
@@ -500,7 +500,7 @@ const ChangePasswordPanel = () => {
     );
 };
 
-const DeactivateAccountPanel = () => {
+const DeleteAccountPanel = () => {
     const context = useContext(AppContext);
     const [password, setPassword] = useState('');
 
@@ -514,7 +514,7 @@ const DeactivateAccountPanel = () => {
 
     return (
         <>
-        <h3 className="text-xl font-semibold mb-4 text-red-400">Deactivate Account</h3>
+        <h3 className="text-xl font-semibold mb-4 text-red-400">Delete Account</h3>
         <p className="text-sm text-gray-300 mb-4">
             This action is irreversible. All your data, including balance, referrals, and transaction history, will be permanently deleted.
         </p>
@@ -525,14 +525,14 @@ const DeactivateAccountPanel = () => {
         <AlertDialog>
             <AlertDialogTrigger asChild>
                 <Button variant="destructive" className="w-full mt-4" disabled={!password}>
-                    <UserXIcon /> Deactivate My Account
+                    <UserXIcon /> Delete My Account
                 </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        This is your final confirmation. Deactivating your account is permanent and cannot be undone. Are you sure you want to proceed?
+                        This is your final confirmation. Deleting your account is permanent and cannot be undone. Are you sure you want to proceed?
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -548,19 +548,15 @@ const DeactivateAccountPanel = () => {
 const SettingsPanel = () => {
     return (
         <Tabs defaultValue="address" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="address">Manage Address</TabsTrigger>
                 <TabsTrigger value="password">Change Password</TabsTrigger>
-                <TabsTrigger value="deactivate" className="text-red-400">Deactivate</TabsTrigger>
             </TabsList>
             <TabsContent value="address" className="mt-6">
                 <ManageAddressPanel />
             </TabsContent>
             <TabsContent value="password" className="mt-6">
                 <ChangePasswordPanel />
-            </TabsContent>
-            <TabsContent value="deactivate" className="mt-6">
-                <DeactivateAccountPanel />
             </TabsContent>
         </Tabs>
     )
@@ -1064,7 +1060,7 @@ const TeamPanel = () => {
     );
 };
 
-const InboxPanel = () => {
+const ChatWithAdminPanel = () => {
     const context = useContext(AppContext);
     const [newMessage, setNewMessage] = useState('');
     const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -1087,7 +1083,7 @@ const InboxPanel = () => {
 
     return (
         <>
-            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Inbox</h3>
+            <h3 className="text-2xl font-semibold mb-4 text-blue-300">Chat With Admin</h3>
             <div ref={scrollAreaRef} className="h-96 overflow-y-auto custom-scrollbar bg-black/20 rounded-lg p-4 space-y-4 mb-4">
                  {(currentUser.messages || []).map((msg: Message) => (
                     <div key={msg.id} className={cn("flex flex-col", msg.sender === 'user' ? 'items-end' : 'items-start')}>
@@ -1257,12 +1253,13 @@ type ModalView =
     | 'pools'
     | 'vaults'
     | 'team'
-    | 'inbox'
     | 'team_layers'
     | 'daily_engagement'
     | 'leaderboards'
     | 'profile'
-    | 'custom';
+    | 'custom'
+    | 'delete_account'
+    | 'chat_with_admin';
 
 
 // Main Dashboard Component
@@ -1312,14 +1309,14 @@ const UserDashboard = () => {
     setPrioritizedMessage(null); // Dismiss from view
   }
   
-    const mainPanelKeys: DashboardPanel['componentKey'][] = ['UserOverview', 'StakingLevel', 'InterestCredit'];
-    const visiblePanels = dashboardPanels.filter(p => p.isVisible);
-    
-    // Panels for the main grid
-    const mainGridPanels = visiblePanels.filter(p => mainPanelKeys.includes(p.componentKey));
-    
-    const floatingMenuItems = visiblePanels.filter(p => !mainPanelKeys.includes(p.componentKey));
-
+  const getPanelComponent = (key: DashboardPanelComponentKey) => {
+    switch(key) {
+        case 'UserOverview': return <UserOverviewPanel currentUser={currentUser} levels={levels} todaysCommission={todaysCommission} />;
+        case 'StakingLevel': return <StakingLevelPanel currentUser={currentUser} currentLevelDetails={currentLevelDetails} />;
+        case 'InterestCredit': return <InterestCountdownPanel />;
+        default: return null;
+    }
+  }
 
   const handleOpenModal = (view: ModalView, panel?: DashboardPanel) => {
     if (view === 'custom' && panel) {
@@ -1347,10 +1344,11 @@ const UserDashboard = () => {
         case 'boosters': return <BoosterStorePanel />;
         case 'pools': return <StakingPoolsPanel />;
         case 'vaults': return <StakingVaultsPanel />;
-        case 'inbox': return <InboxPanel />;
+        case 'chat_with_admin': return <ChatWithAdminPanel />;
         case 'daily_engagement': return <DailyEngagementPanel />;
         case 'leaderboards': return <LeaderboardsPanel />;
         case 'profile': return <ProfilePanel currentUser={currentUser} />;
+        case 'delete_account': return <DeleteAccountPanel />;
         case 'custom':
             if (activeCustomPanel) return <CustomPanel panel={activeCustomPanel} />;
             return null;
@@ -1363,16 +1361,25 @@ const UserDashboard = () => {
     if (view === 'custom' && activeCustomPanel) {
         return activeCustomPanel.title;
     }
-    const panel = dashboardPanels.find(p => p.componentKey.toLowerCase() === view.toLowerCase());
+    const panel = dashboardPanels.find(p => p.componentKey.toLowerCase() === view.replace(/_/g, '').toLowerCase());
     return panel ? panel.title : 'Staking Hub';
   }
+
+  const mainPanelKeys: DashboardPanelComponentKey[] = ['UserOverview', 'StakingLevel', 'InterestCredit'];
+  const visiblePanels = dashboardPanels.filter(p => p.isVisible);
+
+  // Panels for the main grid, ensuring only the configured main panels are there
+  const mainGridPanels = visiblePanels.filter(p => mainPanelKeys.includes(p.componentKey));
+  
+  // Panels for the floating menu (all visible panels that are NOT in the main grid)
+  const floatingMenuItems = visiblePanels.filter(p => !mainPanelKeys.includes(p.componentKey));
 
   const dashboardItems = floatingMenuItems.map(panel => {
     const icons: Record<string, React.ElementType> = {
         Recharge: Briefcase,
         Withdraw: Send,
         TransactionHistory: BarChart,
-        Inbox: MessageSquare,
+        ChatWithAdmin: MessageSquare,
         DailyEngagement: Star,
         ReferralNetwork: UserCheck,
         Team: Users,
@@ -1384,6 +1391,7 @@ const UserDashboard = () => {
         StakingPools: Star,
         Notices: Megaphone,
         Settings: Settings,
+        DeleteAccount: UserXIcon,
         Profile: UserIcon,
         Custom: Info,
     };
@@ -1396,6 +1404,8 @@ const UserDashboard = () => {
     if(viewKey === "stakingvaults") viewKey = "vaults";
     if(viewKey === "teamlayers") viewKey = "team_layers";
     if(viewKey === "dailyengagement") viewKey = "daily_engagement";
+    if(viewKey === "deleteaccount") viewKey = "delete_account";
+    if(viewKey === "chatwithadmin") viewKey = "chat_with_admin";
     
     return {
         panel,
@@ -1430,11 +1440,11 @@ const UserDashboard = () => {
             </Alert>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <UserOverviewPanel currentUser={currentUser} levels={levels} todaysCommission={todaysCommission} />
-            <StakingLevelPanel currentUser={currentUser} currentLevelDetails={currentLevelDetails} />
-            <div className='md:col-span-2'>
-                <InterestCountdownPanel/>
-            </div>
+             {mainGridPanels.map(panel => (
+                <div key={panel.id} className={cn(panel.componentKey === 'InterestCredit' && 'md:col-span-2')}>
+                    {getPanelComponent(panel.componentKey)}
+                </div>
+            ))}
         </div>
       </GlassPanel>
 
@@ -1486,7 +1496,6 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
     const { layoutSettings } = context;
     const maxHeight = window.innerWidth < 768 ? layoutSettings.fabMobileMaxHeight : layoutSettings.fabDesktopMaxHeight;
 
-
     return (
         <div className="fixed bottom-8 right-8 z-50">
             <AnimatePresence>
@@ -1499,8 +1508,10 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
                     >
                         <ScrollArea className="pr-4 -mr-4 custom-scrollbar" style={{ maxHeight }}>
                             <div className="flex flex-col items-end gap-3">
-                                {items.map((item) => (
-                                    <div key={item.view} className="flex items-center gap-3">
+                                {items.map((item) => {
+                                    const ItemIcon = item.icon;
+                                    return (
+                                     <div key={item.panel.id} className="flex items-center gap-3">
                                         <span className="bg-card/50 backdrop-blur-md text-white px-3 py-1 rounded-md shadow-lg text-sm">
                                             {item.label}
                                         </span>
@@ -1513,10 +1524,10 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
                                                 setIsOpen(false);
                                             }}
                                         >
-                                            <item.icon className="size-6" />
+                                            <ItemIcon className="size-6" />
                                         </Button>
                                     </div>
-                                ))}
+                                )})}
                             </div>
                         </ScrollArea>
                     </motion.div>
