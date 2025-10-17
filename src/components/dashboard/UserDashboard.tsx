@@ -681,31 +681,31 @@ const TeamLayersPanel = () => {
 const LevelDetailsPanel = ({ levels }: { levels: { [key: number]: Level } }) => (
     <>
         <h3 className="text-2xl font-semibold mb-4 text-blue-300">Staking Level Details</h3>
-        <ScrollArea className="w-full whitespace-nowrap" orientation="horizontal">
-            <Table className="min-w-max">
+        <ScrollArea className="w-full" orientation="horizontal">
+            <Table>
                 <TableHeader>
-                <TableRow>
-                    <TableHead className="text-white">Level</TableHead>
-                    <TableHead className="text-white">Name</TableHead>
-                    <TableHead className="text-white">Min Balance</TableHead>
-                    <TableHead className="text-white">Referrals</TableHead>
-                    <TableHead className="text-white">Withdraw Limit</TableHead>
-                    <TableHead className="text-white">Monthly Withdrawals</TableHead>
-                    <TableHead className="text-white">Interest</TableHead>
-                </TableRow>
+                    <TableRow>
+                        <TableHead className="text-white">Level</TableHead>
+                        <TableHead className="text-white">Name</TableHead>
+                        <TableHead className="text-white">Min Balance</TableHead>
+                        <TableHead className="text-white">Referrals</TableHead>
+                        <TableHead className="text-white">Withdraw Limit</TableHead>
+                        <TableHead className="text-white whitespace-normal">Monthly Withdrawals</TableHead>
+                        <TableHead className="text-white">Interest</TableHead>
+                    </TableRow>
                 </TableHeader>
                 <TableBody>
-                {Object.entries(levels).filter(([,details]) => details.isEnabled).sort(([a], [b]) => Number(a) - Number(b)).map(([level, details]) => (
-                    <TableRow key={level}>
-                        <TableCell><LevelBadge level={parseInt(level, 10)} /></TableCell>
-                        <TableCell className="font-semibold text-gray-200">{details.name}</TableCell>
-                        <TableCell className="font-mono text-green-300">{details.minBalance} USDT</TableCell>
-                        <TableCell className="font-mono text-blue-300">{details.directReferrals}</TableCell>
-                        <TableCell className="font-mono text-yellow-300">{details.withdrawalLimit} USDT</TableCell>
-                        <TableCell className="font-mono text-orange-300">{details.monthlyWithdrawals}</TableCell>
-                        <TableCell className="font-mono text-purple-300">{(details.interest * 100).toFixed(2)}%</TableCell>
-                    </TableRow>
-                ))}
+                    {Object.entries(levels).filter(([, details]) => details.isEnabled).sort(([a], [b]) => Number(a) - Number(b)).map(([level, details]) => (
+                        <TableRow key={level}>
+                            <TableCell><LevelBadge level={parseInt(level, 10)} /></TableCell>
+                            <TableCell className="font-semibold text-gray-200">{details.name}</TableCell>
+                            <TableCell className="font-mono text-green-300">{details.minBalance} USDT</TableCell>
+                            <TableCell className="font-mono text-blue-300">{details.directReferrals}</TableCell>
+                            <TableCell className="font-mono text-yellow-300">{details.withdrawalLimit} USDT</TableCell>
+                            <TableCell className="font-mono text-orange-300">{details.monthlyWithdrawals}</TableCell>
+                            <TableCell className="font-mono text-purple-300">{(details.interest * 100).toFixed(2)}%</TableCell>
+                        </TableRow>
+                    ))}
                 </TableBody>
             </Table>
         </ScrollArea>
@@ -1555,5 +1555,3 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
-
-    
