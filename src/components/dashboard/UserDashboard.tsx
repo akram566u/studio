@@ -55,8 +55,6 @@ const UserOverviewPanel = ({ currentUser, levels, todaysCommission }: { currentU
     const interestBoost = activeBoosters.reduce((acc: number, b: ActiveBooster) => acc + b.effectValue, 0);
     const totalInterest = baseInterest + interestBoost;
     
-    const userName = currentUser.email.split('@')[0];
-
     return (
         <Card className="card-gradient-blue-purple p-6">
             <h3 className="text-xl font-semibold mb-1 text-blue-300">Your Staking Overview</h3>
@@ -1362,7 +1360,7 @@ const UserDashboard = () => {
         return activeCustomPanel.title;
     }
     const panel = dashboardPanels.find(p => p.componentKey.toLowerCase() === view.replace(/_/g, '').toLowerCase());
-    return panel ? panel.title : 'Staking Hub';
+    return panel ? panel.title : 'Stake Plus';
   }
 
   const mainPanelKeys: DashboardPanelComponentKey[] = ['UserOverview', 'StakingLevel', 'InterestCredit'];

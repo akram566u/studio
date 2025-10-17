@@ -6,9 +6,9 @@ import { getFirestore } from "firebase/firestore";
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyCLJyWdCtjzJLPiVw9Aj0Uw16yhSxJfhS0",
-  authDomain: "staking-hub-3.firebaseapp.com",
-  projectId: "staking-hub-3",
-  storageBucket: "staking-hub-3.firebasestorage.app",
+  authDomain: "stake-plus.firebaseapp.com",
+  projectId: "stake-plus",
+  storageBucket: "stake-plus.appspot.com",
   messagingSenderId: "1068308590899",
   appId: "1:1068308590899:web:99866ad07a5a8e10f88e46",
   measurementId: "G-PLZJDQ6SCZ"

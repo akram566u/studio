@@ -22,6 +22,7 @@ const defaultUserDashboardPanels: DashboardPanel[] = [
     { id: 'p12', title: 'Booster Store', componentKey: 'BoosterStore', isVisible: true, isDeletable: false, isEditable: true },
     { id: 'p13', title: 'Staking Pools', componentKey: 'StakingPools', isVisible: true, isDeletable: false, isEditable: true },
     { id: 'p14', title: 'Staking Vaults', componentKey: 'StakingVaults', isVisible: true, isDeletable: false, isEditable: true },
+    { id: 'p21', title: 'Profile', componentKey: 'Profile', isVisible: true, isDeletable: false, isEditable: false },
 ];
 
 
@@ -38,7 +39,7 @@ export const initialAppSettings: AppSettings = {
     tawkToSrcUrl: '',
     // =================================================================================
     
-    websiteTitle: 'Staking Hub',
+    websiteTitle: 'Stake Plus',
 
     levels: {
         0: { name: 'Newcomer', interest: 0, minBalance: 0, directReferrals: 0, withdrawalLimit: 0, monthlyWithdrawals: 0, isEnabled: true },
@@ -165,14 +166,14 @@ export const initialAppSettings: AppSettings = {
     ],
 
     startScreenContent: {
-        title: 'Staking Hub',
+        title: 'Stake Plus',
         subtitle: 'Unlock Your Financial Potential. Securely stake USDT and earn daily rewards.',
     },
 
     dashboardPanels: defaultUserDashboardPanels,
 
     notices: [
-        { id: 'notice_1', title: 'Welcome to Staking Hub!', content: 'We are excited to have you here. Start staking today to earn daily rewards.', isActive: true },
+        { id: 'notice_1', title: 'Welcome to Stake Plus!', content: 'We are excited to have you here. Start staking today to earn daily rewards.', isActive: true },
         { id: 'notice_2', title: 'Scheduled Maintenance', content: 'The platform will be undergoing scheduled maintenance on Saturday at 11 PM UTC. The service might be temporarily unavailable.', isActive: false },
     ],
     

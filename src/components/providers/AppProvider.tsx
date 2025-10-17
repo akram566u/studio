@@ -134,6 +134,7 @@ export interface AppContextType {
   updateDailyEngagement: (settings: DailyEngagementSettings) => void;
   leaderboards: Leaderboard[];
   updateLeaderboardSettings: (category: LeaderboardCategory, updates: Partial<Leaderboard>) => void;
+  adminReferralCode: string;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -163,7 +164,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   
   const { toast } = useToast();
   
-  const ADMIN_EMAIL = "admin@stakinghub.com";
+  const ADMIN_EMAIL = "admin@stakeplus.com";
   const ADMIN_PASSWORD = "admin123";
   const ADMIN_REFERRAL_CODE = "ADMINREF";
 
@@ -336,33 +337,33 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const signIn = async (email: string, pass: string) => {
     try {
-      if (email === ADMIN_EMAIL && pass === ADMIN_PASSWORD) {
-        await signInWithEmailAndPassword(auth, email, pass);
-        toast({ title: "Admin signed in successfully!" });
-        return;
-      }
+        if (email === ADMIN_EMAIL && pass === ADMIN_PASSWORD) {
+            setIsAdmin(true);
+            toast({ title: "Admin signed in successfully!" });
+            return;
+        }
 
-      const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-      if (!userCredential.user.emailVerified) {
-        await firebaseSignOut(auth);
-        toast({ 
-          title: "Email Not Verified", 
-          description: "Please check your inbox and click the verification link before signing in.", 
-          variant: "destructive" 
-        });
-        return;
-      }
-      toast({ title: "Signed in successfully!" });
+        const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+        if (!userCredential.user.emailVerified) {
+            await firebaseSignOut(auth);
+            toast({ 
+                title: "Email Not Verified", 
+                description: "Please check your inbox and click the verification link before signing in.", 
+                variant: "destructive" 
+            });
+            return;
+        }
+        toast({ title: "Signed in successfully!" });
 
     } catch (error: any) {
-      console.error("Sign in error:", error);
-      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-          toast({ title: "Error", description: "Invalid email or password.", variant: "destructive" });
-      } else if(error.code === 'auth/operation-not-allowed') {
-          toast({ title: "Error", description: "Email/Password sign in is not enabled in Firebase.", variant: "destructive" });
-      } else {
-          toast({ title: "Error", description: "An unknown error occurred during sign in.", variant: "destructive" });
-      }
+        console.error("Sign in error:", error);
+        if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+            toast({ title: "Error", description: "Invalid email or password.", variant: "destructive" });
+        } else if(error.code === 'auth/operation-not-allowed') {
+            toast({ title: "Error", description: "Email/Password sign in is not enabled in Firebase.", variant: "destructive" });
+        } else {
+            toast({ title: "Error", description: "An unknown error occurred during sign in.", variant: "destructive" });
+        }
     }
   };
   
@@ -573,7 +574,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
         const userRef = doc(db, "users", userDocId);
         
-        const description = `${type.replace('_', ' ')} of ${originalRequest.amount} USDT ${newStatus}.`;
+        let description = `${type.replace('_', ' ')} of ${originalRequest.amount} USDT ${newStatus}.`;
         const updatedTransactions = userFound.transactions.map(tx =>
             tx.id === transactionId ? { ...tx, status: newStatus, description } : tx
         );
@@ -1899,7 +1900,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             // The onAuthStateChanged listener will handle the sign-out UI update.
         } catch (error: any) {
             console.error("Error during account deactivation:", error);
-            if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+            if (error.code === 'auth/wrong-password' || error.code === 'invalid-credential') {
                 toast({ title: 'Error', description: 'Incorrect password. Deactivation failed.', variant: 'destructive'});
             } else {
                 toast({ title: 'Error', description: 'An error occurred. Please try again.', variant: 'destructive'});
@@ -2170,6 +2171,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateDailyEngagement,
     leaderboards,
     updateLeaderboardSettings,
+    adminReferralCode: ADMIN_REFERRAL_CODE,
   };
 
   return (

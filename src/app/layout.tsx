@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/toaster"
 import Script from 'next/script';
 
 export const metadata: Metadata = {
-  title: 'Staking Hub',
+  title: 'Stake Plus',
   description: 'Unlock Your Financial Potential. Securely stake USDT and earn daily rewards.',
 };
 
