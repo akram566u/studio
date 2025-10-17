@@ -236,12 +236,6 @@ const RechargePanel = () => {
     const { currentUser, submitDepositRequest, restrictionMessages, rechargeAddresses } = context;
     const activeAddress = rechargeAddresses.find(a => a.isActive);
 
-
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard.writeText(text);
-        toast({ title: 'Copied to clipboard!' });
-    };
-
     const handleDepositRequest = () => {
         if (!activeAddress) {
             toast({ title: "Error", description: "No active deposit address. Please contact support.", variant: "destructive" });
@@ -276,6 +270,11 @@ const RechargePanel = () => {
             setDepositAmount('');
         }
     };
+
+        const copyToClipboard = (text: string) => {
+            navigator.clipboard.writeText(text);
+            toast({ title: 'Copied to clipboard!' });
+        };
     
     return (
         <>
@@ -568,7 +567,11 @@ const SettingsPanel = () => {
 }
 
 
-const ReferralNetworkPanel = ({ currentUser }: { currentUser: any }) => {
+const ReferralNetworkPanel = () => {
+    const context = useContext(AppContext);
+    if (!context || !context.currentUser) return null;
+    const { currentUser } = context;
+
     const { toast } = useToast();
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
@@ -588,7 +591,7 @@ const ReferralNetworkPanel = ({ currentUser }: { currentUser: any }) => {
         <h4 className="text-lg font-semibold mb-2 text-blue-300">Referred Users:</h4>
         <ScrollArea className="h-40">
             <ul className="list-none space-y-2">
-            {currentUser.referredUsers.length > 0 ? (
+            {currentUser.referredUsers && currentUser.referredUsers.length > 0 ? (
                 currentUser.referredUsers.map((user: any, index: number) => (
                 <li key={index} className="flex items-center gap-2 text-gray-300">
                     {user.isActivated 
@@ -1258,13 +1261,15 @@ type ModalView =
     | 'team_layers'
     | 'daily_engagement'
     | 'leaderboards'
-    | 'profile';
+    | 'profile'
+    | 'custom';
 
 
 // Main Dashboard Component
 const UserDashboard = () => {
   const context = useContext(AppContext);
   const [modalView, setModalView] = useState<ModalView | null>(null);
+  const [activeCustomPanel, setActiveCustomPanel] = useState<DashboardPanel | null>(null);
   const [showBoosterPopup, setShowBoosterPopup] = useState(false);
   const [prioritizedMessage, setPrioritizedMessage] = useState<PrioritizeMessageOutput | null>(null);
   const [todaysCommission, setTodaysCommission] = useState(0);
@@ -1307,11 +1312,23 @@ const UserDashboard = () => {
     setPrioritizedMessage(null); // Dismiss from view
   }
   
-  // Filter out the main grid panels from the floating menu
     const mainPanelKeys: DashboardPanel['componentKey'][] = ['UserOverview', 'StakingLevel', 'InterestCredit'];
     const visiblePanels = dashboardPanels.filter(p => p.isVisible);
+    
+    // Panels for the main grid
     const mainGridPanels = visiblePanels.filter(p => mainPanelKeys.includes(p.componentKey));
+    
     const floatingMenuItems = visiblePanels.filter(p => !mainPanelKeys.includes(p.componentKey));
+
+
+  const handleOpenModal = (view: ModalView, panel?: DashboardPanel) => {
+    if (view === 'custom' && panel) {
+        setActiveCustomPanel(panel);
+    } else {
+        setActiveCustomPanel(null);
+    }
+    setModalView(view);
+  };
 
 
   const renderModalContent = () => {
@@ -1321,7 +1338,7 @@ const UserDashboard = () => {
         case 'recharge': return <RechargePanel />;
         case 'withdraw': return <WithdrawPanel />;
         case 'history': return <TransactionHistoryPanel />;
-        case 'referrals': return <ReferralNetworkPanel currentUser={currentUser} />;
+        case 'referrals': return <ReferralNetworkPanel />;
         case 'team': return <TeamPanel />;
         case 'team_layers': return <TeamLayersPanel />;
         case 'levels': return <LevelDetailsPanel levels={levels} />;
@@ -1334,14 +1351,18 @@ const UserDashboard = () => {
         case 'daily_engagement': return <DailyEngagementPanel />;
         case 'leaderboards': return <LeaderboardsPanel />;
         case 'profile': return <ProfilePanel currentUser={currentUser} />;
+        case 'custom':
+            if (activeCustomPanel) return <CustomPanel panel={activeCustomPanel} />;
+            return null;
         default: 
-            const panel = dashboardPanels.find(p => p.componentKey.toLowerCase() === modalView);
-            if (panel?.componentKey === 'Custom') return <CustomPanel panel={panel} />;
             return null;
     }
   };
 
   const getModalTitle = (view: ModalView): string => {
+    if (view === 'custom' && activeCustomPanel) {
+        return activeCustomPanel.title;
+    }
     const panel = dashboardPanels.find(p => p.componentKey.toLowerCase() === view.toLowerCase());
     return panel ? panel.title : 'Staking Hub';
   }
@@ -1366,8 +1387,19 @@ const UserDashboard = () => {
         Profile: UserIcon,
         Custom: Info,
     };
+    let viewKey = panel.componentKey.toLowerCase();
+    if(viewKey === "transactionhistory") viewKey = "history";
+    if(viewKey === "referralnetwork") viewKey = "referrals";
+    if(viewKey === "leveldetails") viewKey = "levels";
+    if(viewKey === "boosterstore") viewKey = "boosters";
+    if(viewKey === "stakingpools") viewKey = "pools";
+    if(viewKey === "stakingvaults") viewKey = "vaults";
+    if(viewKey === "teamlayers") viewKey = "team_layers";
+    if(viewKey === "dailyengagement") viewKey = "daily_engagement";
+    
     return {
-        view: panel.componentKey.toLowerCase() as ModalView,
+        panel,
+        view: viewKey as ModalView,
         label: panel.title,
         icon: icons[panel.componentKey] || Info,
     };
@@ -1406,7 +1438,7 @@ const UserDashboard = () => {
         </div>
       </GlassPanel>
 
-      <FloatingMenu items={dashboardItems} onSelect={setModalView} />
+      <FloatingMenu items={dashboardItems} onSelect={handleOpenModal} />
 
       <Dialog open={!!modalView} onOpenChange={(isOpen) => !isOpen && setModalView(null)}>
         <DialogContent className='max-w-2xl'>
@@ -1446,7 +1478,7 @@ const UserDashboard = () => {
 };
 
 
-const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: string, icon: React.ElementType }[], onSelect: (view: ModalView) => void }) => {
+const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: string, icon: React.ElementType, panel: DashboardPanel }[], onSelect: (view: ModalView, panel?: DashboardPanel) => void }) => {
     const context = useContext(AppContext);
     const [isOpen, setIsOpen] = useState(false);
 
@@ -1476,7 +1508,8 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
                                             size="icon"
                                             className="rounded-full size-12 bg-secondary/80 hover:bg-secondary"
                                             onClick={() => {
-                                                onSelect(item.view);
+                                                const view = item.panel.componentKey === 'Custom' ? 'custom' : item.view;
+                                                onSelect(view, item.panel);
                                                 setIsOpen(false);
                                             }}
                                         >
@@ -1492,7 +1525,7 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 
             <Button 
                 size="icon" 
-                className="rounded-full size-20 shadow-2xl bg-gradient-to-br from-blue-500 to-purple-600 hover:scale-110 active:scale-105 transition-transform duration-200"
+                className="rounded-full size-20 shadow-2xl bg-gradient-to-r from-blue-500 to-purple-600 hover:scale-110 active:scale-105 transition-transform duration-200"
                 onClick={() => setIsOpen(!isOpen)}
             >
                 <AnimatePresence initial={false}>
@@ -1513,7 +1546,5 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
-
-    
 
     
