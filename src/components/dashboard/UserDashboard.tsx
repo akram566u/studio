@@ -8,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent, MessageSquare, UserX as UserXIcon, Loader2, CalendarCheck, ShieldCheck, User as UserIcon, Eye, EyeOff, Wallet } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent, MessageSquare, UserX as UserXIcon, Loader2, CalendarCheck, ShieldCheck, User as UserIcon, Eye, EyeOff, Wallet, BadgeHelp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -110,12 +110,17 @@ const InterestCountdownPanel = () => {
     const context = useContext(AppContext);
     const [interestCountdown, setInterestCountdown] = useState('00h 00m 00s');
     const [isClaimable, setIsClaimable] = useState(false);
+    
+    if (!context || !context.currentUser) return null;
+    const { currentUser, levels } = context;
+
+    const canEarnInterest = currentUser.balance >= (levels[1]?.minBalance || 100);
 
     useEffect(() => {
-        if (context?.currentUser && context.currentUser.level > 0 && context.currentUser.firstDepositTime) {
+        if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
           const timer = setInterval(() => {
             const now = new Date().getTime();
-            const lastCreditTime = context.currentUser.lastInterestCreditTime || context.currentUser.firstDepositTime;
+            const lastCreditTime = currentUser.lastInterestCreditTime || currentUser.firstDepositTime;
             const nextCredit = lastCreditTime + (24 * 60 * 60 * 1000);
             const distance = nextCredit - now;
     
@@ -137,7 +142,7 @@ const InterestCountdownPanel = () => {
           setInterestCountdown('N/A');
           setIsClaimable(false);
         }
-    }, [context?.currentUser]);
+    }, [currentUser]);
     
     const handleClaim = () => {
         if(context && isClaimable) {
@@ -148,11 +153,20 @@ const InterestCountdownPanel = () => {
     return (
         <Card className="card-gradient-orange-red p-6 text-center">
             <h3 className="text-xl font-semibold mb-3 text-blue-300">Daily Interest Credit</h3>
+            {!canEarnInterest && (
+                <Alert variant="destructive" className="mb-4">
+                    <BadgeHelp className="h-4 w-4" />
+                    <AlertTitle>Interest Earning Paused</AlertTitle>
+                    <AlertDescription>
+                        Your balance is below the Level 1 minimum. You must maintain at least {(levels[1]?.minBalance || 100)} USDT to earn daily interest.
+                    </AlertDescription>
+                </Alert>
+            )}
             <p className="text-xl text-gray-200 mb-3">Next credit in:</p>
             <p className="text-5xl font-bold text-purple-400 mb-4">{interestCountdown}</p>
             <Button 
                 onClick={handleClaim} 
-                disabled={!isClaimable}
+                disabled={!isClaimable || !canEarnInterest}
                 className="w-full py-3 text-lg"
             >
                {isClaimable ? <><Check/> Claim & Start Timer</> : <><Ban/>Claim</>}
@@ -170,6 +184,7 @@ const TransactionHistoryPanel = () => {
         switch (status) {
             case 'completed': case 'credited': case 'approved': return <Badge variant="secondary" className="bg-green-700">Completed</Badge>;
             case 'pending': return <Badge variant="secondary" className="bg-yellow-700">Pending</Badge>;
+            case 'on_hold': return <Badge variant="secondary" className="bg-orange-600">On Hold</Badge>;
             case 'declined': return <Badge variant="destructive">Declined</Badge>;
             case 'info': return <Badge variant="default">Info</Badge>;
             case 'active': return <Badge variant="secondary" className="bg-blue-700">Active</Badge>;
@@ -182,12 +197,14 @@ const TransactionHistoryPanel = () => {
             case 'withdrawal': return <Send className="text-red-400" />;
             case 'interest_credit': return <TrendingUp className="text-purple-400" />;
             case 'level_up': return <TrendingUp className="text-blue-400" />;
+            case 'level_down': return <TrendingUp className="text-red-400 rotate-180" />;
             case 'new_referral': return <UserCheck className="text-yellow-400" />;
             case 'team_commission': return <Users className="text-teal-400" />;
             case 'team_size_reward': return <Trophy className="text-amber-400" />;
             case 'team_business_reward': return <BadgePercent className="text-cyan-400" />;
             case 'salary_claim': return <Wallet className="text-blue-400" />;
             case 'booster_purchase': return <Rocket className="text-orange-400" />;
+            case 'sign_up_bonus': return <Gift className="text-pink-400" />;
             case 'pool_join': return <Users className="text-cyan-400" />;
             case 'pool_payout': return <Star className="text-yellow-300" />;
             case 'vault_investment': return <Lock className="text-indigo-400" />;
@@ -344,8 +361,12 @@ const WithdrawPanel = ({ isCounterRunning }: { isCounterRunning: boolean }) => {
     const { currentUser, levels, submitWithdrawalRequest, validateWithdrawal } = context;
     const currentLevelDetails = levels[currentUser.level];
     
+    const feePercentage = currentLevelDetails?.withdrawalFee || 0;
+    const amount = parseFloat(withdrawalAmount) || 0;
+    const fee = (amount * feePercentage) / 100;
+    const netAmount = amount - fee;
+
     const handleSubmitWithdrawal = () => {
-        const amount = parseFloat(withdrawalAmount);
         if (isNaN(amount) || amount <= 0) {
             toast({ title: "Error", description: "Please enter a valid withdrawal amount.", variant: "destructive" });
             return;
@@ -370,7 +391,7 @@ const WithdrawPanel = ({ isCounterRunning }: { isCounterRunning: boolean }) => {
                 Your withdrawal limit: <span className="font-bold text-yellow-300">{currentLevelDetails?.withdrawalLimit || 0} USDT</span>
             </p>
             <p className="text-xs text-gray-400 mb-3">
-                You can withdraw {currentLevelDetails?.monthlyWithdrawals || 0} time(s) per month.
+                You can withdraw {currentLevelDetails?.monthlyWithdrawals || 0} time(s) per month. A {feePercentage}% fee applies.
             </p>
             {isCounterRunning && (
                 <Alert variant="destructive" className='mb-4'>
@@ -389,7 +410,11 @@ const WithdrawPanel = ({ isCounterRunning }: { isCounterRunning: boolean }) => {
                 onChange={e => setWithdrawalAmount(e.target.value)}
                 disabled={isCounterRunning}
             />
-            <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-lg bg-gray-800/50" />
+            <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-2 text-lg bg-gray-800/50" />
+            <div className="text-sm text-gray-400 mb-4 p-2 bg-black/20 rounded-md">
+                <div className="flex justify-between"><span>Fee ({feePercentage}%):</span> <span>{fee.toFixed(2)} USDT</span></div>
+                <div className="flex justify-between font-bold text-white"><span>You Will Receive:</span> <span>{netAmount.toFixed(2)} USDT</span></div>
+            </div>
             <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} disabled={isCounterRunning}>
                  <Send/>Request Withdrawal
             </Button>
@@ -726,6 +751,7 @@ const LevelDetailsPanel = ({ levels }: { levels: { [key: number]: Level } }) => 
                         <TableHead className="text-white">Withdraw Limit</TableHead>
                         <TableHead className="text-white whitespace-normal">Monthly Withdrawals</TableHead>
                         <TableHead className="text-white">Interest</TableHead>
+                        <TableHead className="text-white">Withdrawal Fee</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -738,6 +764,7 @@ const LevelDetailsPanel = ({ levels }: { levels: { [key: number]: Level } }) => 
                             <TableCell className="font-mono text-yellow-300">{details.withdrawalLimit} USDT</TableCell>
                             <TableCell className="font-mono text-orange-300">{details.monthlyWithdrawals}</TableCell>
                             <TableCell className="font-mono text-purple-300">{(details.interest * 100).toFixed(2)}%</TableCell>
+                            <TableCell className="font-mono text-red-300">{details.withdrawalFee}%</TableCell>
                         </TableRow>
                     ))}
                 </TableBody>

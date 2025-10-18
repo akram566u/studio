@@ -49,7 +49,7 @@ export interface AppLinks {
     supportUrl: string;
 }
 
-export type TransactionType = 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created' | 'info' | 'booster_purchase' | 'pool_join' | 'pool_payout' | 'vault_investment' | 'vault_payout' | 'team_commission' | 'team_size_reward' | 'team_business_reward' | 'quest_reward' | 'login_reward' | 'salary_claim';
+export type TransactionType = 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created' | 'info' | 'booster_purchase' | 'pool_join' | 'pool_payout' | 'vault_investment' | 'vault_payout' | 'team_commission' | 'team_size_reward' | 'team_business_reward' | 'quest_reward' | 'login_reward' | 'salary_claim' | 'sign_up_bonus' | 'level_down';
 
 export interface Transaction {
   id: string;
@@ -161,6 +161,7 @@ export interface Level {
   withdrawalLimit: number;
   monthlyWithdrawals: number;
   isEnabled: boolean;
+  withdrawalFee: number; // New: withdrawal fee percentage
 }
 
 export interface Levels {
@@ -227,6 +228,12 @@ export interface RestrictionMessage {
   withdrawalPercentage?: number; // Optional percentage for initial deposit withdrawal
   isActive: boolean;
   applicableLevels?: number[]; // Optional: which levels this restriction applies to. Empty means all levels.
+}
+
+export interface SignUpBonusSettings {
+    isEnabled: boolean;
+    bonusAmount: number;
+    minDeposit: number; // Minimum first deposit to be eligible
 }
 
 export interface ReferralBonusSettings {
@@ -334,6 +341,7 @@ export interface AppSettings {
     startScreenContent: StartScreenSettings;
     dashboardPanels: DashboardPanel[];
     referralBonusSettings: ReferralBonusSettings;
+    signUpBonusSettings: SignUpBonusSettings;
     teamCommissionSettings: TeamCommissionSettings;
     teamSizeRewards: TeamSizeReward[];
     teamBusinessRewards: TeamBusinessReward[];
