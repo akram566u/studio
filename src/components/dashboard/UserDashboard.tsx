@@ -1,7 +1,7 @@
 
 "use client";
 import React, { useContext, useState, useEffect, useRef } from 'react';
-import { AppContext, DownlineUser } from '@/components/providers/AppProvider';
+import { AppContext, DownlineUser, ReferredUserWithStatus } from '@/components/providers/AppProvider';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { LevelBadge } from '@/components/ui/LevelBadge';
@@ -122,7 +122,7 @@ const InterestCountdownPanel = () => {
     if (!context || !context.currentUser) return null;
     const { currentUser, levels } = context;
 
-    const canEarnInterest = currentUser.level > 0;
+    const canEarnInterest = currentUser.level > 0 && currentUser.balance >= (levels[1]?.minBalance || 100);
 
     useEffect(() => {
         if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
@@ -621,10 +621,22 @@ const SettingsPanel = () => {
 
 const ReferralNetworkPanel = () => {
     const context = useContext(AppContext);
+    const { toast } = useToast();
+    const [referredUsers, setReferredUsers] = useState<ReferredUserWithStatus[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        if (context?.getReferredUsersWithStatus) {
+            setIsLoading(true);
+            context.getReferredUsersWithStatus()
+                .then(setReferredUsers)
+                .finally(() => setIsLoading(false));
+        }
+    }, [context?.getReferredUsersWithStatus]);
+
     if (!context || !context.currentUser) return null;
     const { currentUser } = context;
 
-    const { toast } = useToast();
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
         toast({ title: 'Copied to clipboard!' });
@@ -642,20 +654,26 @@ const ReferralNetworkPanel = () => {
         </div>
         <h4 className="text-lg font-semibold mb-2 text-blue-300">Referred Users:</h4>
         <ScrollArea className="h-40">
-            <ul className="list-none space-y-2">
-            {currentUser.referredUsers && currentUser.referredUsers.length > 0 ? (
-                currentUser.referredUsers.map((user: any, index: number) => (
-                <li key={index} className="flex items-center gap-2 text-gray-300">
-                    {user.isActivated 
-                    ? <UserCheck className="text-green-400 size-4" /> 
-                    : <UserX className="text-red-400 size-4" />}
-                    {user.email} {user.isActivated ? '(Active)' : '(Inactive)'}
-                </li>
-                ))
+             {isLoading ? (
+                <div className="flex justify-center items-center h-full">
+                    <Loader2 className="animate-spin text-purple-400" />
+                </div>
             ) : (
-                <li className="text-gray-500">No referrals yet.</li>
+                <ul className="list-none space-y-2">
+                {referredUsers.length > 0 ? (
+                    referredUsers.map((user, index) => (
+                    <li key={index} className="flex items-center gap-2 text-gray-300">
+                        {user.isActivated 
+                        ? <UserCheck className="text-green-400 size-4" /> 
+                        : <UserX className="text-red-400 size-4" />}
+                        {user.email} {user.isActivated ? '(Active)' : '(Inactive)'}
+                    </li>
+                    ))
+                ) : (
+                    <li className="text-gray-500">No referrals yet.</li>
+                )}
+                </ul>
             )}
-            </ul>
         </ScrollArea>
         </>
     );
@@ -1050,7 +1068,7 @@ const TeamPanel = () => {
     if (applicableSalaryRule) {
         const referralReq = applicableSalaryRule.directReferrals;
         const businessReq = applicableSalaryRule.teamBusiness;
-        const growthReq = applicableSalaryRule.requiredGrowthPercentage;
+        const growthReq = applicableSalaryRule.requiredGrowthPercentage || 0;
         
         const lastClaim = currentUser.lastSalaryClaim;
 
@@ -1058,7 +1076,7 @@ const TeamPanel = () => {
 
         if (lastClaim) {
             // Check for cooldown period
-            const cooldownMillis = applicableSalaryRule.claimCooldownDays * 24 * 60 * 60 * 1000;
+            const cooldownMillis = (applicableSalaryRule.claimCooldownDays || 30) * 24 * 60 * 60 * 1000;
             const timeSinceLastClaim = Date.now() - lastClaim.timestamp;
             const isCooldownActive = timeSinceLastClaim < cooldownMillis;
 

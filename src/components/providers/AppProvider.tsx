@@ -23,6 +23,11 @@ export interface DownlineUser {
   email: string;
 }
 
+export type ReferredUserWithStatus = {
+    email: string;
+    isActivated: boolean;
+};
+
 export interface AppContextType {
   currentUser: User | null;
   isAdmin: boolean;
@@ -139,6 +144,7 @@ export interface AppContextType {
   deactivateCurrentUserAccount: (password: string) => Promise<void>;
   deactivateUserAccount: (userId: string) => Promise<void>;
   getDownline: () => Promise<{downline: Record<string, DownlineUser[]>, l4PlusCount: number, rechargedTodayCount: number}>;
+  getReferredUsersWithStatus: () => Promise<ReferredUserWithStatus[]>;
   dailyEngagement: DailyEngagementSettings;
   updateDailyEngagement: (settings: DailyEngagementSettings) => void;
   leaderboards: Leaderboard[];
@@ -613,6 +619,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const userRef = doc(db, "users", userDocId);
         
         let description = `${type.replace('_', ' ')} of ${originalRequest.amount} USDT ${newStatus}.`;
+        if (newStatus === 'declined' && type === 'salary_claim') {
+            description = `Your salary claim was declined. You may claim again if you are still eligible.`;
+        }
+        
         const updatedTransactions = userFound.transactions.map(tx =>
             tx.id === transactionId ? { ...tx, status: newStatus, description } : tx
         );
@@ -672,7 +682,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (newStatus === 'approved' && type === 'deposit') {
             const isFirstDeposit = !userFound.firstDepositTime;
             
-            // Apply Sign-up Bonus first
+            // Apply Sign-up Bonus first if applicable
             if (isFirstDeposit && signUpBonusSettings.isEnabled && originalRequest.amount >= signUpBonusSettings.minDeposit) {
                 await runTransaction(db, async (transaction) => {
                     const freshUserSnap = await transaction.get(userRef);
@@ -694,54 +704,77 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 });
             }
             
-            // Now, check for level up with the updated balance
+            // Now, check for level up with the potentially bonus-updated balance
             await checkAndApplyLevelUp(userDocId);
 
             // Activate referrer and update team metrics
             if (isFirstDeposit && userFound.referredBy && userFound.referredBy !== ADMIN_REFERRAL_CODE) {
                 const referrerRef = doc(db, "users", userFound.referredBy);
                 const referrerSnap = await getDoc(referrerRef);
+                
+                // Fetch the newly updated user to check their level
+                const newlyActivatedUserSnap = await getDoc(userRef);
+                const newlyActivatedUserData = newlyActivatedUserSnap.data() as User;
+                const isNowActive = newlyActivatedUserData.level > 0;
+
                 if (referrerSnap.exists()) {
                     const referrerData = referrerSnap.data() as User;
-                    const updatedReferredUsers = referrerData.referredUsers.map(u => u.email === userFound!.email ? { ...u, isActivated: true } : u);
                     
-                    const newlyActivatedUserSnap = await getDoc(userRef);
-                    const newlyActivatedUserData = newlyActivatedUserSnap.data() as User;
-                    const isNowActive = newlyActivatedUserData.level > 0;
-
-                    const updatesForReferrer: any = { referredUsers: updatedReferredUsers };
-                    if(isNowActive) {
+                    const updatesForReferrer: any = { 
+                        referredUsers: referrerData.referredUsers.map(u => u.email === userFound!.email ? { ...u, isActivated: true } : u)
+                    };
+                    if (isNowActive) {
                         updatesForReferrer.directReferrals = (referrerData.directReferrals || 0) + 1;
                     }
                     await updateDoc(referrerRef, updatesForReferrer);
 
                     // Update referrer's transaction log
-                    const oldTx = referrerData.transactions.find(tx => tx.type === 'new_referral' && tx.referredUserId === userDocId);
-                    if (oldTx) {
-                        const newTxList = referrerData.transactions.filter(tx => tx.id !== oldTx.id);
-                        newTxList.push({
-                            ...oldTx,
-                            status: 'completed',
-                            description: `New user activated with your code: ${userFound.email}`
-                        });
-                        await updateDoc(referrerRef, { transactions: newTxList });
-                    }
+                    const updatedTransactions = referrerData.transactions.map(tx => {
+                        if (tx.type === 'new_referral' && tx.referredUserId === userDocId && tx.status === 'info') {
+                            return { ...tx, status: 'completed', description: `New user activated with your code: ${userFound.email}` };
+                        }
+                        return tx;
+                    });
+                    await updateDoc(referrerRef, { transactions: updatedTransactions });
+                    
+                    // Award referral bonus if applicable
+                    if (isNowActive && referralBonusSettings.isEnabled && originalRequest.amount >= referralBonusSettings.minDeposit) {
+                        const now = Date.now();
+                        const activeBoosters = (referrerData.activeBoosters || []).filter(b => b.type === 'referral_bonus_boost' && b.expiresAt > now);
+                        let bonusAmount = referralBonusSettings.bonusAmount;
+                        const boostMultiplier = activeBoosters.reduce((acc, b) => acc * b.effectValue, 1);
+                        bonusAmount *= boostMultiplier;
 
-                    // If the new user became active, increase team size for the entire upline
-                    if(isNowActive) {
-                      for (const uplineId of userFound.referralPath) {
-                          const uplineRef = doc(db, 'users', uplineId);
-                          await runTransaction(db, async (transaction) => {
-                              const uplineSnap = await transaction.get(uplineRef);
-                              if (uplineSnap.exists() && uplineSnap.data().level > 0) { // Only count for active upline members
-                                  const newSize = (uplineSnap.data().teamSize || 0) + 1;
-                                  transaction.update(uplineRef, { teamSize: newSize });
-                              }
-                          });
-                      }
+                        await updateDoc(referrerRef, { balance: referrerData.balance + bonusAmount });
+                        await checkAndApplyLevelUp(referrerData.id);
+
+                        await addTransaction(referrerData.id, {
+                            id: generateTxnId(),
+                            type: 'referral_bonus',
+                            amount: bonusAmount,
+                            status: 'credited',
+                            description: `You received a ${bonusAmount.toFixed(2)} USDT bonus for activating ${userFound!.email}! ${boostMultiplier > 1 ? '(Boosted!)' : ''}`
+                        });
                     }
                 }
             }
+
+            // Increase team size for the entire upline if the new user became active
+            if (isNowActive) {
+                const batch = writeBatch(db);
+                for (const uplineId of userFound.referralPath) {
+                    const uplineRef = doc(db, 'users', uplineId);
+                    const uplineSnap = await getDoc(uplineRef);
+                    if(uplineSnap.exists()){
+                         const uplineData = uplineSnap.data() as User;
+                         if (uplineData.level > 0) { // Only increment for active upline members
+                            batch.update(uplineRef, { teamSize: (uplineData.teamSize || 0) + 1 });
+                         }
+                    }
+                }
+                await batch.commit();
+            }
+
 
             // Distribute team business
             const batch = writeBatch(db);
@@ -754,33 +787,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             }
             await batch.commit();
 
-            // Referral bonus logic
-            if (isFirstDeposit && referralBonusSettings.isEnabled && originalRequest.amount >= referralBonusSettings.minDeposit && userFound.referredBy && userFound.referredBy !== ADMIN_REFERRAL_CODE) {
-                const referrerRef = doc(db, "users", userFound.referredBy);
-                const referrerSnap = await getDoc(referrerRef);
-                if (referrerSnap.exists()) {
-                    const referrerData = referrerSnap.data() as User;
-                    
-                    const now = Date.now();
-                    const activeBoosters = (referrerData.activeBoosters || []).filter(b => b.type === 'referral_bonus_boost' && b.expiresAt > now);
-                    let bonusAmount = referralBonusSettings.bonusAmount;
-                    const boostMultiplier = activeBoosters.reduce((acc, b) => acc * b.effectValue, 1);
-                    bonusAmount *= boostMultiplier;
-
-                    await updateDoc(referrerRef, {
-                        balance: referrerSnap.data().balance + bonusAmount,
-                    });
-                    await checkAndApplyLevelUp(referrerData.id);
-
-                    await addTransaction(referrerData.id, {
-                        id: generateTxnId(),
-                        type: 'referral_bonus',
-                        amount: bonusAmount,
-                        status: 'credited',
-                        description: `You received a ${bonusAmount.toFixed(2)} USDT bonus for activating ${userFound!.email}! ${boostMultiplier > 1 ? '(Boosted!)' : ''}`
-                    });
-                }
-            }
             await checkQuestProgress(userDocId, 'deposit_amount', originalRequest.amount);
         }
 
@@ -881,7 +887,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     const feePercentage = levels[currentUser.level]?.withdrawalFee || 0;
     const fee = (amount * feePercentage) / 100;
-    const totalDeduction = amount; // User balance is only deducted by the withdrawal amount, fee is extra
+    const totalDeduction = amount + fee; 
+
+    if (currentUser.balance < totalDeduction) {
+        toast({ title: "Error", description: "Insufficient balance to cover withdrawal and fee.", variant: "destructive" });
+        return;
+    }
 
     const newRequest: Omit<Transaction, 'userId' | 'timestamp'> = {
         id: generateTxnId(),
@@ -901,7 +912,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
         const currentBalance = userDoc.data().balance;
         if(currentBalance < totalDeduction) {
-            throw "Insufficient balance to cover withdrawal.";
+            throw "Insufficient balance to cover withdrawal and fee.";
         }
         const newBalance = currentBalance - totalDeduction;
         
@@ -1155,7 +1166,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             userValue = currentUser.teamSize || 0;
             rewardValue = reward?.teamSize || 0;
             claimedList = currentUser.claimedTeamSizeRewards || [];
-            description = `User requested Team Size Reward of ${reward?.rewardAmount} for reaching ${reward?.teamSize} members.`;
+            description = `User requested Team Size Reward of ${reward?.rewardAmount} for reaching ${reward?.teamSize} active members.`;
         } else {
             reward = teamBusinessRewards.find(r => r.id === rewardId);
             userValue = currentUser.teamBusiness || 0;
@@ -1210,14 +1221,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         let isEligible = false;
         if (currentUser.lastSalaryClaim) {
              // Check for cooldown
-            const cooldownMillis = rule.claimCooldownDays * 24 * 60 * 60 * 1000;
+            const cooldownMillis = (rule.claimCooldownDays || 30) * 24 * 60 * 60 * 1000;
             if (Date.now() < currentUser.lastSalaryClaim.timestamp + cooldownMillis) {
-                toast({ title: "Not Yet", description: `You can claim your next salary after the ${rule.claimCooldownDays}-day cooldown period.`, variant: "destructive"});
+                toast({ title: "Not Yet", description: `You can claim your next salary after the ${rule.claimCooldownDays || 30}-day cooldown period.`, variant: "destructive"});
                 return;
             }
 
             // Check for growth
-            const requiredBusiness = currentUser.lastSalaryClaim.teamBusinessAtClaim * (1 + rule.requiredGrowthPercentage / 100);
+            const requiredBusiness = currentUser.lastSalaryClaim.teamBusinessAtClaim * (1 + (rule.requiredGrowthPercentage || 0) / 100);
             isEligible = (currentUser.directReferrals || 0) >= rule.directReferrals && (currentUser.teamBusiness || 0) >= requiredBusiness;
         } else {
             // First time claim
@@ -1229,12 +1240,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             return;
         }
 
-        await addTransaction(currentUser.id, {
+        const newRequest: Omit<Transaction, 'userId' | 'timestamp'> = {
             id: generateTxnId(),
             type: 'salary_claim',
             amount: rule.salaryAmount,
             status: 'pending',
             description: `User claimed salary of ${rule.salaryAmount} USDT for Level ${rule.level}.`,
+        };
+        
+        const userRef = doc(db, 'users', currentUser.id);
+        await updateDoc(userRef, {
+            transactions: arrayUnion(newRequest)
         });
 
         toast({ title: "Salary Claim Submitted!", description: "Your claim has been sent for admin approval." });
@@ -1472,7 +1488,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     const claimDailyInterest = async () => {
         if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
-            const canEarnInterest = currentUser.level > 0 && currentUser.balance >= levels[1].minBalance;
+            const canEarnInterest = currentUser.level > 0 && currentUser.balance >= (levels[1]?.minBalance || 100);
             if (!canEarnInterest) {
                  toast({ title: "Ineligible", description: "Your account is inactive. You must have a balance sufficient for Level 1 to earn interest.", variant: "destructive" });
                  return;
@@ -2238,6 +2254,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     }, [currentUser, teamCommissionSettings.dailyActivationResetTime]);
 
+    const getReferredUsersWithStatus = useCallback(async (): Promise<ReferredUserWithStatus[]> => {
+        if (!currentUser) return [];
+
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("referredBy", "==", currentUser.id));
+        const querySnapshot = await getDocs(q);
+
+        return querySnapshot.docs.map(doc => {
+            const userData = doc.data() as User;
+            return {
+                email: userData.email,
+                isActivated: userData.level > 0
+            };
+        });
+    }, [currentUser]);
+
     const updateDailyEngagement = (settings: DailyEngagementSettings) => updateFirestoreSettings({ dailyEngagement: settings });
 
     const checkQuestProgress = async (userId: string, type: QuestType, value: number) => {
@@ -2452,6 +2484,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     deactivateCurrentUserAccount,
     deactivateUserAccount,
     getDownline,
+    getReferredUsersWithStatus,
     dailyEngagement,
     updateDailyEngagement,
     leaderboards,
