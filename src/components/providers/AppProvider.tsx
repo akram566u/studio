@@ -497,10 +497,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         let teamUpdates = new Map<string, { size: number, business: number }>();
 
         if (referrerDoc) {
+            // This is just to show the list of emails in sponsor's referral list.
             batch.update(doc(db, "users", referrerDoc.id), {
                 referredUsers: arrayUnion({ email: newUser.email, isActivated: false })
             });
-            // Team size does not increase on sign up, only on activation
         }
         
         await batch.commit();
@@ -681,7 +681,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         
         if (newStatus === 'approved' && type === 'deposit') {
             const isFirstDeposit = !userFound.firstDepositTime;
-            
+
             // Apply Sign-up Bonus first if applicable
             if (isFirstDeposit && signUpBonusSettings.isEnabled && originalRequest.amount >= signUpBonusSettings.minDeposit) {
                 await runTransaction(db, async (transaction) => {
@@ -720,32 +720,34 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 if (referrerSnap.exists()) {
                     const referrerData = referrerSnap.data() as User;
                     
-                    const updatesForReferrer: any = { 
-                        referredUsers: referrerData.referredUsers.map(u => u.email === userFound!.email ? { ...u, isActivated: true } : u)
-                    };
-                    
-                    // Old transaction update logic
-                    const updatedTransactions = referrerData.transactions.map(tx => {
-                        if (tx.type === 'new_referral' && tx.referredUserId === userDocId) {
-                            return { ...tx, status: 'completed', description: `New user activated with your code: ${userFound.email}` };
-                        }
-                        return tx;
-                    });
-                    updatesForReferrer.transactions = updatedTransactions;
-                    await updateDoc(referrerRef, updatesForReferrer);
-
-
                     if (isNowActive) {
                         const batch = writeBatch(db);
                         // Increment direct referrals for referrer
                         batch.update(referrerRef, { directReferrals: (referrerData.directReferrals || 0) + 1 });
 
                         // Increment team size for the entire upline
-                        for (const uplineId of referrerData.referralPath) {
+                        const uplinePath = [referrerData.id, ...(referrerData.referralPath || [])];
+                        for (const uplineId of uplinePath) {
                             const uplineRef = doc(db, 'users', uplineId);
-                             batch.update(uplineRef, { teamSize: (uplineSnap.data()?.teamSize || 0) + 1 });
+                            batch.update(uplineRef, { teamSize: (await getDoc(uplineRef)).data()?.teamSize + 1 });
                         }
+
+                        // Remove pending transaction and add completed transaction for referrer
+                        const newTransactionsForReferrer = referrerData.transactions.filter(
+                            tx => !(tx.type === 'new_referral' && tx.referredUserId === userDocId)
+                        );
+                        batch.update(referrerRef, { transactions: newTransactionsForReferrer });
                         await batch.commit();
+
+                        // Add new "activated" transaction
+                        await addTransaction(referrerData.id, {
+                            id: generateTxnId(),
+                            type: 'new_referral',
+                            amount: 0,
+                            status: 'completed',
+                            description: `New user activated with your code: ${userFound.email}`,
+                            referredUserId: userDocId,
+                        });
 
                         // Award referral bonus if applicable
                         if (referralBonusSettings.isEnabled && originalRequest.amount >= referralBonusSettings.minDeposit) {
@@ -755,7 +757,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                             const boostMultiplier = activeBoosters.reduce((acc, b) => acc * b.effectValue, 1);
                             bonusAmount *= boostMultiplier;
 
-                            await updateDoc(referrerRef, { balance: referrerData.balance + bonusAmount });
+                            await updateDoc(referrerRef, { balance: (await getDoc(referrerRef)).data()?.balance + bonusAmount });
                             await checkAndApplyLevelUp(referrerData.id);
 
                             await addTransaction(referrerData.id, {
@@ -2168,7 +2170,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const l1Ids: string[] = [];
         l1Snap.forEach(doc => {
             const userData = doc.data() as User;
-            downline.L1.push({ id: doc.id, email: userData.email });
+            if (userData.level > 0) { // Only count active users
+                downline.L1.push({ id: doc.id, email: userData.email });
+            }
             l1Ids.push(doc.id);
         });
     
@@ -2179,7 +2183,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             const l2Snap = await getDocs(l2Query);
             l2Snap.forEach(doc => {
                 const userData = doc.data() as User;
-                downline.L2.push({ id: doc.id, email: userData.email });
+                 if (userData.level > 0) {
+                    downline.L2.push({ id: doc.id, email: userData.email });
+                 }
                 l2Ids.push(doc.id);
             });
         }
@@ -2191,7 +2197,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             const l3Snap = await getDocs(l3Query);
             l3Snap.forEach(doc => {
                 const userData = doc.data() as User;
-                downline.L3.push({ id: doc.id, email: userData.email });
+                if (userData.level > 0) {
+                    downline.L3.push({ id: doc.id, email: userData.email });
+                }
                 l3Ids.push(doc.id);
             });
         }
@@ -2199,7 +2207,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         // L4+ Community and Activations
         const allUserDocs = await getDocs(usersRef);
         const allUsers = allUserDocs.docs.map(doc => ({ id: doc.id, ...doc.data() as User }));
-        const userMap = new Map(allUsers.map(user => [user.id, user]));
 
         const [hours, minutes] = teamCommissionSettings.dailyActivationResetTime.split(':').map(Number);
         const now = new Date();
@@ -2235,12 +2242,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
         traverseDownline(l3Ids);
 
-
         // Also check activations for L1-L3 active users
-        const l1l2l3_ids = [...l1Ids, ...l2Ids, ...l3Ids];
-        for(const id of l1l2l3_ids) {
-            const user = userMap.get(id);
-             if (user && user.level > 0 && user.firstDepositTime && user.firstDepositTime >= startOfDayTimestamp) {
+        const allDownline = [...downline.L1, ...downline.L2, ...downline.L3];
+        for(const user of allDownline) {
+            const userData = allUsers.find(u => u.id === user.id);
+             if (userData && userData.firstDepositTime && userData.firstDepositTime >= startOfDayTimestamp) {
                 rechargedTodayCount++;
             }
         }
@@ -2509,5 +2515,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
+
+    
 
     
