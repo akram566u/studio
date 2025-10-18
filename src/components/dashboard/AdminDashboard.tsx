@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from 'date-fns';
-import { toast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '../ui/textarea';
@@ -639,6 +639,7 @@ const ChatPanel = ({ user, onSendMessage }: { user: UserForAdmin, onSendMessage:
 
 const UserManagementPanel = () => {
     const context = useContext(AppContext);
+    const { toast } = useToast();
     const [searchQuery, setSearchQuery] = useState('');
     const [searchedUser, setSearchedUser] = useState<UserForAdmin | null>(null);
     const [editingEmail, setEditingEmail] = useState('');
@@ -869,6 +870,7 @@ const UserManagementPanel = () => {
 
 const ContentUIPanel = () => {
     const context = useContext(AppContext);
+    const { toast } = useToast();
     const [localWebsiteTitle, setLocalWebsiteTitle] = useState('');
     const [localStartScreenTitle, setLocalStartScreenTitle] = useState('');
     const [localStartScreenSubtitle, setLocalStartScreenSubtitle] = useState('');
@@ -1242,6 +1244,7 @@ const ContentUIPanel = () => {
 
 const SystemSettingsPanel = () => {
     const context = useContext(AppContext);
+    const { toast } = useToast();
     const [localLevels, setLocalLevels] = useState<{[key: number]: Level}>({});
     const [localRestrictions, setLocalRestrictions] = useState<RestrictionMessage[]>([]);
     const [localReferralBonusSettings, setLocalReferralBonusSettings] = useState<ReferralBonusSettings>({ isEnabled: true, bonusAmount: 5, minDeposit: 100 });
@@ -1527,6 +1530,7 @@ const SystemSettingsPanel = () => {
 
 const UserPanelsPanel = () => {
     const context = useContext(AppContext);
+    const { toast } = useToast();
     const [localPanels, setLocalPanels] = useState<DashboardPanel[]>([]);
 
     useEffect(() => {
@@ -1678,6 +1682,7 @@ const UserDashboardLayoutEditorPanelComponent = () => {
 
 const NoticesPanel = () => {
     const context = useContext(AppContext);
+    const { toast } = useToast();
     const [localNotices, setLocalNotices] = useState<Notice[]>([]);
 
     useEffect(() => {
@@ -1769,6 +1774,7 @@ const MultiSelect = ({ options, value, onChange, placeholder }: { options: { val
 
 const BoostersPanel = () => {
     const context = useContext(AppContext);
+    const { toast } = useToast();
     const [localBoosterPacks, setLocalBoosterPacks] = useState<BoosterPack[]>([]);
     
     useEffect(() => {
@@ -1901,6 +1907,7 @@ const BoosterAnalyticsPanel = () => {
 
 const PoolsPanel = () => {
     const context = useContext(AppContext);
+    const { toast } = useToast();
     const [localStakingPools, setLocalStakingPools] = useState<StakingPool[]>([]);
     
     useEffect(() => {
@@ -1958,6 +1965,7 @@ const PoolsPanel = () => {
 
 const VaultsPanel = () => {
     const context = useContext(AppContext);
+    const { toast } = useToast();
     const [localStakingVaults, setLocalStakingVaults] = useState<StakingVault[]>([]);
     
     useEffect(() => {
@@ -2010,6 +2018,7 @@ const VaultsPanel = () => {
 
 const DailyEngagementPanel = () => {
     const context = useContext(AppContext);
+    const { toast } = useToast();
     const [localQuests, setLocalQuests] = useState<DailyQuest[]>([]);
     const [localStreaks, setLocalStreaks] = useState<LoginStreakReward[]>([]);
 
