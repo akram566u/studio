@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
@@ -518,7 +519,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 id: generateTxnId(),
                 type: 'new_referral',
                 amount: 0,
-                status: 'info',
+                status: 'pending',
                 description: `New user registered with your code: ${newUser.email} (Pending activation)`,
                 referredUserId: newUserAuth.uid, // Store the new user's ID here
             });
@@ -723,31 +724,32 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     if (isNowActive) {
                         const batch = writeBatch(db);
                         // Increment direct referrals for referrer
-                        batch.update(referrerRef, { directReferrals: (referrerData.directReferrals || 0) + 1 });
+                        batch.update(referrerRef, { directReferrals: (referrerData.directReferrals || 0) + 1, teamSize: (referrerData.teamSize || 0) + 1 });
 
                         // Increment team size for the entire upline
-                        const uplinePath = [referrerData.id, ...(referrerData.referralPath || [])];
-                        for (const uplineId of uplinePath) {
+                        for (const uplineId of referrerData.referralPath) {
                             const uplineRef = doc(db, 'users', uplineId);
                             batch.update(uplineRef, { teamSize: (await getDoc(uplineRef)).data()?.teamSize + 1 });
                         }
 
-                        // Remove pending transaction and add completed transaction for referrer
-                        const newTransactionsForReferrer = referrerData.transactions.filter(
+                        // Update sponsor's transaction history
+                        const updatedSponsorTransactions = referrerData.transactions.filter(
                             tx => !(tx.type === 'new_referral' && tx.referredUserId === userDocId)
                         );
-                        batch.update(referrerRef, { transactions: newTransactionsForReferrer });
-                        await batch.commit();
-
-                        // Add new "activated" transaction
-                        await addTransaction(referrerData.id, {
+                        const activationTx: Transaction = {
                             id: generateTxnId(),
+                            userId: referrerData.id,
                             type: 'new_referral',
                             amount: 0,
                             status: 'completed',
                             description: `New user activated with your code: ${userFound.email}`,
-                            referredUserId: userDocId,
-                        });
+                            referredUserId: userDocId
+                        };
+                        updatedSponsorTransactions.push(activationTx);
+                        batch.update(referrerRef, { transactions: updatedSponsorTransactions });
+
+                        await batch.commit();
+
 
                         // Award referral bonus if applicable
                         if (referralBonusSettings.isEnabled && originalRequest.amount >= referralBonusSettings.minDeposit) {
@@ -756,8 +758,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                             let bonusAmount = referralBonusSettings.bonusAmount;
                             const boostMultiplier = activeBoosters.reduce((acc, b) => acc * b.effectValue, 1);
                             bonusAmount *= boostMultiplier;
-
-                            await updateDoc(referrerRef, { balance: (await getDoc(referrerRef)).data()?.balance + bonusAmount });
+                            
+                            const sponsorRef = doc(db, 'users', referrerData.id);
+                            const sponsorSnap = await getDoc(sponsorRef);
+                            if(sponsorSnap.exists()) {
+                                await updateDoc(sponsorRef, { balance: sponsorSnap.data().balance + bonusAmount });
+                            }
                             await checkAndApplyLevelUp(referrerData.id);
 
                             await addTransaction(referrerData.id, {
