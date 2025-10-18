@@ -48,6 +48,7 @@ const UserOverviewPanel = ({ currentUser, levels, todaysCommission }: { currentU
     if (!context) return null;
 
     const baseInterest = levels[currentUser.level]?.interest || 0;
+    const userName = currentUser.email.split('@')[0];
 
     // Calculate boosted interest
     const now = Date.now();
@@ -331,7 +332,7 @@ const RechargePanel = () => {
     )
 };
 
-const WithdrawPanel = () => {
+const WithdrawPanel = ({ isCounterRunning }: { isCounterRunning: boolean }) => {
     const context = useContext(AppContext);
     const { toast } = useToast();
     const [withdrawalAmount, setWithdrawalAmount] = useState('');
@@ -370,15 +371,25 @@ const WithdrawPanel = () => {
             <p className="text-xs text-gray-400 mb-3">
                 You can withdraw {currentLevelDetails?.monthlyWithdrawals || 0} time(s) per month.
             </p>
+            {isCounterRunning && (
+                <Alert variant="destructive" className='mb-4'>
+                    <Ban className="h-4 w-4" />
+                    <AlertTitle>Withdrawals Locked</AlertTitle>
+                    <AlertDescription>
+                       You cannot request a withdrawal while the daily interest timer is running.
+                    </AlertDescription>
+                </Alert>
+            )}
             <Input
                 type="number"
                 placeholder="Amount to withdraw"
                 className="mb-4 text-lg"
                 value={withdrawalAmount}
                 onChange={e => setWithdrawalAmount(e.target.value)}
+                disabled={isCounterRunning}
             />
             <Input type="text" placeholder={currentUser.primaryWithdrawalAddress || 'Not set'} value={currentUser.primaryWithdrawalAddress || ''} readOnly className="mb-4 text-lg bg-gray-800/50" />
-            <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} >
+            <Button className="w-full py-3 text-lg" onClick={handleSubmitWithdrawal} disabled={isCounterRunning}>
                  <Send/>Request Withdrawal
             </Button>
             <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
@@ -1268,6 +1279,7 @@ const UserDashboard = () => {
   const [showBoosterPopup, setShowBoosterPopup] = useState(false);
   const [prioritizedMessage, setPrioritizedMessage] = useState<PrioritizeMessageOutput | null>(null);
   const [todaysCommission, setTodaysCommission] = useState(0);
+  const [isCounterRunning, setIsCounterRunning] = useState(false);
 
   useEffect(() => {
     if (context?.currentUser) {
@@ -1288,6 +1300,15 @@ const UserDashboard = () => {
             .filter(tx => tx.type === 'team_commission' && tx.timestamp >= twentyFourHoursAgo)
             .reduce((sum, tx) => sum + tx.amount, 0);
         setTodaysCommission(commission);
+        
+        // Check if interest counter is running
+        if (context.currentUser.level > 0 && context.currentUser.firstDepositTime) {
+            const lastCredit = context.currentUser.lastInterestCreditTime || context.currentUser.firstDepositTime;
+            const nextCredit = lastCredit + (24 * 60 * 60 * 1000);
+            setIsCounterRunning(now < nextCredit);
+        } else {
+            setIsCounterRunning(false);
+        }
 
     }
   }, [context?.currentUser?.id, context?.boosterPacks]);
@@ -1331,7 +1352,7 @@ const UserDashboard = () => {
 
     switch(modalView) {
         case 'recharge': return <RechargePanel />;
-        case 'withdraw': return <WithdrawPanel />;
+        case 'withdraw': return <WithdrawPanel isCounterRunning={isCounterRunning} />;
         case 'history': return <TransactionHistoryPanel />;
         case 'referrals': return <ReferralNetworkPanel />;
         case 'team': return <TeamPanel />;
@@ -1555,3 +1576,5 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
+
+    

@@ -594,7 +594,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     }
                     break;
                 case 'withdrawal':
-                    updates.balance = userFound.balance - originalRequest.amount;
+                    // Balance was already deducted at request time, so no change on approval.
                     updates.lastWithdrawalTime = Date.now();
                     break;
                 case 'team_size_reward':
@@ -606,6 +606,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     updates.claimedTeamBusinessRewards = arrayUnion(originalRequest.note); // Note stores reward ID
                     break;
             }
+        } else if (newStatus === 'declined' && type === 'withdrawal') {
+            // Refund the user if a withdrawal is declined
+            updates.balance = userFound.balance + originalRequest.amount;
         }
         
         batch.update(userRef, updates);
@@ -684,6 +687,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const validateWithdrawal = (amount: number): string | null => {
     if (!currentUser) return "Not logged in.";
+    
+    // Check if interest timer is running
+    const now = Date.now();
+    const lastCredit = currentUser.lastInterestCreditTime || currentUser.firstDepositTime;
+    if (lastCredit) {
+        const twentyFourHours = 24 * 60 * 60 * 1000;
+        if (now < lastCredit + twentyFourHours) {
+            return "Withdrawals are disabled while the daily interest timer is active. Please claim your interest first.";
+        }
+    }
+    
     if (!currentUser.primaryWithdrawalAddress) return "Set a withdrawal address first.";
     if (amount > currentUser.balance) return "Insufficient balance.";
 
@@ -754,7 +768,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
 
-    const newRequest = {
+    const newRequest: Omit<Transaction, 'userId' | 'timestamp'> = {
         id: generateTxnId(),
         type: 'withdrawal' as 'withdrawal',
         amount,
@@ -763,8 +777,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         description: `User requested a withdrawal of ${amount} USDT.`
     };
     
-    await addTransaction(currentUser.id, newRequest);
-    toast({ title: "Success", description: "Withdrawal request submitted." });
+    // Atomically deduct balance and add transaction
+    const userRef = doc(db, 'users', currentUser.id);
+    await runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) {
+            throw "User document does not exist!";
+        }
+        const currentBalance = userDoc.data().balance;
+        const newBalance = currentBalance - amount;
+        
+        transaction.update(userRef, { 
+            balance: newBalance,
+            transactions: arrayUnion(newRequest)
+        });
+    });
+
+    toast({ title: "Success", description: "Withdrawal request submitted. Your balance has been updated." });
   };
   
   const findUser = async (email: string): Promise<UserForAdmin | null> => {
@@ -2195,3 +2224,5 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
+
+    
