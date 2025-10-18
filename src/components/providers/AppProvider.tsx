@@ -487,27 +487,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             batch.update(doc(db, "users", referrerDoc.id), {
                 referredUsers: arrayUnion({ email: newUser.email, isActivated: false })
             });
-
-            // Prepare team updates for upline
-            for (const uplineId of newReferralPath) {
-                const currentUpdate = teamUpdates.get(uplineId) || { size: 0, business: 0 };
-                teamUpdates.set(uplineId, { size: currentUpdate.size + 1, business: currentUpdate.business });
-            }
+            // Team size does not increase on sign up, only on activation
         }
         
-        // Apply team updates
-        for (const [uplineId, updates] of teamUpdates.entries()) {
-            const uplineUserRef = doc(db, "users", uplineId);
-            const uplineUserSnap = await getDoc(uplineUserRef);
-            if (uplineUserSnap.exists()) {
-                const uplineUserData = uplineUserSnap.data() as User;
-                batch.update(uplineUserRef, {
-                    teamSize: (uplineUserData.teamSize || 0) + updates.size
-                });
-            }
-        }
-
-
         await batch.commit();
 
         await addTransaction(newUserAuth.uid, {
@@ -662,8 +644,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     break;
             }
         } else if (newStatus === 'declined') {
-            if (type === 'withdrawal') {
-                finalBalance += originalRequest.amount;
+            if (type === 'withdrawal' || type === 'salary_claim') {
+                 finalBalance += originalRequest.amount;
+                 if(type === 'salary_claim') {
+                    // if salary claim is declined, we dont need to add fee to user balance
+                    const feePercentage = levels[userFound.level]?.withdrawalFee || 0;
+                    const fee = (originalRequest.amount * feePercentage) / 100;
+                    finalBalance -= fee
+                 }
             }
         }
 
@@ -682,7 +670,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (newStatus === 'approved' && type === 'deposit') {
             const isFirstDeposit = !userFound.firstDepositTime;
             
-            // Sign-up Bonus Logic
+            // Sign-up Bonus Logic, happens before level up
             if (isFirstDeposit && signUpBonusSettings.isEnabled && originalRequest.amount >= signUpBonusSettings.minDeposit) {
                 const newBalanceAfterBonus = finalBalance + signUpBonusSettings.bonusAmount;
                 await updateDoc(userRef, { balance: newBalanceAfterBonus });
@@ -694,8 +682,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     description: `Received a sign-up bonus of ${signUpBonusSettings.bonusAmount} USDT!`
                 });
             }
+            
+            // Check for level up after all balance changes
+            await checkAndApplyLevelUp(userDocId);
 
-            // Activate referrer
+            // Activate referrer and update team metrics
             if (isFirstDeposit && userFound.referredBy && userFound.referredBy !== ADMIN_REFERRAL_CODE) {
                 const referrerRef = doc(db, "users", userFound.referredBy);
                 const referrerSnap = await getDoc(referrerRef);
@@ -703,6 +694,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     const referrerData = referrerSnap.data() as User;
                     const updatedReferredUsers = referrerData.referredUsers.map(u => u.email === userFound!.email ? { ...u, isActivated: true } : u);
                     await updateDoc(referrerRef, { referredUsers: updatedReferredUsers });
+                }
+
+                // Increase team size for the entire upline on activation
+                for (const uplineId of userFound.referralPath) {
+                    const uplineRef = doc(db, 'users', uplineId);
+                    await runTransaction(db, async (transaction) => {
+                        const uplineSnap = await transaction.get(uplineRef);
+                        if (uplineSnap.exists()) {
+                            const newSize = (uplineSnap.data().teamSize || 0) + 1;
+                            transaction.update(uplineRef, { teamSize: newSize });
+                        }
+                    });
                 }
             }
 
@@ -744,8 +747,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     });
                 }
             }
-            // Check for level up at the very end
-            await checkAndApplyLevelUp(userDocId);
             await checkQuestProgress(userDocId, 'deposit_amount', originalRequest.amount);
         }
 
@@ -1437,9 +1438,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     const claimDailyInterest = async () => {
         if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
-            const canEarnInterest = currentUser.balance >= (levels[1]?.minBalance || 100);
+            const canEarnInterest = currentUser.level > 0;
             if (!canEarnInterest) {
-                 toast({ title: "Ineligible", description: "Your balance is too low to earn interest.", variant: "destructive" });
+                 toast({ title: "Ineligible", description: "Your account is inactive. You must have a balance sufficient for Level 1 to earn interest.", variant: "destructive" });
                  return;
             }
 
@@ -1480,7 +1481,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 toast({ title: "Not Yet", description: `You can claim your next interest in some time.`});
             }
         } else {
-            toast({ title: "Ineligible", description: "You must make a deposit and be at least Level 1 to earn interest.", variant: "destructive" });
+            toast({ title: "Ineligible", description: "You must be an active user (Level 1+) to earn interest.", variant: "destructive" });
         }
     };
     
@@ -2115,7 +2116,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const downline: Record<string, DownlineUser[]> = { L1: [], L2: [], L3: [] };
         let l4PlusCount = 0;
         let rechargedTodayCount = 0;
-        let allDownlineIds: string[] = [];
     
         // Level 1
         const l1Query = query(usersRef, where("referredBy", "==", currentUser.id));
@@ -2125,7 +2125,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             const userData = doc.data() as User;
             downline.L1.push({ id: doc.id, email: userData.email });
             l1Ids.push(doc.id);
-            allDownlineIds.push(doc.id);
         });
     
         // Level 2
@@ -2137,7 +2136,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 const userData = doc.data() as User;
                 downline.L2.push({ id: doc.id, email: userData.email });
                 l2Ids.push(doc.id);
-                allDownlineIds.push(doc.id);
             });
         }
     
@@ -2150,28 +2148,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 const userData = doc.data() as User;
                 downline.L3.push({ id: doc.id, email: userData.email });
                 l3Ids.push(doc.id);
-                allDownlineIds.push(doc.id);
             });
         }
 
-        // L4+ Community
-        let currentLayerIds = l3Ids;
-        while(currentLayerIds.length > 0) {
-            const nextLayerQuery = query(usersRef, where("referredBy", "in", currentLayerIds));
-            const nextLayerSnap = await getDocs(nextLayerQuery);
-            const nextLayerIds: string[] = [];
-            nextLayerSnap.forEach(doc => {
-                const userData = doc.data() as User;
-                if(userData.firstDepositTime) { // Count only active users for community
-                    l4PlusCount++;
-                }
-                nextLayerIds.push(doc.id);
-                allDownlineIds.push(doc.id);
-            });
-            currentLayerIds = nextLayerIds;
-        }
-        
-        // Calculate recharged today
+        // L4+ Community and Activations
+        const allUserDocs = await getDocs(usersRef);
+        const allUsers = allUserDocs.docs.map(doc => ({ id: doc.id, ...doc.data() as User }));
+        const userMap = new Map(allUsers.map(user => [user.id, user]));
+
         const [hours, minutes] = teamCommissionSettings.dailyActivationResetTime.split(':').map(Number);
         const now = new Date();
         const istOffset = 330; // 5.5 hours in minutes
@@ -2186,13 +2170,35 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
         const startOfDayTimestamp = resetTimeToday.getTime();
 
-        for (const userId of allDownlineIds) {
-            const userDoc = await getDoc(doc(db, "users", userId));
-            if (userDoc.exists()) {
-                const userData = userDoc.data() as User;
-                if (userData.firstDepositTime && userData.firstDepositTime >= startOfDayTimestamp) {
-                    rechargedTodayCount++;
+        let currentLayerIds = l3Ids;
+        while(currentLayerIds.length > 0) {
+            const nextLayerIds: string[] = [];
+            for (const userId of currentLayerIds) {
+                const user = userMap.get(userId);
+                if (user) {
+                     for(const u of allUsers) {
+                         if(u.referredBy === user.id) {
+                            const isUserActive = u.level > 0;
+                            if(isUserActive) {
+                                l4PlusCount++;
+                                if (u.firstDepositTime && u.firstDepositTime >= startOfDayTimestamp) {
+                                    rechargedTodayCount++;
+                                }
+                            }
+                             nextLayerIds.push(u.id);
+                         }
+                     }
                 }
+            }
+            currentLayerIds = nextLayerIds;
+        }
+
+        // Also check activations for L1-L3
+        const l1l2l3_ids = [...l1Ids, ...l2Ids, ...l3Ids];
+        for(const id of l1l2l3_ids) {
+            const user = userMap.get(id);
+             if (user && user.level > 0 && user.firstDepositTime && user.firstDepositTime >= startOfDayTimestamp) {
+                rechargedTodayCount++;
             }
         }
     
@@ -2240,7 +2246,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
         const lastLoginDate = userData.lastLoginTime ? new Date(new Date(userData.lastLoginTime).getFullYear(), new Date(userData.lastLoginTime).getMonth(), new Date(userData.lastLoginTime).getDate()).getTime() : 0;
-
+    
         if (today > lastLoginDate) {
             const yesterday = today - 24 * 60 * 60 * 1000;
             const newStreak = lastLoginDate === yesterday ? (userData.loginStreak || 0) + 1 : 1;
@@ -2249,8 +2255,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 lastLoginTime: now.getTime(),
                 loginStreak: newStreak,
             };
-
-            // Reset quests if it's a new day
+    
             const lastReset = userData.lastQuestResetTime ? new Date(new Date(userData.lastQuestResetTime).getFullYear(), new Date(userData.lastQuestResetTime).getMonth(), new Date(userData.lastQuestResetTime).getDate()).getTime() : 0;
             if (today > lastReset) {
                 updates.lastQuestResetTime = now.getTime();
@@ -2263,19 +2268,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             
             await updateDoc(doc(db, 'users', userId), updates);
             
-            // Check for login streak reward
-            const streakReward = (dailyEngagement.loginStreakRewards || []).find(r => r.day === newStreak);
-            if (streakReward && streakReward.rewardAmount > 0) {
-                await updateDoc(doc(db, 'users', userId), { balance: userData.balance + streakReward.rewardAmount });
-                await addTransaction(userId, {
-                    id: generateTxnId(),
-                    type: 'login_reward',
-                    amount: streakReward.rewardAmount,
-                    status: 'credited',
-                    description: `Day ${newStreak} login streak reward!`
-                });
+            // Check for login streak reward only if user is active (Level 1+)
+            if (userData.level > 0) {
+                const streakReward = (dailyEngagement.loginStreakRewards || []).find(r => r.day === newStreak);
+                if (streakReward && streakReward.rewardAmount > 0) {
+                    await updateDoc(doc(db, 'users', userId), { balance: userData.balance + streakReward.rewardAmount });
+                    await addTransaction(userId, {
+                        id: generateTxnId(),
+                        type: 'login_reward',
+                        amount: streakReward.rewardAmount,
+                        status: 'credited',
+                        description: `Day ${newStreak} login streak reward!`
+                    });
+                }
             }
-
+    
             await checkQuestProgress(userId, 'login', 1);
         }
     };
@@ -2438,3 +2445,5 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
+
+    

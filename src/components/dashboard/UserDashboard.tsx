@@ -49,6 +49,7 @@ const UserOverviewPanel = ({ currentUser, levels, todaysCommission }: { currentU
 
     const baseInterest = levels[currentUser.level]?.interest || 0;
     const userName = currentUser.email.split('@')[0];
+    const isActive = currentUser.level > 0;
 
     // Calculate boosted interest
     const now = Date.now();
@@ -58,8 +59,15 @@ const UserOverviewPanel = ({ currentUser, levels, todaysCommission }: { currentU
     
     return (
         <Card className="card-gradient-blue-purple p-6">
-            <h3 className="text-xl font-semibold mb-1 text-blue-300">Your Staking Overview</h3>
-            <p className="text-sm text-gray-400 mb-4">{currentUser.email}</p>
+            <div className="flex justify-between items-start">
+                <div>
+                    <h3 className="text-xl font-semibold mb-1 text-blue-300">Your Staking Overview</h3>
+                    <p className="text-sm text-gray-400 mb-4">{currentUser.email}</p>
+                </div>
+                <Badge variant={isActive ? "secondary" : "destructive"} className={cn(isActive ? "bg-green-600/80 border-green-500" : "bg-red-600/80 border-red-500")}>
+                    {isActive ? "Active" : "Inactive"}
+                </Badge>
+            </div>
             <div className="flex items-center justify-between mb-4">
             <p className="text-xl text-gray-200">Total USDT Balance:</p>
             <p className="text-4xl font-bold text-green-400">{currentUser.balance.toFixed(2)}</p>
@@ -114,7 +122,7 @@ const InterestCountdownPanel = () => {
     if (!context || !context.currentUser) return null;
     const { currentUser, levels } = context;
 
-    const canEarnInterest = currentUser.balance >= (levels[1]?.minBalance || 100);
+    const canEarnInterest = currentUser.level > 0;
 
     useEffect(() => {
         if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
@@ -158,7 +166,7 @@ const InterestCountdownPanel = () => {
                     <BadgeHelp className="h-4 w-4" />
                     <AlertTitle>Interest Earning Paused</AlertTitle>
                     <AlertDescription>
-                        Your balance is below the Level 1 minimum. You must maintain at least {(levels[1]?.minBalance || 100)} USDT to earn daily interest.
+                        Your account is inactive. You must maintain at least {(levels[1]?.minBalance || 100)} USDT to earn daily interest.
                     </AlertDescription>
                 </Alert>
             )}
@@ -1080,7 +1088,7 @@ const TeamPanel = () => {
                 <div className="flex justify-around items-center mt-2 text-center">
                     <div>
                         <p className="text-3xl font-bold">{(currentUser.teamSize || 0)}</p>
-                        <p className="text-sm text-gray-300">Total Members</p>
+                        <p className="text-sm text-gray-300">Total Active Members</p>
                     </div>
                      <div>
                         <p className="text-3xl font-bold">{(currentUser.teamBusiness || 0).toFixed(2)}</p>
@@ -1110,7 +1118,7 @@ const TeamPanel = () => {
                                         <div className="flex justify-between items-center">
                                             <div>
                                                 <p className="font-bold text-lg text-amber-400">{reward.rewardAmount} USDT Bonus</p>
-                                                <p className="text-sm text-gray-400">Reach {reward.teamSize} team members</p>
+                                                <p className="text-sm text-gray-400">Reach {reward.teamSize} active members</p>
                                             </div>
                                             <Button
                                                 onClick={() => claimTeamReward('team_size_reward', reward.id)}
@@ -1767,3 +1775,5 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
+
+    
