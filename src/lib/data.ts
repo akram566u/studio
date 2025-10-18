@@ -157,6 +157,9 @@ export const initialAppSettings: AppSettings = {
             level3: 0.02, // 2%
         },
         minDirectReferrals: 3,
+        communityRate: 0.01, // 1% for L4+
+        minReferralsForCommunity: 5, // 5 direct referrals needed
+        dailyActivationResetTime: "00:00", // IST time for reset
     },
 
     teamSizeRewards: [

@@ -239,6 +239,9 @@ export interface TeamCommissionSettings {
         level3: number;
     };
     minDirectReferrals: number;
+    communityRate: number; // Commission for L4+
+    minReferralsForCommunity: number; // Referrals needed to earn community commission
+    dailyActivationResetTime: string; // e.g., "00:00" in IST
 }
 
 export interface TeamSizeReward {

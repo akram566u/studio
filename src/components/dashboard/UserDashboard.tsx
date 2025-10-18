@@ -630,6 +630,7 @@ const ReferralNetworkPanel = () => {
 const TeamLayersPanel = () => {
     const context = useContext(AppContext);
     const [downline, setDownline] = useState<Record<string, DownlineUser[]>>({});
+    const [l4PlusCount, setL4PlusCount] = useState(0);
     const [rechargedTodayCount, setRechargedTodayCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -637,11 +638,12 @@ const TeamLayersPanel = () => {
         if (context?.currentUser) {
             context.getDownline().then(result => {
                 setDownline(result.downline);
+                setL4PlusCount(result.l4PlusCount);
                 setRechargedTodayCount(result.rechargedTodayCount);
                 setIsLoading(false);
             });
         }
-    }, [context?.currentUser?.id]);
+    }, [context?.currentUser?.id, context]);
 
     if (isLoading) {
         return (
@@ -689,14 +691,21 @@ const TeamLayersPanel = () => {
         </div>
 
         <Tabs defaultValue="l1">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="l1">Layer 1 ({downline.L1?.length || 0})</TabsTrigger>
                 <TabsTrigger value="l2">Layer 2 ({downline.L2?.length || 0})</TabsTrigger>
                 <TabsTrigger value="l3">Layer 3 ({downline.L3?.length || 0})</TabsTrigger>
+                <TabsTrigger value="l4+">L4+ Community ({l4PlusCount})</TabsTrigger>
             </TabsList>
             <TabsContent value="l1" className="mt-4">{renderUserTable(downline.L1 || [])}</TabsContent>
             <TabsContent value="l2" className="mt-4">{renderUserTable(downline.L2 || [])}</TabsContent>
             <TabsContent value="l3" className="mt-4">{renderUserTable(downline.L3 || [])}</TabsContent>
+            <TabsContent value="l4+" className="mt-4">
+                <div className="text-center p-8">
+                    <p className="text-5xl font-bold text-purple-400">{l4PlusCount}</p>
+                    <p className="text-lg text-gray-300">Total Active Members in L4+ Community</p>
+                </div>
+            </TabsContent>
         </Tabs>
       </>
     );
@@ -1337,7 +1346,7 @@ const UserDashboard = () => {
         }
 
     }
-  }, [context?.currentUser?.id, context?.boosterPacks, context?.signInPopupSettings]);
+  }, [context?.currentUser?.id, context?.boosterPacks, context?.signInPopupSettings, context]);
 
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;

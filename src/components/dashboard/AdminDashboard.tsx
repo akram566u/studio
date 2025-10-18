@@ -1289,7 +1289,7 @@ const SystemSettingsPanel = () => {
     const [localReferralBonusSettings, setLocalReferralBonusSettings] = useState<ReferralBonusSettings>({ isEnabled: true, bonusAmount: 5, minDeposit: 100 });
     const [localRechargeAddresses, setLocalRechargeAddresses] = useState<RechargeAddress[]>([]);
     const [localAppLinks, setLocalAppLinks] = useState<AppLinks>({ downloadUrl: '', supportUrl: '' });
-    const [localTeamCommissionSettings, setLocalTeamCommissionSettings] = useState<TeamCommissionSettings>({ isEnabled: false, rates: { level1: 0, level2: 0, level3: 0 }, minDirectReferrals: 3 });
+    const [localTeamCommissionSettings, setLocalTeamCommissionSettings] = useState<TeamCommissionSettings>({ isEnabled: false, rates: { level1: 0, level2: 0, level3: 0 }, minDirectReferrals: 3, communityRate: 0.01, minReferralsForCommunity: 5, dailyActivationResetTime: "00:00" });
     const [localTeamSizeRewards, setLocalTeamSizeRewards] = useState<TeamSizeReward[]>([]);
     const [localTeamBusinessRewards, setLocalTeamBusinessRewards] = useState<TeamBusinessReward[]>([]);
     
@@ -1344,10 +1344,12 @@ const SystemSettingsPanel = () => {
     
     const handleTeamCommissionChange = (field: keyof TeamCommissionSettings | keyof TeamCommissionSettings['rates'], value: any) => {
         setLocalTeamCommissionSettings(prev => {
-            if (field === 'isEnabled') {
-                return { ...prev, isEnabled: value };
-            } else if (field === 'minDirectReferrals') {
-                 return { ...prev, minDirectReferrals: Number(value) };
+            if (['isEnabled', 'dailyActivationResetTime'].includes(field as string)) {
+                 return { ...prev, [field]: value };
+            } else if (['minDirectReferrals', 'minReferralsForCommunity'].includes(field as string)) {
+                 return { ...prev, [field as string]: Number(value) };
+            } else if (field === 'communityRate') {
+                 return { ...prev, communityRate: Number(value) / 100 };
             } else {
                 return { ...prev, rates: { ...prev.rates, [field as keyof TeamCommissionSettings['rates']]: Number(value) / 100 }};
             }
@@ -1462,19 +1464,35 @@ const SystemSettingsPanel = () => {
                     <div className='p-4 rounded-lg bg-black/20'>
                         <div className="flex items-center justify-between"><Label htmlFor="team-commission-enabled" className="text-lg">Enable Team Commissions</Label><Switch id="team-commission-enabled" checked={localTeamCommissionSettings.isEnabled} onCheckedChange={checked => handleTeamCommissionChange('isEnabled', checked)} /></div>
                         
-                        <div className='mt-4'>
-                            <Label htmlFor="min-referrals">Min Direct Referrals to Earn Commission</Label>
-                            <Input id="min-referrals" type="number" value={localTeamCommissionSettings.minDirectReferrals} onChange={e => handleTeamCommissionChange('minDirectReferrals', e.target.value)} disabled={!localTeamCommissionSettings.isEnabled} />
-                             <p className="text-xs text-gray-400 mt-1">
-                                A user must have this many active L1 referrals to earn commissions. The commission tiers (L1/L2/L3) are then unlocked sequentially with each new active referral up to this number.
-                            </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                            <div>
+                                <Label htmlFor="min-referrals">Min Direct Referrals (L1-L3)</Label>
+                                <Input id="min-referrals" type="number" value={localTeamCommissionSettings.minDirectReferrals} onChange={e => handleTeamCommissionChange('minDirectReferrals', e.target.value)} disabled={!localTeamCommissionSettings.isEnabled} />
+                                <p className="text-xs text-gray-400 mt-1">
+                                    A user must have this many active L1 referrals to sequentially unlock L1, L2, and L3 commissions.
+                                </p>
+                            </div>
+                            <div>
+                                <Label htmlFor="min-referrals-community">Min Direct Referrals (L4+)</Label>
+                                <Input id="min-referrals-community" type="number" value={localTeamCommissionSettings.minReferralsForCommunity} onChange={e => handleTeamCommissionChange('minReferralsForCommunity', e.target.value)} disabled={!localTeamCommissionSettings.isEnabled} />
+                                <p className="text-xs text-gray-400 mt-1">
+                                    A user must have this many active L1 referrals to earn community commission.
+                                </p>
+                            </div>
                         </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                             <div><Label htmlFor="l1-rate">L1 Rate (%)</Label><Input id="l1-rate" type="number" value={localTeamCommissionSettings.rates.level1 * 100} onChange={e => handleTeamCommissionChange('level1', e.target.value)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
                             <div><Label htmlFor="l2-rate">L2 Rate (%)</Label><Input id="l2-rate" type="number" value={localTeamCommissionSettings.rates.level2 * 100} onChange={e => handleTeamCommissionChange('level2', e.target.value)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
                             <div><Label htmlFor="l3-rate">L3 Rate (%)</Label><Input id="l3-rate" type="number" value={localTeamCommissionSettings.rates.level3 * 100} onChange={e => handleTeamCommissionChange('level3', e.target.value)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
+                            <div><Label htmlFor="l4-rate">L4+ Rate (%)</Label><Input id="l4-rate" type="number" value={localTeamCommissionSettings.communityRate * 100} onChange={e => handleTeamCommissionChange('communityRate', e.target.value)} disabled={!localTeamCommissionSettings.isEnabled} /></div>
                         </div>
+                        
+                        <div className='mt-4'>
+                            <Label htmlFor="activation-reset-time">Daily Activation Reset Time (IST)</Label>
+                            <Input id="activation-reset-time" type="time" value={localTeamCommissionSettings.dailyActivationResetTime} onChange={e => handleTeamCommissionChange('dailyActivationResetTime', e.target.value)} />
+                        </div>
+
 
                         <Button onClick={handleSaveTeamCommissionSettings} className="mt-4">Save Commission Settings</Button>
                     </div>
@@ -1742,8 +1760,6 @@ const NoticesPanel = () => {
         }
     };
     const handleAddNotice = () => {
-        // This relies on the context `addNotice` to update the central state,
-        // which will then be reflected back here via the `useEffect`.
         addNotice();
     };
 
