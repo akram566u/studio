@@ -31,7 +31,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
 import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle, MessageSquare, UserX as UserXIcon, LayoutGrid, Sidebar, Eye, EyeOff, Wallet } from 'lucide-react';
-import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, LayoutSettings, FABSettings, DailyQuest, QuestType, LoginStreakReward, Leaderboard, LeaderboardCategory, AdminDashboardLayout, SignInPopupSettings, SalaryRule } from '@/lib/types';
+import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, LayoutSettings, FABSettings, DailyQuest, QuestType, LoginStreakReward, Leaderboard, LeaderboardCategory, AdminDashboardLayout, SignInPopupSettings, SalaryRule, SignUpBonusSettings } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { analyzeTeam } from '@/ai/flows/analyze-team-flow';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -650,6 +650,7 @@ const UserManagementPanel = () => {
     const [editingReferrals, setEditingReferrals] = useState(0);
     const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
     const [announcement, setAnnouncement] = useState('');
+    const [feeCalculatorAmount, setFeeCalculatorAmount] = useState(0);
 
 
     useEffect(() => {
@@ -664,7 +665,7 @@ const UserManagementPanel = () => {
     }, [searchedUser]);
 
     if (!context) return null;
-    const { findUser, allUsersForAdmin, adminUpdateUserEmail, adminUpdateUserWithdrawalAddress, adjustUserBalance, adjustUserLevel, forgotPassword, adjustUserDirectReferrals, sendAnnouncement, sendMessageToUser, deactivateUserAccount } = context;
+    const { findUser, allUsersForAdmin, adminUpdateUserEmail, adminUpdateUserWithdrawalAddress, adjustUserBalance, adjustUserLevel, forgotPassword, adjustUserDirectReferrals, sendAnnouncement, sendMessageToUser, deactivateUserAccount, levels } = context;
 
     const handleUserSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -792,6 +793,19 @@ const UserManagementPanel = () => {
                                     <Button onClick={() => handleUserUpdate('balance')}>Update Balance</Button>
                                 </div>
                                 <p className="text-xs text-gray-400">Sets the user's balance to this exact amount.</p>
+                            </div>
+                        </div>
+                        <hr className="border-white/10" />
+                        <div className="space-y-2">
+                             <Label>Withdrawal Fee Calculator</Label>
+                            <div className="flex gap-2 items-center">
+                                <Input type="number" placeholder="Withdrawal Amount" value={feeCalculatorAmount || ''} onChange={e => setFeeCalculatorAmount(Number(e.target.value))} />
+                                <div className="p-2 bg-black/20 rounded-md text-center flex-shrink-0">
+                                    <p className="text-xs text-gray-400">Fee for Lvl {searchedUser.level}</p>
+                                    <p className="font-bold text-yellow-300">
+                                        {((feeCalculatorAmount * (levels[searchedUser.level]?.withdrawalFee || 0)) / 100).toFixed(2)} USDT
+                                    </p>
+                                </div>
                             </div>
                         </div>
                         <hr className="border-white/10" />
@@ -1287,6 +1301,7 @@ const SystemSettingsPanel = () => {
     const { toast } = useToast();
     const [localLevels, setLocalLevels] = useState<{[key: number]: Level}>({});
     const [localRestrictions, setLocalRestrictions] = useState<RestrictionMessage[]>([]);
+    const [localSignUpBonus, setLocalSignUpBonus] = useState<SignUpBonusSettings>({ isEnabled: true, bonusAmount: 10, minDeposit: 100 });
     const [localReferralBonusSettings, setLocalReferralBonusSettings] = useState<ReferralBonusSettings>({ isEnabled: true, bonusAmount: 5, minDeposit: 100 });
     const [localRechargeAddresses, setLocalRechargeAddresses] = useState<RechargeAddress[]>([]);
     const [localAppLinks, setLocalAppLinks] = useState<AppLinks>({ downloadUrl: '', supportUrl: '' });
@@ -1298,6 +1313,7 @@ const SystemSettingsPanel = () => {
     useEffect(() => {
         if(context?.levels) setLocalLevels(context.levels);
         if(context?.restrictionMessages) setLocalRestrictions(context.restrictionMessages);
+        if(context?.signUpBonusSettings) setLocalSignUpBonus(context.signUpBonusSettings);
         if(context?.referralBonusSettings) setLocalReferralBonusSettings(context.referralBonusSettings);
         if(context?.rechargeAddresses) setLocalRechargeAddresses(context.rechargeAddresses);
         if(context?.appLinks) setLocalAppLinks(context.appLinks);
@@ -1312,13 +1328,14 @@ const SystemSettingsPanel = () => {
     const { 
         updateLevel, addLevel, deleteLevel,
         updateRestrictionMessages, addRestrictionMessage, deleteRestrictionMessage,
+        updateSignUpBonusSettings,
         updateReferralBonusSettings,
         updateTeamCommissionSettings,
         addTeamSizeReward, updateTeamSizeReward, deleteTeamSizeReward,
         addTeamBusinessReward, updateTeamBusinessReward, deleteTeamBusinessReward,
+        addSalaryRule, updateSalaryRule, deleteSalaryRule,
         addRechargeAddress, updateRechargeAddress, deleteRechargeAddress,
         updateAppLinks,
-        addSalaryRule, updateSalaryRule, deleteSalaryRule,
         levels, // Get levels for options
     } = context;
 
@@ -1328,7 +1345,7 @@ const SystemSettingsPanel = () => {
 
     const handleLevelChange = (level: number, field: keyof Level, value: string | number | boolean) => {
         let finalValue = value;
-        if (typeof value === 'string' && ['minBalance', 'directReferrals', 'interest', 'withdrawalLimit', 'monthlyWithdrawals'].includes(field)) {
+        if (typeof value === 'string' && ['minBalance', 'directReferrals', 'interest', 'withdrawalLimit', 'monthlyWithdrawals', 'withdrawalFee'].includes(field)) {
             finalValue = Number(value);
         }
         setLocalLevels(prev => ({ ...prev, [level]: { ...prev[level], [field]: finalValue } }));
@@ -1340,6 +1357,11 @@ const SystemSettingsPanel = () => {
     };
     const handleSaveRestrictions = () => updateRestrictionMessages(localRestrictions);
     const handleAddNewRestriction = () => addRestrictionMessage();
+    const handleSignUpBonusChange = (field: keyof SignUpBonusSettings, value: any) => {
+        const newSettings = {...localSignUpBonus, [field]: value};
+        setLocalSignUpBonus(newSettings);
+        updateSignUpBonusSettings(newSettings); // Live update
+    }
     const handleReferralBonusSettingsChange = (field: keyof ReferralBonusSettings, value: any) => {
         const newSettings = {...localReferralBonusSettings, [field]: value};
         setLocalReferralBonusSettings(newSettings);
@@ -1409,6 +1431,7 @@ const SystemSettingsPanel = () => {
                                         <div><Label htmlFor={`level-${level}-interest`}>Interest (Decimal)</Label><Input id={`level-${level}-interest`} type="number" step="0.001" value={details.interest} onChange={(e) => handleLevelChange(level, 'interest', e.target.value)} /></div>
                                         <div><Label htmlFor={`level-${level}-withdrawalLimit`}>Withdrawal Limit</Label><Input id={`level-${level}-withdrawalLimit`} type="number" value={details.withdrawalLimit} onChange={(e) => handleLevelChange(level, 'withdrawalLimit', e.target.value)} /></div>
                                         <div><Label htmlFor={`level-${level}-monthlyWithdrawals`}>Monthly Withdrawals</Label><Input id={`level-${level}-monthlyWithdrawals`} type="number" value={details.monthlyWithdrawals} onChange={(e) => handleLevelChange(level, 'monthlyWithdrawals', e.target.value)} /></div>
+                                        <div className="col-span-2"><Label htmlFor={`level-${level}-fee`}>Withdrawal Fee (%)</Label><Input id={`level-${level}-fee`} type="number" value={details.withdrawalFee || 0} onChange={(e) => handleLevelChange(level, 'withdrawalFee', e.target.value)} /></div>
                                     </div>
                                     <div className='flex gap-2'><Button onClick={() => handleSaveLevel(level)} className="mt-4">Save Level {level}</Button><Button onClick={() => deleteLevel(level)} variant="destructive" size="sm" className="mt-4">Delete Level {level}</Button></div>
                                 </div>
@@ -1619,12 +1642,29 @@ const SystemSettingsPanel = () => {
                 </CardContent>
             </Card>
             <Card className="card-gradient-indigo-fuchsia p-6">
-                <CardHeader><CardTitle className="text-purple-300">Manage Referral Bonus</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between"><Label htmlFor="bonus-enabled" className="text-lg">Enable Referral Bonus</Label><Switch id="bonus-enabled" checked={localReferralBonusSettings.isEnabled} onCheckedChange={checked => handleReferralBonusSettingsChange('isEnabled', checked)} /></div>
-                    <div className="space-y-2"><Label htmlFor="bonus-amount">Bonus Amount (USDT)</Label><Input id="bonus-amount" type="number" value={localReferralBonusSettings.bonusAmount} onChange={e => handleReferralBonusSettingsChange('bonusAmount', Number(e.target.value))} disabled={!localReferralBonusSettings.isEnabled} /></div>
-                     <div className="space-y-2"><Label htmlFor="min-deposit">Minimum First Deposit (USDT)</Label><Input id="min-deposit" type="number" value={localReferralBonusSettings.minDeposit} onChange={e => handleReferralBonusSettingsChange('minDeposit', Number(e.target.value))} disabled={!localReferralBonusSettings.isEnabled} /></div>
-                    <Button onClick={handleSaveReferralBonusSettings}>Save Bonus Settings</Button>
+                <CardHeader><CardTitle className="text-purple-300">Manage Bonuses</CardTitle></CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="p-4 rounded-lg bg-black/20 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <Label htmlFor="signup-bonus-enabled" className="text-lg">Enable Sign-up Bonus</Label>
+                            <Switch id="signup-bonus-enabled" checked={localSignUpBonus.isEnabled} onCheckedChange={checked => handleSignUpBonusChange('isEnabled', checked)} />
+                        </div>
+                        <div>
+                            <Label htmlFor="signup-bonus-amount">Bonus Amount (USDT)</Label>
+                            <Input id="signup-bonus-amount" type="number" value={localSignUpBonus.bonusAmount} onChange={e => handleSignUpBonusChange('bonusAmount', Number(e.target.value))} disabled={!localSignUpBonus.isEnabled} />
+                        </div>
+                        <div>
+                             <Label htmlFor="signup-min-deposit">Minimum First Deposit (USDT)</Label>
+                             <Input id="signup-min-deposit" type="number" value={localSignUpBonus.minDeposit} onChange={e => handleSignUpBonusChange('minDeposit', Number(e.target.value))} disabled={!localSignUpBonus.isEnabled} />
+                        </div>
+                    </div>
+                     <hr className="border-white/10" />
+                     <div className="p-4 rounded-lg bg-black/20 space-y-4">
+                        <div className="flex items-center justify-between"><Label htmlFor="bonus-enabled" className="text-lg">Enable Referral Bonus</Label><Switch id="bonus-enabled" checked={localReferralBonusSettings.isEnabled} onCheckedChange={checked => handleReferralBonusSettingsChange('isEnabled', checked)} /></div>
+                        <div className="space-y-2"><Label htmlFor="bonus-amount">Bonus Amount (USDT)</Label><Input id="bonus-amount" type="number" value={localReferralBonusSettings.bonusAmount} onChange={e => handleReferralBonusSettingsChange('bonusAmount', Number(e.target.value))} disabled={!localReferralBonusSettings.isEnabled} /></div>
+                         <div className="space-y-2"><Label htmlFor="min-deposit">Minimum First Deposit (USDT)</Label><Input id="min-deposit" type="number" value={localReferralBonusSettings.minDeposit} onChange={e => handleReferralBonusSettingsChange('minDeposit', Number(e.target.value))} disabled={!localReferralBonusSettings.isEnabled} /></div>
+                        <Button onClick={handleSaveReferralBonusSettings}>Save Referral Bonus Settings</Button>
+                    </div>
                 </CardContent>
             </Card>
         </div>
