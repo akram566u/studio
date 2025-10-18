@@ -269,6 +269,7 @@ export interface SalaryRule {
     teamBusiness: number;
     salaryAmount: number;
     requiredGrowthPercentage: number;
+    claimCooldownDays: number;
     isEnabled: boolean;
 }
 

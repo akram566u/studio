@@ -347,6 +347,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const signIn = async (email: string, pass: string) => {
     try {
         if (email === ADMIN_EMAIL && pass === ADMIN_PASSWORD) {
+            // This is a bypass for the admin user, no firebase auth involved
             setIsAdmin(true);
             toast({ title: "Admin signed in successfully!" });
             return;
@@ -622,12 +623,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     };
                     break;
             }
-        } else if (newStatus === 'declined' && (type === 'withdrawal' || type === 'salary_claim')) {
-            // Refund the user if a withdrawal is declined, or reset salary claim status.
-            if (type === 'withdrawal') {
-                updates.balance = userFound.balance + originalRequest.amount;
+        } else if (newStatus === 'declined') {
+            if (type === 'withdrawal' || type === 'salary_claim') {
+                // Refund the user if a withdrawal is declined. For salary, just update status.
+                if (type === 'withdrawal') {
+                    updates.balance = userFound.balance + originalRequest.amount;
+                }
             }
-            // For salary_claim, no balance change is needed, just the status update.
         }
         
         batch.update(userRef, updates);
@@ -1027,6 +1029,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             teamBusiness: 10000,
             salaryAmount: 100,
             requiredGrowthPercentage: 10,
+            claimCooldownDays: 30,
             isEnabled: true,
         };
         updateFirestoreSettings({ salaryRules: [...(salaryRules || []), newRule] });
@@ -1107,6 +1110,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         
         let isEligible = false;
         if (currentUser.lastSalaryClaim) {
+             // Check for cooldown
+            const cooldownMillis = rule.claimCooldownDays * 24 * 60 * 60 * 1000;
+            if (Date.now() < currentUser.lastSalaryClaim.timestamp + cooldownMillis) {
+                toast({ title: "Not Yet", description: `You can claim your next salary after the ${rule.claimCooldownDays}-day cooldown period.`, variant: "destructive"});
+                return;
+            }
+
             // Check for growth
             const requiredBusiness = currentUser.lastSalaryClaim.teamBusinessAtClaim * (1 + rule.requiredGrowthPercentage / 100);
             isEligible = (currentUser.directReferrals || 0) >= rule.directReferrals && (currentUser.teamBusiness || 0) >= requiredBusiness;

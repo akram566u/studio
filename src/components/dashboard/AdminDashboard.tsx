@@ -1446,6 +1446,7 @@ const SystemSettingsPanel = () => {
                                         <div><Label>Direct Referrals Req.</Label><Input type="number" value={rule.directReferrals} onChange={e => handleSalaryRuleChange(rule.id, 'directReferrals', Number(e.target.value))} /></div>
                                         <div><Label>Team Business Req.</Label><Input type="number" value={rule.teamBusiness} onChange={e => handleSalaryRuleChange(rule.id, 'teamBusiness', Number(e.target.value))} /></div>
                                         <div className="col-span-2"><Label>Next Claim Growth (%)</Label><Input type="number" value={rule.requiredGrowthPercentage} onChange={e => handleSalaryRuleChange(rule.id, 'requiredGrowthPercentage', Number(e.target.value))} /></div>
+                                        <div className="col-span-2"><Label>Claim Cooldown (Days)</Label><Input type="number" value={rule.claimCooldownDays} onChange={e => handleSalaryRuleChange(rule.id, 'claimCooldownDays', Number(e.target.value))} /></div>
                                     </div>
                                     <Button onClick={() => handleSaveSalaryRule(rule.id)} className="mt-4">Save Rule</Button>
                                 </div>

@@ -1009,6 +1009,8 @@ const TeamPanel = () => {
     let referralsProgress = 0;
     let businessProgress = 0;
     let businessTarget = 0;
+    let salaryCooldownMessage: string | null = null;
+
 
     if (applicableSalaryRule) {
         const referralReq = applicableSalaryRule.directReferrals;
@@ -1019,11 +1021,23 @@ const TeamPanel = () => {
 
         referralsProgress = Math.min(100, ((currentUser.directReferrals || 0) / referralReq) * 100);
 
-        if (lastClaim) { // Check for growth requirement
+        if (lastClaim) {
+            // Check for cooldown period
+            const cooldownMillis = applicableSalaryRule.claimCooldownDays * 24 * 60 * 60 * 1000;
+            const timeSinceLastClaim = Date.now() - lastClaim.timestamp;
+            const isCooldownActive = timeSinceLastClaim < cooldownMillis;
+
+            if (isCooldownActive) {
+                const remainingTime = cooldownMillis - timeSinceLastClaim;
+                const remainingDays = Math.ceil(remainingTime / (1000 * 60 * 60 * 24));
+                salaryCooldownMessage = `You can claim your next salary in ${remainingDays} day(s).`;
+            }
+
+            // Check for growth requirement
             const requiredBusiness = lastClaim.teamBusinessAtClaim * (1 + growthReq / 100);
             businessTarget = requiredBusiness;
             businessProgress = Math.min(100, ((currentUser.teamBusiness || 0) / requiredBusiness) * 100);
-            isEligibleForSalary = (currentUser.directReferrals || 0) >= referralReq && (currentUser.teamBusiness || 0) >= requiredBusiness;
+            isEligibleForSalary = !isCooldownActive && (currentUser.directReferrals || 0) >= referralReq && (currentUser.teamBusiness || 0) >= requiredBusiness;
         } else { // First time claim
             businessTarget = businessReq;
             businessProgress = Math.min(100, ((currentUser.teamBusiness || 0) / businessReq) * 100);
@@ -1133,6 +1147,13 @@ const TeamPanel = () => {
                                     {hasPendingSalaryClaim ? <><Info className='mr-2' />Pending</> : <><Wallet className='mr-2' />Claim Salary</>}
                                 </Button>
                             </div>
+                             {salaryCooldownMessage && (
+                                <Alert variant="destructive" className="mt-4">
+                                    <Info className="h-4 w-4" />
+                                    <AlertTitle>Claim Cooldown</AlertTitle>
+                                    <AlertDescription>{salaryCooldownMessage}</AlertDescription>
+                                </Alert>
+                            )}
                             <div className="mt-4 space-y-3">
                                 <div>
                                     <div className="flex justify-between text-sm">

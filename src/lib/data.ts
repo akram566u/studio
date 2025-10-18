@@ -173,7 +173,18 @@ export const initialAppSettings: AppSettings = {
         { id: 'tbr_2', businessAmount: 25000, rewardAmount: 600, isEnabled: true },
     ],
     
-    salaryRules: [],
+    salaryRules: [
+        {
+            id: 'sr_initial_1',
+            level: 1,
+            directReferrals: 10,
+            teamBusiness: 10000,
+            salaryAmount: 100,
+            requiredGrowthPercentage: 10,
+            claimCooldownDays: 30,
+            isEnabled: true,
+        }
+    ],
 
     startScreenContent: {
         title: 'Stake Plus',
