@@ -8,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent, MessageSquare, UserX as UserXIcon, Loader2, CalendarCheck, ShieldCheck, User as UserIcon } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent, MessageSquare, UserX as UserXIcon, Loader2, CalendarCheck, ShieldCheck, User as UserIcon, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -467,6 +467,9 @@ const ChangePasswordPanel = () => {
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -491,17 +494,23 @@ const ChangePasswordPanel = () => {
         <>
         <h3 className="text-xl font-semibold mb-4 text-purple-300">Change Password</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
+                <div className="relative">
                     <Label htmlFor="currentPassword">Current Password</Label>
-                    <Input id="currentPassword" type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required />
+                    <Input id="currentPassword" type={showCurrentPassword ? "text" : "password"} value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required />
+                    <Button type="button" variant="ghost" size="icon" className="absolute right-1 bottom-1 h-8 w-8" onClick={() => setShowCurrentPassword(!showCurrentPassword)}>
+                        {showCurrentPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+                    </Button>
                 </div>
-                <div>
+                <div className="relative">
                     <Label htmlFor="newPassword">New Password</Label>
-                    <Input id="newPassword" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
+                    <Input id="newPassword" type={showNewPassword ? "text" : "password"} value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
+                     <Button type="button" variant="ghost" size="icon" className="absolute right-1 bottom-1 h-8 w-8" onClick={() => setShowNewPassword(!showNewPassword)}>
+                        {showNewPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+                    </Button>
                 </div>
                 <div>
                     <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                    <Input id="confirmPassword" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
+                    <Input id="confirmPassword" type={showNewPassword ? "text" : "password"} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
                 </div>
                 <Button type="submit" className="w-full"><KeyRound /> Update Password</Button>
             </form>
@@ -512,6 +521,7 @@ const ChangePasswordPanel = () => {
 const DeleteAccountPanel = () => {
     const context = useContext(AppContext);
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
 
     if (!context) return null;
 
@@ -527,9 +537,12 @@ const DeleteAccountPanel = () => {
         <p className="text-sm text-gray-300 mb-4">
             This action is irreversible. All your data, including balance, referrals, and transaction history, will be permanently deleted.
         </p>
-        <div>
+        <div className="relative">
             <Label htmlFor="deactivate-password">Enter Password to Confirm</Label>
-            <Input id="deactivate-password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+            <Input id="deactivate-password" type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} required />
+            <Button type="button" variant="ghost" size="icon" className="absolute right-1 bottom-1 h-8 w-8" onClick={() => setShowPassword(!showPassword)}>
+                {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+            </Button>
         </div>
         <AlertDialog>
             <AlertDialogTrigger asChild>

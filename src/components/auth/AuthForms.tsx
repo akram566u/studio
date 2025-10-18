@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AppContext } from '@/components/providers/AppProvider';
 import type { View } from '@/components/StakingApp';
+import { Eye, EyeOff } from 'lucide-react';
 
 interface AuthFormProps {
   setView: React.Dispatch<React.SetStateAction<View>>;
@@ -19,6 +20,7 @@ interface SignUpFormProps extends AuthFormProps {
 export const SignUpForm: React.FC<SignUpFormProps> = ({ setView, setEmailForVerification }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [referral, setReferral] = useState('');
   const context = useContext(AppContext);
   
@@ -39,9 +41,18 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ setView, setEmailForVeri
           <Label htmlFor="signUpEmail">Email:</Label>
           <Input type="email" id="signUpEmail" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@example.com" required className="mt-1" />
         </div>
-        <div>
+        <div className="relative">
           <Label htmlFor="signUpPassword">Password:</Label>
-          <Input type="password" id="signUpPassword" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimum 6 characters" required minLength={6} className="mt-1" />
+          <Input type={showPassword ? "text" : "password"} id="signUpPassword" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimum 6 characters" required minLength={6} className="mt-1" />
+           <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-1 top-7 h-8 w-8"
+            onClick={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+          </Button>
         </div>
         <div>
           <Label htmlFor="referralCode">Referral Code (Mandatory):</Label>
@@ -60,6 +71,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ setView, setEmailForVeri
 export const SignInForm: React.FC<AuthFormProps> = ({ setView }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const context = useContext(AppContext);
   
   const handleSubmit = (e: React.FormEvent) => {
@@ -75,9 +87,18 @@ export const SignInForm: React.FC<AuthFormProps> = ({ setView }) => {
           <Label htmlFor="signInEmail">Email:</Label>
           <Input type="email" id="signInEmail" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@example.com" required className="mt-1" />
         </div>
-        <div>
+        <div className="relative">
           <Label htmlFor="signInPassword">Password:</Label>
-          <Input type="password" id="signInPassword" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Your password" required className="mt-1" />
+          <Input type={showPassword ? "text" : "password"} id="signInPassword" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Your password" required className="mt-1" />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-1 top-7 h-8 w-8"
+            onClick={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+          </Button>
         </div>
         <Button type="submit" className="w-full py-3 text-lg">Sign In</Button>
       </form>
