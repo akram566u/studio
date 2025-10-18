@@ -8,7 +8,7 @@ import { LevelBadge } from '@/components/ui/LevelBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent, MessageSquare, UserX as UserXIcon, Loader2, CalendarCheck, ShieldCheck, User as UserIcon, Eye, EyeOff } from 'lucide-react';
+import { Copy, UserCheck, Trash2, Edit, Send, Briefcase, TrendingUp, CheckCircle, Info, UserX, KeyRound, Ban, Megaphone, Check, ChevronRight, X, Star, BarChart, Settings, Gift, Layers, Rocket, Users, PiggyBank, Lock, Trophy, BadgePercent, MessageSquare, UserX as UserXIcon, Loader2, CalendarCheck, ShieldCheck, User as UserIcon, Eye, EyeOff, Wallet } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Table,
@@ -32,7 +32,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format, formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { BoosterPack, DashboardPanel, DashboardPanelComponentKey, Level, Notice, SignInPopupSettings, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, User, Message, DailyQuest, UserDailyQuest, Leaderboard } from '@/lib/types';
+import { BoosterPack, DashboardPanel, DashboardPanelComponentKey, Level, Notice, SignInPopupSettings, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, User, Message, DailyQuest, UserDailyQuest, Leaderboard, SalaryRule } from '@/lib/types';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -186,6 +186,7 @@ const TransactionHistoryPanel = () => {
             case 'team_commission': return <Users className="text-teal-400" />;
             case 'team_size_reward': return <Trophy className="text-amber-400" />;
             case 'team_business_reward': return <BadgePercent className="text-cyan-400" />;
+            case 'salary_claim': return <Wallet className="text-blue-400" />;
             case 'booster_purchase': return <Rocket className="text-orange-400" />;
             case 'pool_join': return <Users className="text-cyan-400" />;
             case 'pool_payout': return <Star className="text-yellow-300" />;
@@ -996,11 +997,40 @@ const StakingVaultsPanel = () => {
 const TeamPanel = () => {
     const context = useContext(AppContext);
     if (!context || !context.currentUser || !context.teamSizeRewards) return null;
-    const { currentUser, teamSizeRewards, claimTeamReward, teamBusinessRewards } = context;
+    const { currentUser, teamSizeRewards, claimTeamReward, teamBusinessRewards, salaryRules, claimSalary } = context;
 
     const availableSizeRewards = teamSizeRewards.filter(r => r.isEnabled);
     const availableBusinessRewards = teamBusinessRewards.filter(r => r.isEnabled);
+    const applicableSalaryRule = (salaryRules || []).find(r => r.isEnabled && r.level === currentUser.level);
 
+    // Salary eligibility calculation
+    const hasPendingSalaryClaim = currentUser.transactions.some(tx => tx.type === 'salary_claim' && tx.status === 'pending');
+    let isEligibleForSalary = false;
+    let referralsProgress = 0;
+    let businessProgress = 0;
+    let businessTarget = 0;
+
+    if (applicableSalaryRule) {
+        const referralReq = applicableSalaryRule.directReferrals;
+        const businessReq = applicableSalaryRule.teamBusiness;
+        const growthReq = applicableSalaryRule.requiredGrowthPercentage;
+        
+        const lastClaim = currentUser.lastSalaryClaim;
+
+        referralsProgress = Math.min(100, ((currentUser.directReferrals || 0) / referralReq) * 100);
+
+        if (lastClaim) { // Check for growth requirement
+            const requiredBusiness = lastClaim.teamBusinessAtClaim * (1 + growthReq / 100);
+            businessTarget = requiredBusiness;
+            businessProgress = Math.min(100, ((currentUser.teamBusiness || 0) / requiredBusiness) * 100);
+            isEligibleForSalary = (currentUser.directReferrals || 0) >= referralReq && (currentUser.teamBusiness || 0) >= requiredBusiness;
+        } else { // First time claim
+            businessTarget = businessReq;
+            businessProgress = Math.min(100, ((currentUser.teamBusiness || 0) / businessReq) * 100);
+            isEligibleForSalary = (currentUser.directReferrals || 0) >= referralReq && (currentUser.teamBusiness || 0) >= businessReq;
+        }
+    }
+    
     return (
         <>
             <h3 className="text-2xl font-semibold mb-4 text-blue-300">Your Team</h3>
@@ -1019,9 +1049,10 @@ const TeamPanel = () => {
             </Card>
 
             <Tabs defaultValue="size_rewards" className="w-full">
-                <TabsList className='grid w-full grid-cols-2'>
+                <TabsList className='grid w-full grid-cols-3'>
                     <TabsTrigger value="size_rewards">Size Rewards</TabsTrigger>
                     <TabsTrigger value="business_rewards">Business Rewards</TabsTrigger>
+                    <TabsTrigger value="salary">Salary</TabsTrigger>
                 </TabsList>
                 <TabsContent value="size_rewards" className="mt-4">
                     <h4 className="text-xl font-semibold mb-3 text-purple-300">Team Size Rewards</h4>
@@ -1085,6 +1116,44 @@ const TeamPanel = () => {
                             })}
                         </div>
                     </ScrollArea>
+                </TabsContent>
+                 <TabsContent value="salary" className="mt-4">
+                    <h4 className="text-xl font-semibold mb-3 text-purple-300">Monthly Salary</h4>
+                     {applicableSalaryRule ? (
+                        <Card className="p-4 bg-black/20">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <p className="font-bold text-lg text-blue-400">{applicableSalaryRule.salaryAmount} USDT Salary</p>
+                                    <p className="text-sm text-gray-400">Reward for Level {applicableSalaryRule.level} team leaders</p>
+                                </div>
+                                 <Button
+                                    onClick={() => claimSalary()}
+                                    disabled={!isEligibleForSalary || hasPendingSalaryClaim}
+                                >
+                                    {hasPendingSalaryClaim ? <><Info className='mr-2' />Pending</> : <><Wallet className='mr-2' />Claim Salary</>}
+                                </Button>
+                            </div>
+                            <div className="mt-4 space-y-3">
+                                <div>
+                                    <div className="flex justify-between text-sm">
+                                        <span>Direct Referrals</span>
+                                        <span>{(currentUser.directReferrals || 0)} / {applicableSalaryRule.directReferrals}</span>
+                                    </div>
+                                    <Progress value={referralsProgress} className="mt-1" />
+                                </div>
+                                <div>
+                                    <div className="flex justify-between text-sm">
+                                        <span>Team Business</span>
+                                        <span>{(currentUser.teamBusiness || 0).toFixed(2)} / {businessTarget.toFixed(2)} USDT</span>
+                                    </div>
+                                    <Progress value={businessProgress} className="mt-1" />
+                                     {currentUser.lastSalaryClaim && <p className="text-xs text-gray-500 mt-1">Next target based on {applicableSalaryRule.requiredGrowthPercentage}% growth.</p>}
+                                </div>
+                            </div>
+                        </Card>
+                     ) : (
+                        <p className="text-center text-gray-400 py-8">No salary rule available for your current level.</p>
+                     )}
                 </TabsContent>
             </Tabs>
         </>
@@ -1650,5 +1719,3 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
-
-    

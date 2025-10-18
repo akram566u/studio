@@ -30,8 +30,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
-import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle, MessageSquare, UserX as UserXIcon, LayoutGrid, Sidebar, Eye, EyeOff } from 'lucide-react';
-import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, LayoutSettings, FABSettings, DailyQuest, QuestType, LoginStreakReward, Leaderboard, LeaderboardCategory, AdminDashboardLayout, SignInPopupSettings } from '@/lib/types';
+import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle, MessageSquare, UserX as UserXIcon, LayoutGrid, Sidebar, Eye, EyeOff, Wallet } from 'lucide-react';
+import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, LayoutSettings, FABSettings, DailyQuest, QuestType, LoginStreakReward, Leaderboard, LeaderboardCategory, AdminDashboardLayout, SignInPopupSettings, SalaryRule } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { analyzeTeam } from '@/ai/flows/analyze-team-flow';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -217,6 +217,7 @@ const AdminHomePanel = ({ onReply }: { onReply: (view: AdminModalView) => void }
             case 'withdrawal': return <ArrowUpCircle className="text-red-400 mt-1 size-6" />;
             case 'team_size_reward': return <Trophy className="text-amber-400 mt-1 size-6" />;
             case 'team_business_reward': return <BadgePercent className="text-cyan-400 mt-1 size-6" />;
+            case 'salary_claim': return <Wallet className="text-blue-400 mt-1 size-6" />;
             default: return <CheckCircle className="text-gray-400 mt-1 size-6" />;
         }
     }
@@ -1292,6 +1293,7 @@ const SystemSettingsPanel = () => {
     const [localTeamCommissionSettings, setLocalTeamCommissionSettings] = useState<TeamCommissionSettings>({ isEnabled: false, rates: { level1: 0, level2: 0, level3: 0 }, minDirectReferrals: 3, communityRate: 0.01, minReferralsForCommunity: 5, dailyActivationResetTime: "00:00" });
     const [localTeamSizeRewards, setLocalTeamSizeRewards] = useState<TeamSizeReward[]>([]);
     const [localTeamBusinessRewards, setLocalTeamBusinessRewards] = useState<TeamBusinessReward[]>([]);
+    const [localSalaryRules, setLocalSalaryRules] = useState<SalaryRule[]>([]);
     
     useEffect(() => {
         if(context?.levels) setLocalLevels(context.levels);
@@ -1302,6 +1304,7 @@ const SystemSettingsPanel = () => {
         if(context?.teamCommissionSettings) setLocalTeamCommissionSettings(context.teamCommissionSettings);
         if(context?.teamSizeRewards) setLocalTeamSizeRewards(context.teamSizeRewards);
         if(context?.teamBusinessRewards) setLocalTeamBusinessRewards(context.teamBusinessRewards);
+        if(context?.salaryRules) setLocalSalaryRules(context.salaryRules);
     }, [context]);
     
     if(!context) return null;
@@ -1315,6 +1318,7 @@ const SystemSettingsPanel = () => {
         addTeamBusinessReward, updateTeamBusinessReward, deleteTeamBusinessReward,
         addRechargeAddress, updateRechargeAddress, deleteRechargeAddress,
         updateAppLinks,
+        addSalaryRule, updateSalaryRule, deleteSalaryRule,
         levels, // Get levels for options
     } = context;
 
@@ -1367,6 +1371,10 @@ const SystemSettingsPanel = () => {
     }
     const handleSaveTeamBusinessReward = (id: string) => { const reward = localTeamBusinessRewards.find(r => r.id === id); if(reward) updateTeamBusinessReward(id, reward); }
 
+    const handleSalaryRuleChange = (id: string, field: keyof SalaryRule, value: any) => {
+        setLocalSalaryRules(prev => prev.map(r => r.id === id ? {...r, [field]: value} : r));
+    };
+    const handleSaveSalaryRule = (id: string) => { const rule = localSalaryRules.find(r => r.id === id); if(rule) updateSalaryRule(id, rule); };
 
     const handleRechargeAddressChange = (id: string, field: keyof RechargeAddress, value: any) => {
         const newAddresses = localRechargeAddresses.map(addr => addr.id === id ? { ...addr, [field]: value } : addr);
@@ -1408,6 +1416,43 @@ const SystemSettingsPanel = () => {
                         </div>
                     </ScrollArea>
                     <div className="mt-4 flex gap-4"><Button onClick={handleAddNewLevel} variant="secondary">Add New Level</Button></div>
+                </CardContent>
+            </Card>
+             <Card className="card-gradient-indigo-fuchsia p-6">
+                <CardHeader><CardTitle className="text-purple-300">Manage Salary Rules</CardTitle></CardHeader>
+                <CardContent>
+                    <ScrollArea className="h-96 custom-scrollbar">
+                        <div className="space-y-4">
+                            {localSalaryRules.map(rule => (
+                                <div key={rule.id} className="bg-black/20 p-4 rounded-lg">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <Label htmlFor={`salary-enabled-${rule.id}`} className="flex items-center gap-2 text-base text-yellow-300 font-bold">
+                                            <Switch id={`salary-enabled-${rule.id}`} checked={rule.isEnabled} onCheckedChange={checked => handleSalaryRuleChange(rule.id, 'isEnabled', checked)} />
+                                            Salary for Level {rule.level}
+                                        </Label>
+                                        <Button variant="destructive" size="icon" onClick={() => deleteSalaryRule(rule.id)}><Trash2/></Button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <Label>Applicable Level</Label>
+                                            <Select value={String(rule.level)} onValueChange={v => handleSalaryRuleChange(rule.id, 'level', Number(v))}>
+                                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    {levelOptions.map(opt => <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div><Label>Salary Amount (USDT)</Label><Input type="number" value={rule.salaryAmount} onChange={e => handleSalaryRuleChange(rule.id, 'salaryAmount', Number(e.target.value))} /></div>
+                                        <div><Label>Direct Referrals Req.</Label><Input type="number" value={rule.directReferrals} onChange={e => handleSalaryRuleChange(rule.id, 'directReferrals', Number(e.target.value))} /></div>
+                                        <div><Label>Team Business Req.</Label><Input type="number" value={rule.teamBusiness} onChange={e => handleSalaryRuleChange(rule.id, 'teamBusiness', Number(e.target.value))} /></div>
+                                        <div className="col-span-2"><Label>Next Claim Growth (%)</Label><Input type="number" value={rule.requiredGrowthPercentage} onChange={e => handleSalaryRuleChange(rule.id, 'requiredGrowthPercentage', Number(e.target.value))} /></div>
+                                    </div>
+                                    <Button onClick={() => handleSaveSalaryRule(rule.id)} className="mt-4">Save Rule</Button>
+                                </div>
+                            ))}
+                        </div>
+                    </ScrollArea>
+                    <Button onClick={addSalaryRule} variant="secondary" className="mt-4">Add New Salary Rule</Button>
                 </CardContent>
             </Card>
             <Card className="card-gradient-orange-red p-6">
@@ -1745,7 +1790,7 @@ const NoticesPanel = () => {
         if(context?.notices) {
             setLocalNotices(context.notices);
         }
-    }, [context?.notices]);
+    }, [context]);
 
     if(!context) return null;
     const { addNotice, updateNotice, deleteNotice } = context;
@@ -2316,5 +2361,3 @@ const AdminSidebar = ({ items, onSelect, activeItem }: { items: MenuItem[], onSe
 }
 
 export default AdminDashboard;
-
-    

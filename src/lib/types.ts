@@ -49,7 +49,7 @@ export interface AppLinks {
     supportUrl: string;
 }
 
-export type TransactionType = 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created' | 'info' | 'booster_purchase' | 'pool_join' | 'pool_payout' | 'vault_investment' | 'vault_payout' | 'team_commission' | 'team_size_reward' | 'team_business_reward' | 'quest_reward' | 'login_reward';
+export type TransactionType = 'deposit' | 'withdrawal' | 'interest_credit' | 'referral_bonus' | 'admin_adjusted' | 'level_up' | 'new_referral' | 'account_created' | 'info' | 'booster_purchase' | 'pool_join' | 'pool_payout' | 'vault_investment' | 'vault_payout' | 'team_commission' | 'team_size_reward' | 'team_business_reward' | 'quest_reward' | 'login_reward' | 'salary_claim';
 
 export interface Transaction {
   id: string;
@@ -147,6 +147,10 @@ export interface User {
   loginStreak?: number;
   dailyQuests?: UserDailyQuest[];
   lastQuestResetTime?: number;
+  lastSalaryClaim?: {
+      timestamp: number;
+      teamBusinessAtClaim: number;
+  };
 }
 
 export interface Level {
@@ -258,6 +262,16 @@ export interface TeamBusinessReward {
     isEnabled: boolean;
 }
 
+export interface SalaryRule {
+    id: string;
+    level: number;
+    directReferrals: number;
+    teamBusiness: number;
+    salaryAmount: number;
+    requiredGrowthPercentage: number;
+    isEnabled: boolean;
+}
+
 export interface StartScreenSettings {
   title: string;
   subtitle: string;
@@ -322,6 +336,7 @@ export interface AppSettings {
     teamCommissionSettings: TeamCommissionSettings;
     teamSizeRewards: TeamSizeReward[];
     teamBusinessRewards: TeamBusinessReward[];
+    salaryRules: SalaryRule[];
     active3DTheme: BackgroundTheme;
     rechargeAddresses: RechargeAddress[];
     appLinks: AppLinks;

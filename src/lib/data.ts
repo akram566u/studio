@@ -172,6 +172,8 @@ export const initialAppSettings: AppSettings = {
         { id: 'tbr_1', businessAmount: 5000, rewardAmount: 100, isEnabled: true },
         { id: 'tbr_2', businessAmount: 25000, rewardAmount: 600, isEnabled: true },
     ],
+    
+    salaryRules: [],
 
     startScreenContent: {
         title: 'Stake Plus',
