@@ -6,7 +6,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe, runTransaction, deleteDoc, collectionGroup, limit } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification, deleteUser } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message, FABSettings, DailyEngagementSettings, DailyQuest, LoginStreakReward, Leaderboard, LeaderboardCategory, UserDailyQuest, AdminDashboardLayout, LayoutSettings, SignInPopupSettings, SalaryRule } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message, FABSettings, DailyEngagementSettings, DailyQuest, LoginStreakReward, Leaderboard, LeaderboardCategory, UserDailyQuest, AdminDashboardLayout, LayoutSettings, SignInPopupSettings, SalaryRule, SignUpBonusSettings } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
@@ -66,6 +66,8 @@ export interface AppContextType {
   deleteDashboardPanel: (id: string) => void;
   referralBonusSettings: ReferralBonusSettings;
   updateReferralBonusSettings: (settings: ReferralBonusSettings) => void;
+  signUpBonusSettings: SignUpBonusSettings;
+  updateSignUpBonusSettings: (settings: SignUpBonusSettings) => void;
   teamCommissionSettings: TeamCommissionSettings;
   updateTeamCommissionSettings: (settings: TeamCommissionSettings) => void;
   teamSizeRewards: TeamSizeReward[];
@@ -142,6 +144,7 @@ export interface AppContextType {
   leaderboards: Leaderboard[];
   updateLeaderboardSettings: (category: LeaderboardCategory, updates: Partial<Leaderboard>) => void;
   adminReferralCode: string;
+  checkAndApplyLevelDowngrade: (userId: string) => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -183,6 +186,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     startScreenContent, 
     dashboardPanels, 
     referralBonusSettings, 
+    signUpBonusSettings,
     teamCommissionSettings,
     teamSizeRewards,
     teamBusinessRewards,
@@ -342,6 +346,40 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: "Congratulations!", description: `You have been promoted to Level ${newLevel}!`});
     }
   }, [levels, addTransaction, toast]);
+
+    const checkAndApplyLevelDowngrade = useCallback(async (userId: string) => {
+        const userRef = doc(db, "users", userId);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) return;
+        
+        const userData = userSnap.data() as User;
+        const oldLevel = userData.level;
+        let newLevel = 0; // Start from the bottom
+
+        // Find the highest level the user qualifies for
+        const sortedLevels = Object.keys(levels).map(Number).sort((a, b) => b - a);
+        for (const levelKey of sortedLevels) {
+            const levelDetails = levels[levelKey];
+            const totalReferrals = (userData.directReferrals || 0) + (userData.purchasedReferralPoints || 0);
+            if (userData.balance >= levelDetails.minBalance && totalReferrals >= levelDetails.directReferrals) {
+                newLevel = levelKey;
+                break;
+            }
+        }
+
+        if (newLevel < oldLevel) {
+            await updateDoc(userRef, { level: newLevel });
+            await addTransaction(userId, { 
+                id: generateTxnId(), 
+                type: 'level_down', 
+                amount: newLevel, 
+                status: 'info', 
+                description: `Your level has been adjusted to Level ${newLevel} - ${levels[newLevel].name} based on your current balance.` 
+            });
+            toast({ title: "Level Adjusted", description: `You are now Level ${newLevel}.`});
+        }
+
+    }, [levels, addTransaction, toast]);
 
 
   const signIn = async (email: string, pass: string) => {
@@ -589,14 +627,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             tx.id === transactionId ? { ...tx, status: newStatus, description } : tx
         );
         
-        const batch = writeBatch(db);
+        let finalBalance = userFound.balance;
         const updates: any = { transactions: updatedTransactions };
         const adminTxDescription = `Admin ${newStatus} ${type.replace('_', ' ')} of ${originalRequest.amount} for user ${userFound.email}`;
 
         if (newStatus === 'approved') {
             switch(type) {
                 case 'deposit':
-                    updates.balance = userFound.balance + originalRequest.amount;
+                    finalBalance += originalRequest.amount;
                     updates.totalDeposits = (userFound.totalDeposits || 0) + originalRequest.amount;
                     if (!userFound.firstDepositTime) {
                         updates.firstDepositTime = Date.now();
@@ -608,15 +646,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     updates.lastWithdrawalTime = Date.now();
                     break;
                 case 'team_size_reward':
-                    updates.balance = userFound.balance + originalRequest.amount;
+                    finalBalance += originalRequest.amount;
                     updates.claimedTeamSizeRewards = arrayUnion(originalRequest.note); // Note stores reward ID
                     break;
                  case 'team_business_reward':
-                    updates.balance = userFound.balance + originalRequest.amount;
+                    finalBalance += originalRequest.amount;
                     updates.claimedTeamBusinessRewards = arrayUnion(originalRequest.note); // Note stores reward ID
                     break;
                  case 'salary_claim':
-                    updates.balance = userFound.balance + originalRequest.amount;
+                    finalBalance += originalRequest.amount;
                     updates.lastSalaryClaim = {
                         timestamp: Date.now(),
                         teamBusinessAtClaim: userFound.teamBusiness || 0,
@@ -624,16 +662,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     break;
             }
         } else if (newStatus === 'declined') {
-            if (type === 'withdrawal' || type === 'salary_claim') {
-                // Refund the user if a withdrawal is declined. For salary, just update status.
-                if (type === 'withdrawal') {
-                    updates.balance = userFound.balance + originalRequest.amount;
-                }
+            if (type === 'withdrawal') {
+                finalBalance += originalRequest.amount;
             }
         }
-        
-        batch.update(userRef, updates);
-        await batch.commit();
+
+        updates.balance = finalBalance;
+
+        await updateDoc(userRef, updates);
 
         await addTransaction(userDocId, {
           id: generateTxnId(),
@@ -646,6 +682,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (newStatus === 'approved' && type === 'deposit') {
             const isFirstDeposit = !userFound.firstDepositTime;
             
+            // Sign-up Bonus Logic
+            if (isFirstDeposit && signUpBonusSettings.isEnabled && originalRequest.amount >= signUpBonusSettings.minDeposit) {
+                const newBalanceAfterBonus = finalBalance + signUpBonusSettings.bonusAmount;
+                await updateDoc(userRef, { balance: newBalanceAfterBonus });
+                await addTransaction(userDocId, {
+                    id: generateTxnId(),
+                    type: 'sign_up_bonus',
+                    amount: signUpBonusSettings.bonusAmount,
+                    status: 'credited',
+                    description: `Received a sign-up bonus of ${signUpBonusSettings.bonusAmount} USDT!`
+                });
+            }
+
             // Activate referrer
             if (isFirstDeposit && userFound.referredBy && userFound.referredBy !== ADMIN_REFERRAL_CODE) {
                 const referrerRef = doc(db, "users", userFound.referredBy);
@@ -682,7 +731,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     bonusAmount *= boostMultiplier;
 
                     await updateDoc(referrerRef, {
-                        balance: referrerData.balance + bonusAmount,
+                        balance: referrerSnap.data().balance + bonusAmount,
                         directReferrals: (referrerData.directReferrals || 0) + 1,
                     });
 
@@ -695,10 +744,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     });
                 }
             }
+            // Check for level up at the very end
             await checkAndApplyLevelUp(userDocId);
             await checkQuestProgress(userDocId, 'deposit_amount', originalRequest.amount);
         }
 
+        // Check for level downgrade on withdrawal approval
+        if (newStatus === 'approved' && type === 'withdrawal') {
+            await checkAndApplyLevelDowngrade(userDocId);
+        }
+        
         toast({ title: "Success", description: `${type.replace('_', ' ')} request has been ${newStatus}.` });
     };
 
@@ -710,13 +765,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (!currentUser) return "Not logged in.";
     
     // Check if interest timer is running
-    const now = Date.now();
-    const lastCredit = currentUser.lastInterestCreditTime || currentUser.firstDepositTime;
-    if (lastCredit) {
-        const twentyFourHours = 24 * 60 * 60 * 1000;
-        if (now < lastCredit + twentyFourHours) {
-            return "Withdrawals are disabled while the daily interest timer is active. Please claim your interest first.";
-        }
+    if (currentUser.level > 0 && currentUser.firstDepositTime) {
+      const now = Date.now();
+      const lastCredit = currentUser.lastInterestCreditTime || currentUser.firstDepositTime;
+      const twentyFourHours = 24 * 60 * 60 * 1000;
+      if (now < lastCredit + twentyFourHours) {
+          return "Withdrawals are disabled while the daily interest timer is active. Please claim your interest first.";
+      }
     }
     
     if (!currentUser.primaryWithdrawalAddress) return "Set a withdrawal address first.";
@@ -788,6 +843,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: "Withdrawal Error", description: validationError, variant: "destructive" });
         return;
     }
+    
+    const feePercentage = levels[currentUser.level]?.withdrawalFee || 0;
+    const fee = (amount * feePercentage) / 100;
+    const totalDeduction = amount + fee;
 
     const newRequest: Omit<Transaction, 'userId' | 'timestamp'> = {
         id: generateTxnId(),
@@ -795,7 +854,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         amount,
         status: 'pending' as 'pending',
         walletAddress: currentUser.primaryWithdrawalAddress,
-        description: `User requested a withdrawal of ${amount} USDT.`
+        description: `User requested withdrawal of ${amount} USDT (Fee: ${fee.toFixed(2)} USDT).`
     };
     
     // Atomically deduct balance and add transaction
@@ -806,7 +865,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             throw "User document does not exist!";
         }
         const currentBalance = userDoc.data().balance;
-        const newBalance = currentBalance - amount;
+        if(currentBalance < totalDeduction) {
+            throw "Insufficient balance to cover withdrawal and fee.";
+        }
+        const newBalance = currentBalance - totalDeduction;
         
         transaction.update(userRef, { 
             balance: newBalance,
@@ -979,6 +1041,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             withdrawalLimit: 1500,
             monthlyWithdrawals: 2,
             isEnabled: true,
+            withdrawalFee: 0,
         };
         const updatedLevels = { ...levels, [newLevelKey]: newLevelData };
         updateFirestoreSettings({ levels: updatedLevels });
@@ -988,6 +1051,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         updateFirestoreSettings({ levels: remainingLevels });
     };
     const updateReferralBonusSettings = (settings: ReferralBonusSettings) => updateFirestoreSettings({ referralBonusSettings: settings });
+    const updateSignUpBonusSettings = (settings: SignUpBonusSettings) => updateFirestoreSettings({ signUpBonusSettings: settings });
     const updateTeamCommissionSettings = (settings: TeamCommissionSettings) => updateFirestoreSettings({ teamCommissionSettings: settings });
     const addTeamSizeReward = () => {
         const newReward: TeamSizeReward = {
@@ -1284,7 +1348,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 if(tx.status === 'approved' || tx.status === 'credited' || tx.status === 'completed') {
                     if (tx.type === 'deposit') totalDeposits += tx.amount;
                     if (tx.type === 'withdrawal') totalWithdrawals += tx.amount;
-                    if (tx.type === 'referral_bonus') totalBonuses += tx.amount;
+                    if (tx.type === 'referral_bonus' || tx.type === 'sign_up_bonus') totalBonuses += tx.amount;
                     if (tx.type === 'booster_purchase') boosterHistory.push({ ...tx, email: user.email });
                 }
             });
@@ -1324,7 +1388,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const allHistory: AugmentedTransaction[] = [];
         allUsers.forEach(userData => {
             const completed = (userData.transactions || []).filter(tx => 
-                tx.status === 'approved' || tx.status === 'declined' || tx.type === 'admin_adjusted'
+                tx.status === 'approved' || tx.status === 'declined' || tx.type === 'admin_adjusted' || tx.type === 'salary_claim'
             );
             completed.forEach(c => {
                 allHistory.push({ ...c, email: userData.email })
@@ -1373,6 +1437,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     const claimDailyInterest = async () => {
         if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
+            const canEarnInterest = currentUser.balance >= (levels[1]?.minBalance || 100);
+            if (!canEarnInterest) {
+                 toast({ title: "Ineligible", description: "Your balance is too low to earn interest.", variant: "destructive" });
+                 return;
+            }
+
             const now = Date.now();
             const lastCredit = currentUser.lastInterestCreditTime || currentUser.firstDepositTime;
             const twentyFourHours = 24 * 60 * 60 * 1000;
@@ -2266,6 +2336,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     deleteDashboardPanel,
     referralBonusSettings,
     updateReferralBonusSettings,
+    signUpBonusSettings,
+    updateSignUpBonusSettings,
     teamCommissionSettings,
     updateTeamCommissionSettings,
     teamSizeRewards,
@@ -2342,6 +2414,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     leaderboards,
     updateLeaderboardSettings,
     adminReferralCode: ADMIN_REFERRAL_CODE,
+    checkAndApplyLevelDowngrade,
   };
 
   return (
