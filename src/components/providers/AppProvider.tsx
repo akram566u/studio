@@ -644,14 +644,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     break;
             }
         } else if (newStatus === 'declined') {
-            if (type === 'withdrawal' || type === 'salary_claim') {
+            if (type === 'withdrawal') {
                  finalBalance += originalRequest.amount;
-                 if(type === 'salary_claim') {
-                    // if salary claim is declined, we dont need to add fee to user balance
-                    const feePercentage = levels[userFound.level]?.withdrawalFee || 0;
-                    const fee = (originalRequest.amount * feePercentage) / 100;
-                    finalBalance -= fee
-                 }
+            }
+            if (type === 'salary_claim') {
+                // Do not refund the fee if salary claim is declined.
+                finalBalance += originalRequest.amount;
             }
         }
 
@@ -669,11 +667,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         
         if (newStatus === 'approved' && type === 'deposit') {
             const isFirstDeposit = !userFound.firstDepositTime;
+            let currentBalanceAfterDeposit = finalBalance;
             
-            // Sign-up Bonus Logic, happens before level up
+            // Sign-up Bonus Logic
             if (isFirstDeposit && signUpBonusSettings.isEnabled && originalRequest.amount >= signUpBonusSettings.minDeposit) {
-                const newBalanceAfterBonus = finalBalance + signUpBonusSettings.bonusAmount;
+                const newBalanceAfterBonus = currentBalanceAfterDeposit + signUpBonusSettings.bonusAmount;
                 await updateDoc(userRef, { balance: newBalanceAfterBonus });
+                currentBalanceAfterDeposit = newBalanceAfterBonus;
                 await addTransaction(userDocId, {
                     id: generateTxnId(),
                     type: 'sign_up_bonus',
@@ -683,7 +683,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 });
             }
             
-            // Check for level up after all balance changes
+            // Check for level up *after* all balance changes from the deposit are applied
             await checkAndApplyLevelUp(userDocId);
 
             // Activate referrer and update team metrics
@@ -693,19 +693,30 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 if (referrerSnap.exists()) {
                     const referrerData = referrerSnap.data() as User;
                     const updatedReferredUsers = referrerData.referredUsers.map(u => u.email === userFound!.email ? { ...u, isActivated: true } : u);
-                    await updateDoc(referrerRef, { referredUsers: updatedReferredUsers });
-                }
+                    
+                    const newlyActivatedUserSnap = await getDoc(userRef);
+                    const newlyActivatedUserData = newlyActivatedUserSnap.data() as User;
+                    const isNowActive = newlyActivatedUserData.level > 0;
 
-                // Increase team size for the entire upline on activation
-                for (const uplineId of userFound.referralPath) {
-                    const uplineRef = doc(db, 'users', uplineId);
-                    await runTransaction(db, async (transaction) => {
-                        const uplineSnap = await transaction.get(uplineRef);
-                        if (uplineSnap.exists()) {
-                            const newSize = (uplineSnap.data().teamSize || 0) + 1;
-                            transaction.update(uplineRef, { teamSize: newSize });
-                        }
-                    });
+                    const updatesForReferrer: any = { referredUsers: updatedReferredUsers };
+                    if(isNowActive) {
+                        updatesForReferrer.directReferrals = (referrerData.directReferrals || 0) + 1;
+                    }
+                    await updateDoc(referrerRef, updatesForReferrer);
+
+                    // If the new user became active, increase team size for the entire upline
+                    if(isNowActive) {
+                      for (const uplineId of userFound.referralPath) {
+                          const uplineRef = doc(db, 'users', uplineId);
+                          await runTransaction(db, async (transaction) => {
+                              const uplineSnap = await transaction.get(uplineRef);
+                              if (uplineSnap.exists()) {
+                                  const newSize = (uplineSnap.data().teamSize || 0) + 1;
+                                  transaction.update(uplineRef, { teamSize: newSize });
+                              }
+                          });
+                      }
+                    }
                 }
             }
 
@@ -735,8 +746,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
                     await updateDoc(referrerRef, {
                         balance: referrerSnap.data().balance + bonusAmount,
-                        directReferrals: (referrerData.directReferrals || 0) + 1,
                     });
+                    await checkAndApplyLevelUp(referrerData.id);
 
                     await addTransaction(referrerData.id, {
                         id: generateTxnId(),
@@ -847,12 +858,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     const feePercentage = levels[currentUser.level]?.withdrawalFee || 0;
     const fee = (amount * feePercentage) / 100;
-    const totalDeduction = amount + fee;
+    const totalDeduction = amount; // User balance is only deducted by the withdrawal amount, fee is extra
 
     const newRequest: Omit<Transaction, 'userId' | 'timestamp'> = {
         id: generateTxnId(),
         type: 'withdrawal' as 'withdrawal',
-        amount,
+        amount: amount,
         status: 'pending' as 'pending',
         walletAddress: currentUser.primaryWithdrawalAddress,
         description: `User requested withdrawal of ${amount} USDT (Fee: ${fee.toFixed(2)} USDT).`
@@ -867,7 +878,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
         const currentBalance = userDoc.data().balance;
         if(currentBalance < totalDeduction) {
-            throw "Insufficient balance to cover withdrawal and fee.";
+            throw "Insufficient balance to cover withdrawal.";
         }
         const newBalance = currentBalance - totalDeduction;
         
@@ -2193,7 +2204,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             currentLayerIds = nextLayerIds;
         }
 
-        // Also check activations for L1-L3
+        // Also check activations for L1-L3 active users
         const l1l2l3_ids = [...l1Ids, ...l2Ids, ...l3Ids];
         for(const id of l1l2l3_ids) {
             const user = userMap.get(id);
