@@ -313,39 +313,46 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const checkAndApplyLevelUp = useCallback(async (userId: string) => {
     const userRef = doc(db, "users", userId);
-    const userSnap = await getDoc(userRef);
-    if (!userSnap.exists()) return;
+    await runTransaction(db, async (transaction) => {
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists()) return;
 
-    const userData = userSnap.data() as User;
-    const oldLevel = userData.level;
-    let newLevel = oldLevel;
+        const userData = userSnap.data() as User;
+        const oldLevel = userData.level;
+        let newLevel = oldLevel;
 
-    const sortedLevels = Object.keys(levels).map(Number).sort((a, b) => b - a);
+        const sortedLevels = Object.keys(levels).map(Number).sort((a, b) => b - a);
 
-    for (const levelKey of sortedLevels) {
-        if (levelKey > newLevel) {
-            const levelDetails = levels[levelKey];
-            const totalReferrals = (userData.directReferrals || 0) + (userData.purchasedReferralPoints || 0);
+        for (const levelKey of sortedLevels) {
+            if (levelKey > newLevel) {
+                const levelDetails = levels[levelKey];
+                const totalReferrals = (userData.directReferrals || 0) + (userData.purchasedReferralPoints || 0);
 
-            if (userData.balance >= levelDetails.minBalance && totalReferrals >= levelDetails.directReferrals) {
-                newLevel = levelKey;
-                break; 
+                if (userData.balance >= levelDetails.minBalance && totalReferrals >= levelDetails.directReferrals) {
+                    newLevel = levelKey;
+                    break;
+                }
             }
         }
-    }
 
-    if (newLevel > oldLevel) {
-        await updateDoc(userRef, { level: newLevel });
-        await addTransaction(userId, { 
-            id: generateTxnId(), 
-            type: 'level_up', 
-            amount: newLevel, 
-            status: 'info', 
-            description: `Promoted to Level ${newLevel} - ${levels[newLevel].name}` 
-        });
-        toast({ title: "Congratulations!", description: `You have been promoted to Level ${newLevel}!`});
-    }
-  }, [levels, addTransaction, toast]);
+        if (newLevel > oldLevel) {
+            transaction.update(userRef, { level: newLevel });
+            const levelUpTx: Transaction = {
+                id: generateTxnId(),
+                userId: userId,
+                timestamp: Date.now(),
+                type: 'level_up',
+                amount: newLevel,
+                status: 'info',
+                description: `Promoted to Level ${newLevel} - ${levels[newLevel].name}`
+            };
+            transaction.update(userRef, { transactions: arrayUnion(levelUpTx) });
+            // Defer toast until after transaction commits
+            setTimeout(() => toast({ title: "Congratulations!", description: `You have been promoted to Level ${newLevel}!` }), 0);
+        }
+    });
+}, [levels, toast]);
+
 
     const checkAndApplyLevelDowngrade = useCallback(async (userId: string) => {
         const userRef = doc(db, "users", userId);
@@ -506,7 +513,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 type: 'new_referral',
                 amount: 0,
                 status: 'info',
-                description: `New user registered with your code: ${newUser.email} (Pending activation)`
+                description: `New user registered with your code: ${newUser.email} (Pending activation)`,
+                referredUserId: newUserAuth.uid, // Store the new user's ID here
             });
         }
 
@@ -644,12 +652,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     break;
             }
         } else if (newStatus === 'declined') {
-            if (type === 'withdrawal') {
+            if (type === 'withdrawal' || type === 'salary_claim') {
                  finalBalance += originalRequest.amount;
-            }
-            if (type === 'salary_claim') {
-                // Do not refund the fee if salary claim is declined.
-                finalBalance += originalRequest.amount;
             }
         }
 
@@ -667,23 +671,30 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         
         if (newStatus === 'approved' && type === 'deposit') {
             const isFirstDeposit = !userFound.firstDepositTime;
-            let currentBalanceAfterDeposit = finalBalance;
             
-            // Sign-up Bonus Logic
+            // Apply Sign-up Bonus first
             if (isFirstDeposit && signUpBonusSettings.isEnabled && originalRequest.amount >= signUpBonusSettings.minDeposit) {
-                const newBalanceAfterBonus = currentBalanceAfterDeposit + signUpBonusSettings.bonusAmount;
-                await updateDoc(userRef, { balance: newBalanceAfterBonus });
-                currentBalanceAfterDeposit = newBalanceAfterBonus;
-                await addTransaction(userDocId, {
-                    id: generateTxnId(),
-                    type: 'sign_up_bonus',
-                    amount: signUpBonusSettings.bonusAmount,
-                    status: 'credited',
-                    description: `Received a sign-up bonus of ${signUpBonusSettings.bonusAmount} USDT!`
+                await runTransaction(db, async (transaction) => {
+                    const freshUserSnap = await transaction.get(userRef);
+                    if (!freshUserSnap.exists()) return;
+                    const freshUserData = freshUserSnap.data() as User;
+                    const newBalanceAfterBonus = freshUserData.balance + signUpBonusSettings.bonusAmount;
+                    transaction.update(userRef, { balance: newBalanceAfterBonus });
+                    
+                    const bonusTx: Transaction = {
+                        userId: userDocId!,
+                        timestamp: Date.now(),
+                        id: generateTxnId(),
+                        type: 'sign_up_bonus',
+                        amount: signUpBonusSettings.bonusAmount,
+                        status: 'credited',
+                        description: `Received a sign-up bonus of ${signUpBonusSettings.bonusAmount} USDT!`
+                    };
+                    transaction.update(userRef, { transactions: arrayUnion(bonusTx) });
                 });
             }
             
-            // Check for level up *after* all balance changes from the deposit are applied
+            // Now, check for level up with the updated balance
             await checkAndApplyLevelUp(userDocId);
 
             // Activate referrer and update team metrics
@@ -704,13 +715,25 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     }
                     await updateDoc(referrerRef, updatesForReferrer);
 
+                    // Update referrer's transaction log
+                    const oldTx = referrerData.transactions.find(tx => tx.type === 'new_referral' && tx.referredUserId === userDocId);
+                    if (oldTx) {
+                        const newTxList = referrerData.transactions.filter(tx => tx.id !== oldTx.id);
+                        newTxList.push({
+                            ...oldTx,
+                            status: 'completed',
+                            description: `New user activated with your code: ${userFound.email}`
+                        });
+                        await updateDoc(referrerRef, { transactions: newTxList });
+                    }
+
                     // If the new user became active, increase team size for the entire upline
                     if(isNowActive) {
                       for (const uplineId of userFound.referralPath) {
                           const uplineRef = doc(db, 'users', uplineId);
                           await runTransaction(db, async (transaction) => {
                               const uplineSnap = await transaction.get(uplineRef);
-                              if (uplineSnap.exists()) {
+                              if (uplineSnap.exists() && uplineSnap.data().level > 0) { // Only count for active upline members
                                   const newSize = (uplineSnap.data().teamSize || 0) + 1;
                                   transaction.update(uplineRef, { teamSize: newSize });
                               }
@@ -1449,7 +1472,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     const claimDailyInterest = async () => {
         if (currentUser && currentUser.level > 0 && currentUser.firstDepositTime) {
-            const canEarnInterest = currentUser.level > 0;
+            const canEarnInterest = currentUser.level > 0 && currentUser.balance >= levels[1].minBalance;
             if (!canEarnInterest) {
                  toast({ title: "Ineligible", description: "Your account is inactive. You must have a balance sufficient for Level 1 to earn interest.", variant: "destructive" });
                  return;
@@ -2181,28 +2204,26 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
         const startOfDayTimestamp = resetTimeToday.getTime();
 
-        let currentLayerIds = l3Ids;
-        while(currentLayerIds.length > 0) {
+        const traverseDownline = (userIds: string[]) => {
+            if (userIds.length === 0) return;
             const nextLayerIds: string[] = [];
-            for (const userId of currentLayerIds) {
-                const user = userMap.get(userId);
-                if (user) {
-                     for(const u of allUsers) {
-                         if(u.referredBy === user.id) {
-                            const isUserActive = u.level > 0;
-                            if(isUserActive) {
-                                l4PlusCount++;
-                                if (u.firstDepositTime && u.firstDepositTime >= startOfDayTimestamp) {
-                                    rechargedTodayCount++;
-                                }
-                            }
-                             nextLayerIds.push(u.id);
-                         }
-                     }
+            for (const userId of userIds) {
+                const referredUsers = allUsers.filter(u => u.referredBy === userId);
+                for (const u of referredUsers) {
+                    if (u.level > 0) { // Only count active users
+                        l4PlusCount++;
+                        if (u.firstDepositTime && u.firstDepositTime >= startOfDayTimestamp) {
+                            rechargedTodayCount++;
+                        }
+                    }
+                    nextLayerIds.push(u.id);
                 }
             }
-            currentLayerIds = nextLayerIds;
-        }
+            traverseDownline(nextLayerIds);
+        };
+
+        traverseDownline(l3Ids);
+
 
         // Also check activations for L1-L3 active users
         const l1l2l3_ids = [...l1Ids, ...l2Ids, ...l3Ids];
@@ -2283,14 +2304,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             if (userData.level > 0) {
                 const streakReward = (dailyEngagement.loginStreakRewards || []).find(r => r.day === newStreak);
                 if (streakReward && streakReward.rewardAmount > 0) {
-                    await updateDoc(doc(db, 'users', userId), { balance: userData.balance + streakReward.rewardAmount });
-                    await addTransaction(userId, {
-                        id: generateTxnId(),
-                        type: 'login_reward',
-                        amount: streakReward.rewardAmount,
-                        status: 'credited',
-                        description: `Day ${newStreak} login streak reward!`
-                    });
+                    const userRef = doc(db, 'users', userId);
+                    const userSnap = await getDoc(userRef);
+                    if (userSnap.exists()) {
+                        await updateDoc(userRef, { balance: userSnap.data().balance + streakReward.rewardAmount });
+                        await addTransaction(userId, {
+                            id: generateTxnId(),
+                            type: 'login_reward',
+                            amount: streakReward.rewardAmount,
+                            status: 'credited',
+                            description: `Day ${newStreak} login streak reward!`
+                        });
+                    }
                 }
             }
     
