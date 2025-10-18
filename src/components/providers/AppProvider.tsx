@@ -164,7 +164,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   
   const { toast } = useToast();
   
-  const ADMIN_EMAIL = "admin@stakeplus.com";
+  const ADMIN_EMAIL = "admin@stakinghub.com";
   const ADMIN_PASSWORD = "admin123";
   const ADMIN_REFERRAL_CODE = "ADMINREF";
 
@@ -2224,5 +2224,3 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
-
-    

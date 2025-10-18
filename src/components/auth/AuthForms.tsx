@@ -73,7 +73,7 @@ export const SignInForm: React.FC<AuthFormProps> = ({ setView }) => {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <Label htmlFor="signInEmail">Email:</Label>
-          <Input type="email" id="signInEmail" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@example.com" required className="mt-1" />
+          <Input type="email" id="signInEmail" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@stakinghub.com" required className="mt-1" />
         </div>
         <div>
           <Label htmlFor="signInPassword">Password:</Label>
