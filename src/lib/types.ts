@@ -39,6 +39,11 @@ export interface LayoutSettings {
 
 export type AdminDashboardLayout = 'floating' | 'sidebar' | 'grid';
 
+export interface SignInPopupSettings {
+    isEnabled: boolean;
+    content: string;
+}
+
 export interface AppLinks {
     downloadUrl: string;
     supportUrl: string;
@@ -255,7 +260,7 @@ export interface StartScreenSettings {
   subtitle: string;
 }
 
-export type DashboardPanelComponentKey = 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices' | 'BoosterStore' | 'StakingPools' | 'StakingVaults' | 'Team' | 'Settings' | 'DailyEngagement' | 'Leaderboards' | 'Inbox' | 'TeamLayers' | 'DeleteAccount' | 'ChatWithAdmin';
+export type DashboardPanelComponentKey = 'UserOverview' | 'StakingLevel' | 'InterestCredit' | 'TransactionHistory' | 'Recharge' | 'Withdraw' | 'ManageAddress' | 'ReferralNetwork' | 'LevelDetails' | 'Custom' | 'ChangePassword' | 'Notices' | 'BoosterStore' | 'StakingPools' | 'StakingVaults' | 'Team' | 'Settings' | 'DailyEngagement' | 'Leaderboards' | 'Inbox' | 'TeamLayers' | 'DeleteAccount' | 'ChatWithAdmin' | 'Profile';
 
 export interface DashboardPanel {
   id: string;
@@ -320,6 +325,7 @@ export interface AppSettings {
     floatingActionButtonSettings: FABSettings;
     layoutSettings: LayoutSettings;
     adminDashboardLayout: AdminDashboardLayout;
+    signInPopupSettings: SignInPopupSettings;
     tawkToSrcUrl: string;
     themeColors: { primary: string; accent: string };
     notices: Notice[];

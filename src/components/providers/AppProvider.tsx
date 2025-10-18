@@ -6,7 +6,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe, runTransaction, deleteDoc, collectionGroup, limit } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification, deleteUser } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message, FABSettings, DailyEngagementSettings, DailyQuest, LoginStreakReward, Leaderboard, LeaderboardCategory, UserDailyQuest, AdminDashboardLayout, LayoutSettings } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message, FABSettings, DailyEngagementSettings, DailyQuest, LoginStreakReward, Leaderboard, LeaderboardCategory, UserDailyQuest, AdminDashboardLayout, LayoutSettings, SignInPopupSettings } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
@@ -93,6 +93,8 @@ export interface AppContextType {
   updateLayoutSettings: (settings: LayoutSettings) => void;
   adminDashboardLayout: AdminDashboardLayout;
   updateAdminDashboardLayout: (layout: AdminDashboardLayout) => void;
+  signInPopupSettings: SignInPopupSettings;
+  updateSignInPopupSettings: (settings: SignInPopupSettings) => void;
   tawkToSrcUrl: string;
   notices: Notice[];
   addNotice: () => void;
@@ -185,6 +187,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     floatingActionButtonSettings,
     layoutSettings,
     adminDashboardLayout,
+    signInPopupSettings,
     tawkToSrcUrl,
     notices,
     boosterPacks,
@@ -1111,6 +1114,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const updateFloatingActionButtonSettings = (settings: FABSettings) => updateFirestoreSettings({ floatingActionButtonSettings: settings });
     const updateLayoutSettings = (settings: LayoutSettings) => updateFirestoreSettings({ layoutSettings: settings });
     const updateAdminDashboardLayout = (layout: AdminDashboardLayout) => updateFirestoreSettings({ adminDashboardLayout: layout });
+    const updateSignInPopupSettings = (settings: SignInPopupSettings) => updateFirestoreSettings({ signInPopupSettings: settings });
     const addNotice = () => {
         const newNotice: Notice = {
             id: `notice_${Date.now()}`,
@@ -2159,6 +2163,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateLayoutSettings,
     adminDashboardLayout,
     updateAdminDashboardLayout,
+    signInPopupSettings,
+    updateSignInPopupSettings,
     tawkToSrcUrl,
     notices,
     addNotice,

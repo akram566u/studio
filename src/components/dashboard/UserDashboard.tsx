@@ -32,7 +32,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { format, formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { BoosterPack, DashboardPanel, DashboardPanelComponentKey, Level, Notice, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, User, Message, DailyQuest, UserDailyQuest, Leaderboard } from '@/lib/types';
+import { BoosterPack, DashboardPanel, DashboardPanelComponentKey, Level, Notice, SignInPopupSettings, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, User, Message, DailyQuest, UserDailyQuest, Leaderboard } from '@/lib/types';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -1293,14 +1293,23 @@ const UserDashboard = () => {
   const [prioritizedMessage, setPrioritizedMessage] = useState<PrioritizeMessageOutput | null>(null);
   const [todaysCommission, setTodaysCommission] = useState(0);
   const [isCounterRunning, setIsCounterRunning] = useState(false);
+  const [showSignInPopup, setShowSignInPopup] = useState(false);
+
 
   useEffect(() => {
     if (context?.currentUser) {
         // Show booster popup only once per session
-        const hasSeenPopup = sessionStorage.getItem('hasSeenBoosterPopup');
-        if (!hasSeenPopup && context.boosterPacks.some(p => p.isActive)) {
+        const hasSeenBoosterPopup = sessionStorage.getItem('hasSeenBoosterPopup');
+        if (!hasSeenBoosterPopup && context.boosterPacks.some(p => p.isActive)) {
             setShowBoosterPopup(true);
             sessionStorage.setItem('hasSeenBoosterPopup', 'true');
+        }
+
+        // Show sign-in popup only once per session
+        const hasSeenSignInPopup = sessionStorage.getItem('hasSeenSignInPopup');
+        if (!hasSeenSignInPopup && context.signInPopupSettings.isEnabled) {
+            setShowSignInPopup(true);
+            sessionStorage.setItem('hasSeenSignInPopup', 'true');
         }
 
         // Fetch prioritized message
@@ -1318,18 +1327,22 @@ const UserDashboard = () => {
         if (context.currentUser.level > 0 && context.currentUser.firstDepositTime) {
             const lastCredit = context.currentUser.lastInterestCreditTime || context.currentUser.firstDepositTime;
             const nextCredit = lastCredit + (24 * 60 * 60 * 1000);
-            setIsCounterRunning(now < nextCredit);
+            const timerId = setInterval(() => {
+                setIsCounterRunning(Date.now() < nextCredit);
+            }, 1000);
+            setIsCounterRunning(Date.now() < nextCredit); // Initial check
+            return () => clearInterval(timerId);
         } else {
             setIsCounterRunning(false);
         }
 
     }
-  }, [context?.currentUser?.id, context?.boosterPacks]);
+  }, [context?.currentUser?.id, context?.boosterPacks, context?.signInPopupSettings]);
 
   if (!context || !context.currentUser) {
     return <div>Loading user data...</div>;
   }
-  const { currentUser, levels, markAnnouncementAsRead, dashboardPanels } = context;
+  const { currentUser, levels, markAnnouncementAsRead, dashboardPanels, signInPopupSettings } = context;
   
   const hasPendingRequests = currentUser.transactions.some(tx => tx.status === 'pending');
   const currentLevelDetails = levels[currentUser.level];
@@ -1393,8 +1406,28 @@ const UserDashboard = () => {
     if (view === 'custom' && activeCustomPanel) {
         return activeCustomPanel.title;
     }
-    const panel = dashboardPanels.find(p => p.componentKey.toLowerCase() === view.replace(/_/g, '').toLowerCase());
-    return panel ? panel.title : 'Stake Plus';
+    // A simple mapping for titles
+    const titles: Record<ModalView, string> = {
+        recharge: "Recharge USDT",
+        withdraw: "Withdraw USDT",
+        history: "Transaction History",
+        referrals: "Your Referral Network",
+        levels: "Staking Level Details",
+        settings: "Settings",
+        notices: "Notices & Events",
+        boosters: "Booster Store",
+        pools: "Staking Pools",
+        vaults: "Staking Vaults",
+        team: "Your Team",
+        team_layers: "Team Layers",
+        daily_engagement: "Daily Engagement",
+        leaderboards: "Leaderboards",
+        profile: "Your Profile",
+        custom: "Information",
+        delete_account: "Delete Account",
+        chat_with_admin: "Chat With Admin"
+    };
+    return titles[view] || 'Stake Plus';
   }
 
   const mainPanelKeys: DashboardPanelComponentKey[] = ['UserOverview', 'StakingLevel', 'InterestCredit'];
@@ -1427,21 +1460,21 @@ const UserDashboard = () => {
         Profile: UserIcon,
         Custom: Info,
     };
-    let viewKey = panel.componentKey.toLowerCase();
-    if(viewKey === "transactionhistory") viewKey = "history";
-    if(viewKey === "referralnetwork") viewKey = "referrals";
-    if(viewKey === "leveldetails") viewKey = "levels";
-    if(viewKey === "boosterstore") viewKey = "boosters";
-    if(viewKey === "stakingpools") viewKey = "pools";
-    if(viewKey === "stakingvaults") viewKey = "vaults";
-    if(viewKey === "teamlayers") viewKey = "team_layers";
-    if(viewKey === "dailyengagement") viewKey = "daily_engagement";
-    if(viewKey === "deleteaccount") viewKey = "delete_account";
-    if(viewKey === "chatwithadmin") viewKey = "chat_with_admin";
+    let viewKey = panel.componentKey.toLowerCase() as ModalView;
+    if(panel.componentKey === 'TransactionHistory') viewKey = 'history';
+    if(panel.componentKey === 'ReferralNetwork') viewKey = 'referrals';
+    if(panel.componentKey === 'LevelDetails') viewKey = 'levels';
+    if(panel.componentKey === 'BoosterStore') viewKey = 'boosters';
+    if(panel.componentKey === 'StakingPools') viewKey = 'pools';
+    if(panel.componentKey === 'StakingVaults') viewKey = 'vaults';
+    if(panel.componentKey === 'TeamLayers') viewKey = 'team_layers';
+    if(panel.componentKey === 'DailyEngagement') viewKey = 'daily_engagement';
+    if(panel.componentKey === 'DeleteAccount') viewKey = 'delete_account';
+    if(panel.componentKey === 'ChatWithAdmin') viewKey = 'chat_with_admin';
     
     return {
         panel,
-        view: viewKey as ModalView,
+        view: viewKey,
         label: panel.title,
         icon: icons[panel.componentKey] || Info,
     };
@@ -1496,6 +1529,25 @@ const UserDashboard = () => {
             )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showSignInPopup} onOpenChange={setShowSignInPopup}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>
+                    <Megaphone className="inline-block mr-2" /> Important Notice
+                </AlertDialogTitle>
+                <AlertDialogDescription className="whitespace-pre-wrap py-4">
+                    {signInPopupSettings.content}
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogAction onClick={() => setShowSignInPopup(false)}>
+                    I Understand
+                </AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={showBoosterPopup} onOpenChange={setShowBoosterPopup}>
           <AlertDialogContent>
               <AlertDialogHeader>

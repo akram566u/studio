@@ -31,7 +31,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import RequestViewExamples from './RequestViewExamples';
 import { ArrowDownCircle, ArrowUpCircle, Badge, CheckCircle, ExternalLink, GripVertical, KeyRound, Rocket, ShieldCheck, ShieldX, Star, Trash2, UserCog, Users, Settings, BarChart, FileText, Palette, Users2, PanelTop, Megaphone, Gift, Layers, X, ChevronRight, PiggyBank, BadgePercent, CheckCheck, Trophy, BrainCircuit, Loader2, Send, PauseCircle, MessageSquare, UserX as UserXIcon, LayoutGrid, Sidebar, Eye, EyeOff } from 'lucide-react';
-import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, LayoutSettings, FABSettings, DailyQuest, QuestType, LoginStreakReward, Leaderboard, LeaderboardCategory, AdminDashboardLayout } from '@/lib/types';
+import { AppLinks, BackgroundTheme, BoosterPack, DashboardPanel, FloatingActionButtonSettings, FloatingActionItem, Level, Notice, RechargeAddress, ReferralBonusSettings, RestrictionMessage, StakingPool, StakingVault, Transaction, Levels, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, AnalyzeTeamOutput, Message, LayoutSettings, FABSettings, DailyQuest, QuestType, LoginStreakReward, Leaderboard, LeaderboardCategory, AdminDashboardLayout, SignInPopupSettings } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { analyzeTeam } from '@/ai/flows/analyze-team-flow';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -878,6 +878,7 @@ const ContentUIPanel = () => {
     const [localFabSettings, setLocalFabSettings] = useState<FABSettings | null>(null);
     const [localLayout, setLocalLayout] = useState<LayoutSettings | null>(null);
     const [localAdminLayout, setLocalAdminLayout] = useState<AdminDashboardLayout>('floating');
+    const [localSignInPopup, setLocalSignInPopup] = useState<SignInPopupSettings | null>(null);
     
     useEffect(() => {
         if(context?.websiteTitle) setLocalWebsiteTitle(context.websiteTitle);
@@ -888,6 +889,7 @@ const ContentUIPanel = () => {
         if(context?.floatingActionButtonSettings) setLocalFabSettings(context.floatingActionButtonSettings);
         if(context?.layoutSettings) setLocalLayout(context.layoutSettings);
         if(context?.adminDashboardLayout) setLocalAdminLayout(context.adminDashboardLayout);
+        if(context?.signInPopupSettings) setLocalSignInPopup(context.signInPopupSettings);
     }, [context]);
 
     if(!context) return null;
@@ -900,6 +902,7 @@ const ContentUIPanel = () => {
         updateFloatingActionButtonSettings,
         updateLayoutSettings,
         updateAdminDashboardLayout,
+        updateSignInPopupSettings,
     } = context;
 
     const handleWebsiteTitleSave = () => updateWebsiteTitle(localWebsiteTitle);
@@ -984,6 +987,17 @@ const ContentUIPanel = () => {
             updateLayoutSettings(localLayout);
         }
     };
+
+    const handleSignInPopupChange = (field: keyof SignInPopupSettings, value: any) => {
+        setLocalSignInPopup(prev => (prev ? {...prev, [field]: value} : null));
+    }
+    
+    const handleSaveSignInPopup = () => {
+        if (localSignInPopup) {
+            updateSignInPopupSettings(localSignInPopup);
+        }
+    }
+
 
     const FabEditor = ({ screen }: { screen: keyof FABSettings }) => {
         if (!localFabSettings) return <div>Loading FAB settings...</div>;
@@ -1091,7 +1105,7 @@ const ContentUIPanel = () => {
         );
     }
 
-    if (!localFabSettings || !localLayout) {
+    if (!localFabSettings || !localLayout || !localSignInPopup) {
         return <p>Loading settings...</p>
     }
 
@@ -1117,6 +1131,31 @@ const ContentUIPanel = () => {
                         <Textarea id="startScreenSubtitle" value={localStartScreenSubtitle} onChange={e => setLocalStartScreenSubtitle(e.target.value)} className="mt-1"/>
                     </div>
                     <Button onClick={handleStartScreenContentSave} className="mt-2">Save Start Screen Content</Button>
+                </CardContent>
+            </Card>
+            <Card className="card-gradient-blue-purple p-6">
+                <CardHeader>
+                    <CardTitle className="text-purple-300">Sign-In Popup Notice</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <Label htmlFor="popup-enabled" className="text-lg">Enable Popup</Label>
+                        <Switch
+                            id="popup-enabled"
+                            checked={localSignInPopup.isEnabled}
+                            onCheckedChange={checked => handleSignInPopupChange('isEnabled', checked)}
+                        />
+                    </div>
+                    <div>
+                        <Label htmlFor="popup-content">Popup Content (Markdown supported)</Label>
+                        <Textarea 
+                            id="popup-content" 
+                            value={localSignInPopup.content}
+                            onChange={(e) => handleSignInPopupChange('content', e.target.value)}
+                            rows={6}
+                        />
+                    </div>
+                    <Button onClick={handleSaveSignInPopup}>Save Popup Settings</Button>
                 </CardContent>
             </Card>
             <Card className="card-gradient-blue-purple p-6">
@@ -1682,20 +1721,31 @@ const UserDashboardLayoutEditorPanelComponent = () => {
 
 const NoticesPanel = () => {
     const context = useContext(AppContext);
-    const { toast } = useToast();
     const [localNotices, setLocalNotices] = useState<Notice[]>([]);
 
     useEffect(() => {
-        if(context?.notices) setLocalNotices(context.notices);
+        if(context?.notices) {
+            setLocalNotices(context.notices);
+        }
     }, [context?.notices]);
 
     if(!context) return null;
-    const { addNotice, updateNotice, deleteNotice, notices } = context;
+    const { addNotice, updateNotice, deleteNotice } = context;
 
     const handleNoticeChange = (id: string, field: keyof Notice, value: any) => {
         setLocalNotices(prev => prev.map(n => n.id === id ? { ...n, [field]: value } : n));
     };
-    const handleSaveNotice = (id: string) => { const noticeToUpdate = localNotices.find(n => n.id === id); if (noticeToUpdate) updateNotice(id, noticeToUpdate); };
+    const handleSaveNotice = (id: string) => { 
+        const noticeToUpdate = localNotices.find(n => n.id === id); 
+        if (noticeToUpdate) {
+            updateNotice(id, noticeToUpdate); 
+        }
+    };
+    const handleAddNotice = () => {
+        // This relies on the context `addNotice` to update the central state,
+        // which will then be reflected back here via the `useEffect`.
+        addNotice();
+    };
 
     return (
         <Card className="card-gradient-blue-purple p-6">
@@ -1703,7 +1753,7 @@ const NoticesPanel = () => {
             <CardContent>
                 <ScrollArea className="h-[70vh] custom-scrollbar">
                     <div className="space-y-4">
-                        {(notices || []).map(notice => (
+                        {localNotices.map(notice => (
                             <div key={notice.id} className="bg-black/20 p-4 rounded-lg space-y-3">
                                 <div className="flex justify-between items-center">
                                     <Label htmlFor={`notice-active-${notice.id}`} className="flex items-center gap-2 text-base font-bold text-yellow-300"><Switch id={`notice-active-${notice.id}`} checked={notice.isActive} onCheckedChange={checked => handleNoticeChange(notice.id, 'isActive', checked)} />Active</Label>
@@ -1716,11 +1766,12 @@ const NoticesPanel = () => {
                         ))}
                     </div>
                 </ScrollArea>
-                <div className="mt-4"><Button onClick={addNotice} variant="secondary">Add New Notice</Button></div>
+                <div className="mt-4"><Button onClick={handleAddNotice} variant="secondary">Add New Notice</Button></div>
             </CardContent>
         </Card>
     );
 };
+
 
 const MultiSelect = ({ options, value, onChange, placeholder }: { options: { value: number, label: string }[], value: number[], onChange: (value: number[]) => void, placeholder: string }) => {
     const [isOpen, setIsOpen] = useState(false);

@@ -94,6 +94,11 @@ export const initialAppSettings: AppSettings = {
     },
 
     adminDashboardLayout: 'floating',
+    
+    signInPopupSettings: {
+        isEnabled: true,
+        content: "Welcome to Stake Plus! We're glad to have you here. \n\nCheck out the Booster Store for special offers."
+    },
 
     restrictionMessages: [
         {
