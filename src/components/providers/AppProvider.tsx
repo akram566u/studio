@@ -723,56 +723,51 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     const updatesForReferrer: any = { 
                         referredUsers: referrerData.referredUsers.map(u => u.email === userFound!.email ? { ...u, isActivated: true } : u)
                     };
-                    if (isNowActive) {
-                        updatesForReferrer.directReferrals = (referrerData.directReferrals || 0) + 1;
-                    }
-                    await updateDoc(referrerRef, updatesForReferrer);
-
-                    // Update referrer's transaction log
+                    
+                    // Old transaction update logic
                     const updatedTransactions = referrerData.transactions.map(tx => {
-                        if (tx.type === 'new_referral' && tx.referredUserId === userDocId && tx.status === 'info') {
+                        if (tx.type === 'new_referral' && tx.referredUserId === userDocId) {
                             return { ...tx, status: 'completed', description: `New user activated with your code: ${userFound.email}` };
                         }
                         return tx;
                     });
-                    await updateDoc(referrerRef, { transactions: updatedTransactions });
-                    
-                    // Award referral bonus if applicable
-                    if (isNowActive && referralBonusSettings.isEnabled && originalRequest.amount >= referralBonusSettings.minDeposit) {
-                        const now = Date.now();
-                        const activeBoosters = (referrerData.activeBoosters || []).filter(b => b.type === 'referral_bonus_boost' && b.expiresAt > now);
-                        let bonusAmount = referralBonusSettings.bonusAmount;
-                        const boostMultiplier = activeBoosters.reduce((acc, b) => acc * b.effectValue, 1);
-                        bonusAmount *= boostMultiplier;
+                    updatesForReferrer.transactions = updatedTransactions;
+                    await updateDoc(referrerRef, updatesForReferrer);
 
-                        await updateDoc(referrerRef, { balance: referrerData.balance + bonusAmount });
-                        await checkAndApplyLevelUp(referrerData.id);
 
-                        await addTransaction(referrerData.id, {
-                            id: generateTxnId(),
-                            type: 'referral_bonus',
-                            amount: bonusAmount,
-                            status: 'credited',
-                            description: `You received a ${bonusAmount.toFixed(2)} USDT bonus for activating ${userFound!.email}! ${boostMultiplier > 1 ? '(Boosted!)' : ''}`
-                        });
+                    if (isNowActive) {
+                        const batch = writeBatch(db);
+                        // Increment direct referrals for referrer
+                        batch.update(referrerRef, { directReferrals: (referrerData.directReferrals || 0) + 1 });
+
+                        // Increment team size for the entire upline
+                        for (const uplineId of referrerData.referralPath) {
+                            const uplineRef = doc(db, 'users', uplineId);
+                             batch.update(uplineRef, { teamSize: (uplineSnap.data()?.teamSize || 0) + 1 });
+                        }
+                        await batch.commit();
+
+                        // Award referral bonus if applicable
+                        if (referralBonusSettings.isEnabled && originalRequest.amount >= referralBonusSettings.minDeposit) {
+                            const now = Date.now();
+                            const activeBoosters = (referrerData.activeBoosters || []).filter(b => b.type === 'referral_bonus_boost' && b.expiresAt > now);
+                            let bonusAmount = referralBonusSettings.bonusAmount;
+                            const boostMultiplier = activeBoosters.reduce((acc, b) => acc * b.effectValue, 1);
+                            bonusAmount *= boostMultiplier;
+
+                            await updateDoc(referrerRef, { balance: referrerData.balance + bonusAmount });
+                            await checkAndApplyLevelUp(referrerData.id);
+
+                            await addTransaction(referrerData.id, {
+                                id: generateTxnId(),
+                                type: 'referral_bonus',
+                                amount: bonusAmount,
+                                status: 'credited',
+                                description: `You received a ${bonusAmount.toFixed(2)} USDT bonus for activating ${userFound!.email}! ${boostMultiplier > 1 ? '(Boosted!)' : ''}`
+                            });
+                        }
                     }
                 }
-            }
-
-            // Increase team size for the entire upline if the new user became active
-            if (isNowActive) {
-                const batch = writeBatch(db);
-                for (const uplineId of userFound.referralPath) {
-                    const uplineRef = doc(db, 'users', uplineId);
-                    const uplineSnap = await getDoc(uplineRef);
-                    if(uplineSnap.exists()){
-                         const uplineData = uplineSnap.data() as User;
-                         if (uplineData.level > 0) { // Only increment for active upline members
-                            batch.update(uplineRef, { teamSize: (uplineData.teamSize || 0) + 1 });
-                         }
-                    }
-                }
-                await batch.commit();
             }
 
 
@@ -887,10 +882,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     const feePercentage = levels[currentUser.level]?.withdrawalFee || 0;
     const fee = (amount * feePercentage) / 100;
-    const totalDeduction = amount + fee; 
+    const totalDeduction = amount; 
 
     if (currentUser.balance < totalDeduction) {
-        toast({ title: "Error", description: "Insufficient balance to cover withdrawal and fee.", variant: "destructive" });
+        toast({ title: "Error", description: "Insufficient balance to cover withdrawal.", variant: "destructive" });
         return;
     }
 
