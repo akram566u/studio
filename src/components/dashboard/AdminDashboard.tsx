@@ -1790,7 +1790,7 @@ const NoticesPanel = () => {
         if(context?.notices) {
             setLocalNotices(context.notices);
         }
-    }, [context]);
+    }, [context?.notices]);
 
     if(!context) return null;
     const { addNotice, updateNotice, deleteNotice } = context;

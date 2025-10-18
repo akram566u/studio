@@ -6,7 +6,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs, writeBatch, onSnapshot, Unsubscribe, runTransaction, deleteDoc, collectionGroup, limit } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification, deleteUser } from "firebase/auth";
-import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message, FABSettings, DailyEngagementSettings, DailyQuest, LoginStreakReward, Leaderboard, LeaderboardCategory, UserDailyQuest, AdminDashboardLayout, LayoutSettings, SignInPopupSettings } from '@/lib/types';
+import { User, Levels, Transaction, AugmentedTransaction, RestrictionMessage, StartScreenSettings, Level, DashboardPanel, ReferralBonusSettings, BackgroundTheme, RechargeAddress, AppLinks, FloatingActionButtonSettings, AppSettings, Notice, BoosterPack, StakingPool, StakingVault, UserVaultInvestment, ActiveBooster, TeamCommissionSettings, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, Message, FABSettings, DailyEngagementSettings, DailyQuest, LoginStreakReward, Leaderboard, LeaderboardCategory, UserDailyQuest, AdminDashboardLayout, LayoutSettings, SignInPopupSettings, SalaryRule } from '@/lib/types';
 import { initialAppSettings } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { hexToHsl } from '@/lib/utils';
@@ -77,6 +77,11 @@ export interface AppContextType {
   updateTeamBusinessReward: (id: string, updates: Partial<TeamBusinessReward>) => void;
   deleteTeamBusinessReward: (id: string) => void;
   claimTeamReward: (type: 'team_size_reward' | 'team_business_reward', rewardId: string) => Promise<void>;
+  salaryRules: SalaryRule[];
+  addSalaryRule: () => void;
+  updateSalaryRule: (id: string, updates: Partial<SalaryRule>) => void;
+  deleteSalaryRule: (id: string) => void;
+  claimSalary: () => Promise<void>;
   active3DTheme: BackgroundTheme;
   setActive3DTheme: (theme: BackgroundTheme) => void;
   rechargeAddresses: RechargeAddress[];
@@ -131,7 +136,7 @@ export interface AppContextType {
   sendMessageToAdmin: (content: string) => void;
   deactivateCurrentUserAccount: (password: string) => Promise<void>;
   deactivateUserAccount: (userId: string) => Promise<void>;
-  getDownline: () => Promise<{downline: Record<string, DownlineUser[]>, rechargedTodayCount: number}>;
+  getDownline: () => Promise<{downline: Record<string, DownlineUser[]>, l4PlusCount: number, rechargedTodayCount: number}>;
   dailyEngagement: DailyEngagementSettings;
   updateDailyEngagement: (settings: DailyEngagementSettings) => void;
   leaderboards: Leaderboard[];
@@ -181,6 +186,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     teamCommissionSettings,
     teamSizeRewards,
     teamBusinessRewards,
+    salaryRules,
     active3DTheme, 
     rechargeAddresses,
     appLinks,
@@ -608,10 +614,20 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     updates.balance = userFound.balance + originalRequest.amount;
                     updates.claimedTeamBusinessRewards = arrayUnion(originalRequest.note); // Note stores reward ID
                     break;
+                 case 'salary_claim':
+                    updates.balance = userFound.balance + originalRequest.amount;
+                    updates.lastSalaryClaim = {
+                        timestamp: Date.now(),
+                        teamBusinessAtClaim: userFound.teamBusiness || 0,
+                    };
+                    break;
             }
-        } else if (newStatus === 'declined' && type === 'withdrawal') {
-            // Refund the user if a withdrawal is declined
-            updates.balance = userFound.balance + originalRequest.amount;
+        } else if (newStatus === 'declined' && (type === 'withdrawal' || type === 'salary_claim')) {
+            // Refund the user if a withdrawal is declined, or reset salary claim status.
+            if (type === 'withdrawal') {
+                updates.balance = userFound.balance + originalRequest.amount;
+            }
+            // For salary_claim, no balance change is needed, just the status update.
         }
         
         batch.update(userRef, updates);
@@ -1003,6 +1019,25 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const deleteTeamBusinessReward = (id: string) => {
         updateFirestoreSettings({ teamBusinessRewards: (teamBusinessRewards || []).filter(r => r.id !== id) });
     }
+    const addSalaryRule = () => {
+        const newRule: SalaryRule = {
+            id: `sr_${Date.now()}`,
+            level: 1,
+            directReferrals: 10,
+            teamBusiness: 10000,
+            salaryAmount: 100,
+            requiredGrowthPercentage: 10,
+            isEnabled: true,
+        };
+        updateFirestoreSettings({ salaryRules: [...(salaryRules || []), newRule] });
+    };
+    const updateSalaryRule = (id: string, updates: Partial<SalaryRule>) => {
+        const newRules = (salaryRules || []).map(r => r.id === id ? { ...r, ...updates } : r);
+        updateFirestoreSettings({ salaryRules: newRules });
+    };
+    const deleteSalaryRule = (id: string) => {
+        updateFirestoreSettings({ salaryRules: (salaryRules || []).filter(r => r.id !== id) });
+    };
 
     const claimTeamReward = async (type: 'team_size_reward' | 'team_business_reward', rewardId: string) => {
         if (!currentUser) return;
@@ -1054,6 +1089,46 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         });
 
         toast({ title: "Claim Submitted!", description: "Your reward claim has been sent for admin approval." });
+    };
+
+    const claimSalary = async () => {
+        if (!currentUser) return;
+
+        const rule = (salaryRules || []).find(r => r.isEnabled && r.level === currentUser.level);
+        if (!rule) {
+            toast({ title: "Not Eligible", description: "No salary rule is active for your current level.", variant: "destructive" });
+            return;
+        }
+
+        if (currentUser.transactions.some(tx => tx.type === 'salary_claim' && tx.status === 'pending')) {
+            toast({ title: "Error", description: "You already have a pending salary claim.", variant: "destructive" });
+            return;
+        }
+        
+        let isEligible = false;
+        if (currentUser.lastSalaryClaim) {
+            // Check for growth
+            const requiredBusiness = currentUser.lastSalaryClaim.teamBusinessAtClaim * (1 + rule.requiredGrowthPercentage / 100);
+            isEligible = (currentUser.directReferrals || 0) >= rule.directReferrals && (currentUser.teamBusiness || 0) >= requiredBusiness;
+        } else {
+            // First time claim
+            isEligible = (currentUser.directReferrals || 0) >= rule.directReferrals && (currentUser.teamBusiness || 0) >= rule.teamBusiness;
+        }
+
+        if (!isEligible) {
+            toast({ title: "Not Eligible", description: "You have not met the requirements for this month's salary.", variant: "destructive" });
+            return;
+        }
+
+        await addTransaction(currentUser.id, {
+            id: generateTxnId(),
+            type: 'salary_claim',
+            amount: rule.salaryAmount,
+            status: 'pending',
+            description: `User claimed salary of ${rule.salaryAmount} USDT for Level ${rule.level}.`,
+        });
+
+        toast({ title: "Salary Claim Submitted!", description: "Your claim has been sent for admin approval." });
     };
 
     const updateDashboardPanel = (id: string, updates: Partial<DashboardPanel>) => {
@@ -1334,51 +1409,63 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const userSnap = await getDoc(userRef);
         if (!userSnap.exists()) return;
         const userData = userSnap.data() as User;
-
+      
         const rates = [
-            teamCommissionSettings.rates.level1,
-            teamCommissionSettings.rates.level2,
-            teamCommissionSettings.rates.level3,
+          teamCommissionSettings.rates.level1,
+          teamCommissionSettings.rates.level2,
+          teamCommissionSettings.rates.level3,
         ];
-        
-        const upline = userData.referralPath.slice(0, 3);
-        
-        for (let i = 0; i < upline.length; i++) {
-            const referrerId = upline[i];
+      
+        for (let i = 0; i < userData.referralPath.length; i++) {
+          const referrerId = userData.referralPath[i];
+          const level = i + 1;
+      
+          await runTransaction(db, async (transaction) => {
+            const referrerRef = doc(db, 'users', referrerId);
+            const referrerSnap = await transaction.get(referrerRef);
+            if (!referrerSnap.exists()) return;
+      
+            const referrerData = referrerSnap.data() as User;
+            const activeReferrals = (referrerData.referredUsers || []).filter(u => u.isActivated).length;
             
-            await runTransaction(db, async (transaction) => {
-                const referrerRef = doc(db, 'users', referrerId);
-                const referrerSnap = await transaction.get(referrerRef);
-                if (!referrerSnap.exists()) return;
-
-                const referrerData = referrerSnap.data() as User;
-                const activeReferrals = (referrerData.referredUsers || []).filter(u => u.isActivated).length;
-
-                // NEW: Check eligibility based on active referrals and level
-                if (referrerData.level === 0 || activeReferrals < teamCommissionSettings.minDirectReferrals || activeReferrals < (i + 1)) {
-                    return;
-                }
+            let commissionRate = 0;
+            let commissionType = '';
+            
+            if (level <= 3) {
+              // Standard L1-L3 commission
+              if (referrerData.level > 0 && activeReferrals >= teamCommissionSettings.minDirectReferrals && activeReferrals >= level) {
+                commissionRate = rates[i];
+                commissionType = `L${level}`;
+              }
+            } else {
+              // Community L4+ commission
+              if (referrerData.level > 0 && activeReferrals >= teamCommissionSettings.minReferralsForCommunity) {
+                commissionRate = teamCommissionSettings.communityRate;
+                commissionType = `L4+`;
+              }
+            }
+      
+            if (commissionRate > 0) {
+              const commissionAmount = interestEarned * commissionRate;
+      
+              if (commissionAmount > 0) {
+                const newBalance = referrerData.balance + commissionAmount;
+                transaction.update(referrerRef, { balance: newBalance });
+      
+                const commissionTx: Transaction = {
+                  userId: referrerId,
+                  timestamp: Date.now(),
+                  id: generateTxnId(),
+                  type: 'team_commission',
+                  amount: commissionAmount,
+                  status: 'credited',
+                  description: `Received ${commissionAmount.toFixed(4)} USDT ${commissionType} commission from ${userData.email}.`
+                };
                 
-                const commissionRate = rates[i];
-                const commissionAmount = interestEarned * commissionRate;
-
-                if (commissionAmount > 0) {
-                    const newBalance = referrerData.balance + commissionAmount;
-                    transaction.update(referrerRef, { balance: newBalance });
-
-                    const commissionTx = {
-                      userId: referrerId,
-                      timestamp: Date.now(),
-                      id: generateTxnId(),
-                      type: 'team_commission',
-                      amount: commissionAmount,
-                      status: 'credited',
-                      description: `Received ${commissionAmount.toFixed(4)} USDT commission from L${i + 1} member ${userData.email}.`
-                    } as Transaction;
-
-                    transaction.update(referrerRef, { transactions: arrayUnion(commissionTx) });
-                }
-            });
+                transaction.update(referrerRef, { transactions: arrayUnion(commissionTx) });
+              }
+            }
+          });
         }
     };
     
@@ -1941,13 +2028,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
-    const getDownline = useCallback(async (): Promise<{downline: Record<string, DownlineUser[]>, rechargedTodayCount: number}> => {
-        if (!currentUser) return { downline: {}, rechargedTodayCount: 0 };
+    const getDownline = useCallback(async (): Promise<{downline: Record<string, DownlineUser[]>, l4PlusCount: number, rechargedTodayCount: number}> => {
+        if (!currentUser) return { downline: {}, l4PlusCount: 0, rechargedTodayCount: 0 };
     
         const usersRef = collection(db, "users");
         const downline: Record<string, DownlineUser[]> = { L1: [], L2: [], L3: [] };
-        let allDownlineIds: string[] = [];
+        let l4PlusCount = 0;
         let rechargedTodayCount = 0;
+        let allDownlineIds: string[] = [];
     
         // Level 1
         const l1Query = query(usersRef, where("referredBy", "==", currentUser.id));
@@ -1961,44 +2049,76 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         });
     
         // Level 2
+        let l2Ids: string[] = [];
         if (l1Ids.length > 0) {
             const l2Query = query(usersRef, where("referredBy", "in", l1Ids));
             const l2Snap = await getDocs(l2Query);
-            const l2Ids: string[] = [];
             l2Snap.forEach(doc => {
                 const userData = doc.data() as User;
                 downline.L2.push({ id: doc.id, email: userData.email });
                 l2Ids.push(doc.id);
                 allDownlineIds.push(doc.id);
             });
+        }
     
-            // Level 3
-            if (l2Ids.length > 0) {
-                const l3Query = query(usersRef, where("referredBy", "in", l2Ids));
-                const l3Snap = await getDocs(l3Query);
-                l3Snap.forEach(doc => {
-                     const userData = doc.data() as User;
-                    downline.L3.push({ id: doc.id, email: userData.email });
-                    allDownlineIds.push(doc.id);
-                });
-            }
+        // Level 3
+        let l3Ids: string[] = [];
+        if (l2Ids.length > 0) {
+            const l3Query = query(usersRef, where("referredBy", "in", l2Ids));
+            const l3Snap = await getDocs(l3Query);
+            l3Snap.forEach(doc => {
+                const userData = doc.data() as User;
+                downline.L3.push({ id: doc.id, email: userData.email });
+                l3Ids.push(doc.id);
+                allDownlineIds.push(doc.id);
+            });
+        }
+
+        // L4+ Community
+        let currentLayerIds = l3Ids;
+        while(currentLayerIds.length > 0) {
+            const nextLayerQuery = query(usersRef, where("referredBy", "in", currentLayerIds));
+            const nextLayerSnap = await getDocs(nextLayerQuery);
+            const nextLayerIds: string[] = [];
+            nextLayerSnap.forEach(doc => {
+                const userData = doc.data() as User;
+                if(userData.firstDepositTime) { // Count only active users for community
+                    l4PlusCount++;
+                }
+                nextLayerIds.push(doc.id);
+                allDownlineIds.push(doc.id);
+            });
+            currentLayerIds = nextLayerIds;
         }
         
         // Calculate recharged today
-        const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+        const [hours, minutes] = teamCommissionSettings.dailyActivationResetTime.split(':').map(Number);
+        const now = new Date();
+        const istOffset = 330; // 5.5 hours in minutes
+        const nowUtc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const nowIst = new Date(nowUtc + (istOffset * 60000));
+        
+        let resetTimeToday = new Date(nowIst);
+        resetTimeToday.setHours(hours, minutes, 0, 0);
+
+        if (nowIst < resetTimeToday) {
+            resetTimeToday.setDate(resetTimeToday.getDate() - 1);
+        }
+        const startOfDayTimestamp = resetTimeToday.getTime();
+
         for (const userId of allDownlineIds) {
             const userDoc = await getDoc(doc(db, "users", userId));
             if (userDoc.exists()) {
                 const userData = userDoc.data() as User;
-                if (userData.firstDepositTime && userData.firstDepositTime >= twentyFourHoursAgo) {
+                if (userData.firstDepositTime && userData.firstDepositTime >= startOfDayTimestamp) {
                     rechargedTodayCount++;
                 }
             }
         }
     
-        return { downline, rechargedTodayCount };
+        return { downline, l4PlusCount, rechargedTodayCount };
     
-    }, [currentUser]);
+    }, [currentUser, teamCommissionSettings.dailyActivationResetTime]);
 
     const updateDailyEngagement = (settings: DailyEngagementSettings) => updateFirestoreSettings({ dailyEngagement: settings });
 
@@ -2147,6 +2267,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateTeamBusinessReward,
     deleteTeamBusinessReward,
     claimTeamReward,
+    salaryRules,
+    addSalaryRule,
+    updateSalaryRule,
+    deleteSalaryRule,
+    claimSalary,
     active3DTheme,
     setActive3DTheme,
     rechargeAddresses,
