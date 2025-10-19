@@ -701,6 +701,15 @@ const TeamLayersPanel = () => {
         }
     }, [context?.currentUser?.id, context]);
 
+    if (!context) {
+        return (
+             <div className="flex items-center justify-center h-64">
+                <Loader2 className="animate-spin text-purple-400" size={32} />
+                <p className="ml-4">Loading Context...</p>
+            </div>
+        )
+    }
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -710,6 +719,8 @@ const TeamLayersPanel = () => {
         );
     }
     
+    const { teamCommissionSettings } = context;
+
     const renderUserTable = (users: DownlineUser[]) => (
         <ScrollArea className="h-80 custom-scrollbar pr-2">
             <Table>
@@ -748,10 +759,10 @@ const TeamLayersPanel = () => {
 
         <Tabs defaultValue="l1">
             <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="l1">Layer 1 ({downline.L1?.length || 0})</TabsTrigger>
-                <TabsTrigger value="l2">Layer 2 ({downline.L2?.length || 0})</TabsTrigger>
-                <TabsTrigger value="l3">Layer 3 ({downline.L3?.length || 0})</TabsTrigger>
-                <TabsTrigger value="l4+">L4+ Community ({l4PlusCount})</TabsTrigger>
+                <TabsTrigger value="l1">Layer 1 ({downline.L1?.length || 0}) - {(teamCommissionSettings.rates.level1 * 100).toFixed(0)}%</TabsTrigger>
+                <TabsTrigger value="l2">Layer 2 ({downline.L2?.length || 0}) - {(teamCommissionSettings.rates.level2 * 100).toFixed(0)}%</TabsTrigger>
+                <TabsTrigger value="l3">Layer 3 ({downline.L3?.length || 0}) - {(teamCommissionSettings.rates.level3 * 100).toFixed(0)}%</TabsTrigger>
+                <TabsTrigger value="l4+">L4+ ({l4PlusCount}) - {(teamCommissionSettings.communityRate * 100).toFixed(0)}%</TabsTrigger>
             </TabsList>
             <TabsContent value="l1" className="mt-4">{renderUserTable(downline.L1 || [])}</TabsContent>
             <TabsContent value="l2" className="mt-4">{renderUserTable(downline.L2 || [])}</TabsContent>
