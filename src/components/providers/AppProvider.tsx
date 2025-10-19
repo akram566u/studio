@@ -683,30 +683,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (newStatus === 'approved' && type === 'deposit') {
             const isFirstDeposit = !userFound.firstDepositTime;
 
-            // Apply Sign-up Bonus first if applicable
-            if (isFirstDeposit && signUpBonusSettings.isEnabled && originalRequest.amount >= signUpBonusSettings.minDeposit) {
-                await runTransaction(db, async (transaction) => {
-                    const freshUserSnap = await transaction.get(userRef);
-                    if (!freshUserSnap.exists()) return;
-                    const freshUserData = freshUserSnap.data() as User;
-                    const newBalanceAfterBonus = freshUserData.balance + signUpBonusSettings.bonusAmount;
-                    transaction.update(userRef, { balance: newBalanceAfterBonus });
-                    
-                    const bonusTx: Transaction = {
-                        userId: userDocId!,
-                        timestamp: Date.now(),
-                        id: generateTxnId(),
-                        type: 'sign_up_bonus',
-                        amount: signUpBonusSettings.bonusAmount,
-                        status: 'credited',
-                        description: `Received a sign-up bonus of ${signUpBonusSettings.bonusAmount} USDT!`
-                    };
-                    transaction.update(userRef, { transactions: arrayUnion(bonusTx) });
-                });
-            }
-            
-            await checkAndApplyLevelUp(userDocId);
-
             // Distribute team business for *every* deposit
             for (const uplineId of userFound.referralPath) {
                 await runTransaction(db, async (transaction) => {
@@ -719,12 +695,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 });
             }
 
+            // Only run activation logic on first deposit
             if (isFirstDeposit) {
+                await checkAndApplyLevelUp(userDocId);
+
                 // Fetch the newly updated user to check their level
                 const newlyActivatedUserSnap = await getDoc(userRef);
                 const newlyActivatedUserData = newlyActivatedUserSnap.data() as User;
                 const isNowActive = newlyActivatedUserData.level > 0;
-
+                
                 if (isNowActive) {
                     // Activate referrer and update team size for the entire upline
                     if (userFound.referredBy && userFound.referredBy !== ADMIN_REFERRAL_CODE) {
@@ -2154,74 +2133,66 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const getDownline = useCallback(async (): Promise<{downline: Record<string, DownlineUser[]>, l4PlusCount: number, rechargedTodayCount: number}> => {
-      if (!currentUser) return { downline: {}, l4PlusCount: 0, rechargedTodayCount: 0 };
-  
-      const usersRef = collection(db, "users");
-      const allUserDocs = await getDocs(usersRef);
-      const allUsers = new Map<string, User>(allUserDocs.docs.map(doc => [doc.id, { id: doc.id, ...doc.data() } as User]));
-  
-      const downline: Record<string, DownlineUser[]> = { L1: [], L2: [], L3: [] };
-      let l4PlusCount = 0;
-  
-      // --- Time-based activation calculation setup ---
-      const [hours, minutes] = teamCommissionSettings.dailyActivationResetTime.split(':').map(Number);
-      const now = new Date();
-      const istOffset = 330; // 5.5 hours in minutes
-      const nowUtc = now.getTime() + (now.getTimezoneOffset() * 60000);
-      const nowIst = new Date(nowUtc + (istOffset * 60000));
-      
-      let resetTimeToday = new Date(nowIst);
-      resetTimeToday.setHours(hours, minutes, 0, 0);
-  
-      if (nowIst < resetTimeToday) {
-          resetTimeToday.setDate(resetTimeToday.getDate() - 1);
-      }
-      const startOfDayTimestamp = resetTimeToday.getTime();
-      let rechargedTodayCount = 0;
-      // --- End setup ---
-  
-      let queue = [currentUser.id];
-      const visited = new Set([currentUser.id]);
-      const userToLevelMap = new Map<string, number>();
-      userToLevelMap.set(currentUser.id, 0);
-  
-      while (queue.length > 0) {
-          const currentUserId = queue.shift()!;
-          const currentLevel = userToLevelMap.get(currentUserId)!;
-  
-          for (const user of allUsers.values()) {
-              if (user.referredBy === currentUserId && !visited.has(user.id)) {
-                  visited.add(user.id);
-                  const childLevel = currentLevel + 1;
-                  userToLevelMap.set(user.id, childLevel);
-                  queue.push(user.id);
-  
-                  // Check if the user is active (level > 0)
-                  if (user.level > 0) {
-                      if (childLevel >= 1 && childLevel <= 3) {
-                          downline[`L${childLevel}`].push({ id: user.id, email: user.email });
-                      } else if (childLevel > 3) {
-                          l4PlusCount++;
-                      }
-                      // Check for activations today
-                      if (user.firstDepositTime && user.firstDepositTime >= startOfDayTimestamp) {
-                          rechargedTodayCount++;
-                      }
-                  }
-              }
-          }
-      }
-      
-      // Update the current user's teamSize in Firestore, as this is the most reliable place to do it.
-      const totalTeamSize = downline.L1.length + downline.L2.length + downline.L3.length + l4PlusCount;
-      if (currentUser.teamSize !== totalTeamSize) {
-          const userRef = doc(db, 'users', currentUser.id);
-          await updateDoc(userRef, { teamSize: totalTeamSize });
-      }
-  
-      return { downline, l4PlusCount, rechargedTodayCount };
-  
-  }, [currentUser, teamCommissionSettings.dailyActivationResetTime]);
+        if (!currentUser) return { downline: {}, l4PlusCount: 0, rechargedTodayCount: 0 };
+    
+        const usersRef = collection(db, "users");
+        const allUserDocs = await getDocs(usersRef);
+        const allUsers = new Map<string, User>(allUserDocs.docs.map(doc => [doc.id, { id: doc.id, ...doc.data() } as User]));
+    
+        const downline: Record<string, DownlineUser[]> = { L1: [], L2: [], L3: [] };
+        let l4PlusCount = 0;
+        let totalActiveMembers = 0;
+    
+        // --- Time-based activation calculation setup ---
+        const [hours, minutes] = teamCommissionSettings.dailyActivationResetTime.split(':').map(Number);
+        const now = new Date();
+        const istOffset = 330; // 5.5 hours in minutes
+        const nowUtc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const nowIst = new Date(nowUtc + (istOffset * 60000));
+        
+        let resetTimeToday = new Date(nowIst);
+        resetTimeToday.setHours(hours, minutes, 0, 0);
+    
+        if (nowIst < resetTimeToday) {
+            resetTimeToday.setDate(resetTimeToday.getDate() - 1);
+        }
+        const startOfDayTimestamp = resetTimeToday.getTime();
+        let rechargedTodayCount = 0;
+        // --- End setup ---
+    
+        let queue = [currentUser.id];
+        const visited = new Set([currentUser.id]);
+        const userToLevelMap = new Map<string, number>();
+        userToLevelMap.set(currentUser.id, 0);
+    
+        for (const user of allUsers.values()) {
+            if (user.referralPath.includes(currentUser.id)) {
+                if (user.level > 0) { // Check if user is active
+                    totalActiveMembers++;
+                    const level = user.referralPath.indexOf(currentUser.id) + 1;
+                    if (level >= 1 && level <= 3) {
+                        downline[`L${level}`].push({ id: user.id, email: user.email });
+                    } else {
+                        l4PlusCount++;
+                    }
+
+                    // Check for activations today
+                    if (user.firstDepositTime && user.firstDepositTime >= startOfDayTimestamp) {
+                        rechargedTodayCount++;
+                    }
+                }
+            }
+        }
+        
+        // Update the current user's teamSize in Firestore, as this is the most reliable place to do it.
+        if (currentUser.teamSize !== totalActiveMembers) {
+            const userRef = doc(db, 'users', currentUser.id);
+            await updateDoc(userRef, { teamSize: totalActiveMembers });
+        }
+    
+        return { downline, l4PlusCount, rechargedTodayCount };
+    
+    }, [currentUser, teamCommissionSettings.dailyActivationResetTime]);
 
     const getReferredUsersWithStatus = useCallback(async (): Promise<ReferredUserWithStatus[]> => {
         if (!currentUser) return [];
@@ -2483,9 +2454,3 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
-
-    
-
-    
-
-
