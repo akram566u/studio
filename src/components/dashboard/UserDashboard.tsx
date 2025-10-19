@@ -30,7 +30,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, isValid } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { BoosterPack, DashboardPanel, DashboardPanelComponentKey, Level, Notice, SignInPopupSettings, StakingPool, StakingVault, Transaction, ActiveBooster, TeamSizeReward, TeamBusinessReward, PrioritizeMessageOutput, User, Message, DailyQuest, UserDailyQuest, Leaderboard, SalaryRule } from '@/lib/types';
 import { Label } from '../ui/label';
@@ -236,7 +236,11 @@ const TransactionHistoryPanel = () => {
                             <p className="font-semibold text-white">{tx.description}</p>
                             {getStatusBadge(tx.status)}
                         </div>
-                        <p className="text-xs text-gray-400">{format(new Date(tx.timestamp), 'PPpp')}</p>
+                        <p className="text-xs text-gray-400">
+                            {tx.timestamp && isValid(new Date(tx.timestamp))
+                                ? format(new Date(tx.timestamp), 'PPpp')
+                                : 'Invalid date'}
+                        </p>
                         </div>
                     </div>
                     ))}
@@ -1793,5 +1797,8 @@ const FloatingMenu = ({ items, onSelect }: { items: { view: ModalView, label: st
 }
 
 export default UserDashboard;
+
+    
+
 
     
