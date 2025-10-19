@@ -619,17 +619,17 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
 
     try {
         await runTransaction(db, async (transaction) => {
+            // =================================================================
+            //  READ PHASE: Perform all reads upfront
+            // =================================================================
             const userSnap = await transaction.get(userRef);
             if (!userSnap.exists()) {
                 throw new Error("User not found during transaction.");
             }
             const freshUserFound = userSnap.data() as User;
             const isFirstDeposit = newStatus === 'approved' && type === 'deposit' && !freshUserFound.firstDepositTime;
-            
-            // =================================================================
-            //  READ PHASE: Perform all reads upfront
-            // =================================================================
-            let referrerSnap = null;
+
+            let referrerSnap: any = null;
             const uplineSnaps = new Map<string, any>();
             
             if (isFirstDeposit) {
@@ -639,8 +639,7 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
                 }
                 for (const uplineId of freshUserFound.referralPath || []) {
                     const uplineRef = doc(db, 'users', uplineId);
-                    const uplineSnap = await transaction.get(uplineRef);
-                    uplineSnaps.set(uplineId, uplineSnap);
+                    uplineSnaps.set(uplineId, await transaction.get(uplineRef));
                 }
             }
             
@@ -661,7 +660,8 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
                 type: 'admin_adjusted',
                 amount: originalRequest!.amount,
                 status: newStatus as Transaction['status'],
-                description: adminTxDescription
+                description: adminTxDescription,
+                email: freshUserFound.email,
             };
             finalTransactions.push(adminActionTx);
 
@@ -701,7 +701,7 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
             userUpdates.balance = finalBalance;
 
             if (isFirstDeposit) {
-                // Apply signup bonus
+                 // Apply signup bonus
                 if (signUpBonusSettings.isEnabled && originalRequest!.amount >= signUpBonusSettings.minDeposit) {
                     userUpdates.balance += signUpBonusSettings.bonusAmount;
                     const bonusTx: Transaction = {
@@ -712,7 +712,7 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
                 }
 
                 // Check for level up
-                const tempUpdatedUser = { ...freshUserFound, balance: finalBalance };
+                const tempUpdatedUser = { ...freshUserFound, balance: userUpdates.balance };
                 let newLevel = tempUpdatedUser.level;
                 const sortedLevels = Object.keys(levels).map(Number).sort((a, b) => b - a);
                 for (const levelKey of sortedLevels) {
@@ -725,6 +725,7 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
                     }
                 }
                 
+                const justActivated = freshUserFound.level === 0 && newLevel > 0;
                 if (newLevel > tempUpdatedUser.level) {
                     userUpdates.level = newLevel;
                 }
@@ -756,18 +757,18 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
                 }
 
                 // Update upline team stats
-                const depositAmount = originalRequest!.amount;
-                for (const uplineId of freshUserFound.referralPath || []) {
-                    const uplineSnap = uplineSnaps.get(uplineId);
-                    if (uplineSnap && uplineSnap.exists()) {
-                        const uplineData = uplineSnap.data();
-                        const uplineUpdates: any = {
-                            teamBusiness: (uplineData.teamBusiness || 0) + depositAmount,
-                        };
-                        if (userUpdates.level > 0 || freshUserFound.level > 0) {
-                            uplineUpdates.teamSize = (uplineData.teamSize || 0) + 1;
+                if (justActivated) {
+                    const depositAmount = originalRequest!.amount;
+                    for (const uplineId of freshUserFound.referralPath || []) {
+                        const uplineSnap = uplineSnaps.get(uplineId);
+                        if (uplineSnap && uplineSnap.exists()) {
+                            const uplineData = uplineSnap.data();
+                            const uplineUpdates: any = {
+                                teamBusiness: (uplineData.teamBusiness || 0) + depositAmount,
+                                teamSize: (uplineData.teamSize || 0) + 1,
+                            };
+                            transaction.update(uplineSnap.ref, uplineUpdates);
                         }
-                        transaction.update(uplineSnap.ref, uplineUpdates);
                     }
                 }
             }
@@ -2023,7 +2024,7 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
             .find(r => r.teamSize > (currentUser.teamSize || 0));
     
         const nextTeamBusinessRewardResult = [...(teamBusinessRewards || [])]
-            .filter(r => r.isEnabled && !(currentUser.claimedTeamBusinessRewards || [])).includes(r.id)
+            .filter(r => r.isEnabled && !(currentUser.claimedTeamBusinessRewards || []).includes(r.id))
             .sort((a, b) => a.businessAmount - b.businessAmount)
             .find(r => r.businessAmount > (currentUser.teamBusiness || 0));
     
