@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
@@ -593,10 +592,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     toast({ title: "Success", description: "Deposit request submitted." });
   };
   
-  const processRequest = async (transactionId: string, newStatus: 'approved' | 'declined' | 'on_hold', type: Transaction['type']) => {
+const processRequest = async (transactionId: string, newStatus: 'approved' | 'declined' | 'on_hold', type: Transaction['type']) => {
     const usersRef = collection(db, "users");
     const allUsersSnap = await getDocs(usersRef);
-    let userFound: User | null = null;
+    let userFoundData: User | null = null;
     let userDocId: string | null = null;
     let originalRequest: Transaction | null = null;
 
@@ -604,14 +603,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const userData = userDoc.data() as User;
         const req = userData.transactions.find(t => t.id === transactionId && (t.status === 'pending' || t.status === 'on_hold') && t.type === type);
         if (req) {
-            userFound = userData;
+            userFoundData = userData;
             userDocId = userDoc.id;
             originalRequest = req;
             break;
         }
     }
 
-    if (!userFound || !userDocId || !originalRequest) {
+    if (!userFoundData || !userDocId || !originalRequest) {
         toast({ title: "Error", description: `Transaction not found or already processed. ID: ${transactionId}`, variant: "destructive" });
         return;
     }
@@ -620,64 +619,49 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     try {
         await runTransaction(db, async (transaction) => {
+            // =================================================================
+            // 1. READ PHASE - All reads must be done before any writes.
+            // =================================================================
             const userSnap = await transaction.get(userRef);
             if (!userSnap.exists()) {
                 throw new Error("User not found during transaction.");
             }
             const freshUserFound = userSnap.data() as User;
+            const isFirstDeposit = newStatus === 'approved' && type === 'deposit' && !freshUserFound.firstDepositTime;
+            let referrerRef: any = null;
+            let referrerSnap: any = null;
+            let uplineRefs: any[] = [];
+            let uplineSnaps: any[] = [];
+
+            if (isFirstDeposit && freshUserFound.referredBy && freshUserFound.referredBy !== ADMIN_REFERRAL_CODE) {
+                referrerRef = doc(db, "users", freshUserFound.referredBy);
+                referrerSnap = await transaction.get(referrerRef);
+            }
+
+            if (isFirstDeposit || (newStatus === 'approved' && type === 'deposit')) {
+                for (const uplineId of freshUserFound.referralPath || []) {
+                    const uplineRef = doc(db, 'users', uplineId);
+                    uplineRefs.push(uplineRef);
+                    uplineSnaps.push(await transaction.get(uplineRef));
+                }
+            }
             
+            // =================================================================
+            // 2. LOGIC PHASE - Prepare all updates.
+            // =================================================================
+            const userUpdates: any = {};
+            let finalBalance = freshUserFound.balance;
+            const adminTxDescription = `Admin ${newStatus} ${type.replace('_', ' ')} of ${originalRequest!.amount} for user ${freshUserFound.email}`;
             let description = `${type.replace('_', ' ')} of ${originalRequest!.amount} USDT ${newStatus}.`;
             if (newStatus === 'declined' && type === 'salary_claim') {
                 description = `Your salary claim was declined. You may claim again if you are still eligible.`;
             }
-    
             const updatedTransactions = freshUserFound.transactions.map(tx =>
                 tx.id === transactionId ? { ...tx, status: newStatus, description } : tx
             );
-    
-            let finalBalance = freshUserFound.balance;
-            const updates: any = { transactions: updatedTransactions };
-            const adminTxDescription = `Admin ${newStatus} ${type.replace('_', ' ')} of ${originalRequest!.amount} for user ${freshUserFound.email}`;
-    
-            if (newStatus === 'approved') {
-                switch(type) {
-                    case 'deposit':
-                        finalBalance += originalRequest!.amount;
-                        updates.totalDeposits = (freshUserFound.totalDeposits || 0) + originalRequest!.amount;
-                        if (!freshUserFound.firstDepositTime) {
-                            updates.firstDepositTime = Date.now();
-                            updates.lastInterestCreditTime = Date.now();
-                        }
-                        break;
-                    case 'withdrawal':
-                        updates.lastWithdrawalTime = Date.now();
-                        break;
-                    case 'team_size_reward':
-                        finalBalance += originalRequest!.amount;
-                        updates.claimedTeamSizeRewards = arrayUnion(originalRequest!.note);
-                        break;
-                    case 'team_business_reward':
-                        finalBalance += originalRequest!.amount;
-                        updates.claimedTeamBusinessRewards = arrayUnion(originalRequest!.note);
-                        break;
-                    case 'salary_claim':
-                        finalBalance += originalRequest!.amount;
-                        updates.lastSalaryClaim = {
-                            timestamp: Date.now(),
-                            teamBusinessAtClaim: freshUserFound.teamBusiness || 0,
-                        };
-                        break;
-                }
-            } else if (newStatus === 'declined') {
-                if (type === 'withdrawal' || type === 'salary_claim') {
-                    finalBalance += originalRequest!.amount;
-                }
-            }
-    
-            updates.balance = finalBalance;
-            transaction.update(userRef, updates);
+            userUpdates.transactions = updatedTransactions;
             
-            // Add admin transaction log for the user being actioned on
+            // Add admin action transaction
             const adminActionTx: Transaction = {
                 userId: userDocId!,
                 timestamp: Date.now(),
@@ -687,101 +671,127 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 status: newStatus as Transaction['status'],
                 description: adminTxDescription
             };
-            transaction.update(userRef, { transactions: arrayUnion(adminActionTx) });
-    
-            // Activation and Bonus Logic (only on first deposit approval)
-            if (newStatus === 'approved' && type === 'deposit') {
-                const isFirstDeposit = !freshUserFound.firstDepositTime;
-    
-                // Update Team Business for every deposit
-                for (const uplineId of freshUserFound.referralPath) {
-                    const uplineRef = doc(db, 'users', uplineId);
-                    const uplineSnap = await transaction.get(uplineRef);
-                    if (uplineSnap.exists()) {
-                        const newBusiness = (uplineSnap.data().teamBusiness || 0) + originalRequest!.amount;
-                        transaction.update(uplineRef, { teamBusiness: newBusiness });
+            userUpdates.transactions.push(adminActionTx);
+
+
+            if (newStatus === 'approved') {
+                switch (type) {
+                    case 'deposit':
+                        finalBalance += originalRequest!.amount;
+                        userUpdates.totalDeposits = (freshUserFound.totalDeposits || 0) + originalRequest!.amount;
+                        if (isFirstDeposit) {
+                            userUpdates.firstDepositTime = Date.now();
+                            userUpdates.lastInterestCreditTime = Date.now();
+                        }
+                        break;
+                    case 'withdrawal':
+                        userUpdates.lastWithdrawalTime = Date.now();
+                        break;
+                    case 'team_size_reward':
+                        finalBalance += originalRequest!.amount;
+                        userUpdates.claimedTeamSizeRewards = arrayUnion(originalRequest!.note);
+                        break;
+                    case 'team_business_reward':
+                        finalBalance += originalRequest!.amount;
+                        userUpdates.claimedTeamBusinessRewards = arrayUnion(originalRequest!.note);
+                        break;
+                    case 'salary_claim':
+                        finalBalance += originalRequest!.amount;
+                        userUpdates.lastSalaryClaim = {
+                            timestamp: Date.now(),
+                            teamBusinessAtClaim: freshUserFound.teamBusiness || 0,
+                        };
+                        break;
+                }
+            } else if (newStatus === 'declined' && (type === 'withdrawal' || type === 'salary_claim')) {
+                finalBalance += originalRequest!.amount;
+            }
+
+            userUpdates.balance = finalBalance;
+
+            // Activation & Bonus Logic
+            if (isFirstDeposit) {
+                // Determine new level after deposit
+                const tempUpdatedUser = { ...freshUserFound, balance: finalBalance };
+                let newLevel = tempUpdatedUser.level;
+                const sortedLevels = Object.keys(levels).map(Number).sort((a, b) => b - a);
+                for (const levelKey of sortedLevels) {
+                    if (levelKey > newLevel) {
+                        const levelDetails = levels[levelKey];
+                        if (tempUpdatedUser.balance >= levelDetails.minBalance && (tempUpdatedUser.directReferrals || 0) >= levelDetails.directReferrals) {
+                            newLevel = levelKey;
+                            break;
+                        }
                     }
                 }
                 
-                if (isFirstDeposit) {
-                    // Get updated user data after balance change to check for level up
-                    const tempUpdatedUser = { ...freshUserFound, balance: finalBalance };
-                    let newLevel = tempUpdatedUser.level;
-                    const sortedLevels = Object.keys(levels).map(Number).sort((a, b) => b - a);
-    
-                    for (const levelKey of sortedLevels) {
-                        if (levelKey > newLevel) {
-                            const levelDetails = levels[levelKey];
-                            if (tempUpdatedUser.balance >= levelDetails.minBalance && (tempUpdatedUser.directReferrals || 0) >= levelDetails.directReferrals) {
-                                newLevel = levelKey;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    if (newLevel > tempUpdatedUser.level) {
-                        transaction.update(userRef, { level: newLevel });
-                    }
-                    
-                    const isNowActive = newLevel > 0;
-    
-                    if (isNowActive && freshUserFound.referredBy && freshUserFound.referredBy !== ADMIN_REFERRAL_CODE) {
-                        const referrerRef = doc(db, "users", freshUserFound.referredBy);
-                        const referrerSnap = await transaction.get(referrerRef);
-                        if (referrerSnap.exists()) {
-                            const referrerData = referrerSnap.data() as User;
-                            
-                            // Update sponsor's transaction history
-                            const updatedSponsorTransactions = referrerData.transactions.map(
-                                tx => (tx.type === 'new_referral' && tx.referredUserId === userDocId)
-                                    ? { ...tx, status: 'completed', description: `New user activated with your code: ${freshUserFound.email}` }
-                                    : tx
-                            );
-                            transaction.update(referrerRef, { transactions: updatedSponsorTransactions });
-    
-                            // Increment direct referrals for sponsor
-                            transaction.update(referrerRef, { 
-                                directReferrals: (referrerData.directReferrals || 0) + 1
-                            });
-    
-                            // Award referral bonus
-                            if (referralBonusSettings.isEnabled && originalRequest!.amount >= referralBonusSettings.minDeposit) {
-                                let bonusAmount = referralBonusSettings.bonusAmount;
-                                const activeBoosters = (referrerData.activeBoosters || []).filter(b => b.type === 'referral_bonus_boost' && b.expiresAt > Date.now());
-                                const boostMultiplier = activeBoosters.reduce((acc, b) => acc * b.effectValue, 1);
-                                bonusAmount *= boostMultiplier;
-                                
-                                const newSponsorBalance = referrerData.balance + bonusAmount;
-                                transaction.update(referrerRef, { balance: newSponsorBalance });
-    
-                                const bonusTx: Transaction = {
-                                    userId: referrerData.id,
-                                    timestamp: Date.now(),
-                                    id: generateTxnId(),
-                                    type: 'referral_bonus',
-                                    amount: bonusAmount,
-                                    status: 'credited',
-                                    description: `You received a ${bonusAmount.toFixed(2)} USDT bonus for activating ${freshUserFound.email}! ${boostMultiplier > 1 ? '(Boosted!)' : ''}`
-                                };
-                                transaction.update(referrerRef, { transactions: arrayUnion(bonusTx) });
-                            }
-    
-                            // Update Team Size for the entire upline
-                            for (const uplineId of freshUserFound.referralPath) {
-                                const uplineRef = doc(db, 'users', uplineId);
-                                const uplineSnap = await transaction.get(uplineRef);
-                                if (uplineSnap.exists()) {
-                                    const newTeamSize = (uplineSnap.data().teamSize || 0) + 1;
-                                    transaction.update(uplineRef, { teamSize: newTeamSize });
-                                }
-                            }
-                        }
-                    }
+                if (newLevel > tempUpdatedUser.level) {
+                    userUpdates.level = newLevel;
                 }
+                const isNowActive = newLevel > 0;
+
+                if (isNowActive && referrerSnap?.exists()) {
+                    const referrerData = referrerSnap.data() as User;
+                    const referrerUpdates: any = {};
+                    
+                    // Update sponsor's transaction history
+                    referrerUpdates.transactions = referrerData.transactions.map(
+                        tx => (tx.type === 'new_referral' && tx.referredUserId === userDocId)
+                            ? { ...tx, status: 'completed', description: `New user activated with your code: ${freshUserFound.email}` }
+                            : tx
+                    );
+                    
+                    // Increment direct referrals
+                    referrerUpdates.directReferrals = (referrerData.directReferrals || 0) + 1;
+
+                    // Award referral bonus
+                    if (referralBonusSettings.isEnabled && originalRequest!.amount >= referralBonusSettings.minDeposit) {
+                        let bonusAmount = referralBonusSettings.bonusAmount;
+                        const activeBoosters = (referrerData.activeBoosters || []).filter(b => b.type === 'referral_bonus_boost' && b.expiresAt > Date.now());
+                        const boostMultiplier = activeBoosters.reduce((acc, b) => acc * b.effectValue, 1);
+                        bonusAmount *= boostMultiplier;
+                        
+                        referrerUpdates.balance = referrerData.balance + bonusAmount;
+
+                        const bonusTx: Transaction = {
+                            userId: referrerData.id, timestamp: Date.now(), id: generateTxnId(), type: 'referral_bonus', amount: bonusAmount, status: 'credited',
+                            description: `You received a ${bonusAmount.toFixed(2)} USDT bonus for activating ${freshUserFound.email}! ${boostMultiplier > 1 ? '(Boosted!)' : ''}`
+                        };
+                        referrerUpdates.transactions.push(bonusTx);
+                    }
+                    transaction.update(referrerRef, referrerUpdates);
+                }
+            }
+
+            // =================================================================
+            // 3. WRITE PHASE - All writes happen here.
+            // =================================================================
+            transaction.update(userRef, userUpdates);
+
+            if (newStatus === 'approved' && type === 'deposit') {
+                uplineSnaps.forEach((uplineSnap, index) => {
+                    if (uplineSnap.exists()) {
+                        const uplineRef = uplineRefs[index];
+                        const uplineData = uplineSnap.data();
+                        const updates: any = {};
+
+                        // Update team business for all deposits
+                        updates.teamBusiness = (uplineData.teamBusiness || 0) + originalRequest!.amount;
+
+                        // Update team size only on first deposit activation
+                        if(isFirstDeposit && (userUpdates.level > 0 || freshUserFound.level > 0)){
+                            updates.teamSize = (uplineData.teamSize || 0) + 1;
+                        }
+                        
+                        if(Object.keys(updates).length > 0) {
+                           transaction.update(uplineRef, updates);
+                        }
+                    }
+                });
             }
         });
     
-        // Check for level downgrade on withdrawal approval outside the transaction
+        // Post-transaction actions
         if (newStatus === 'approved' && type === 'withdrawal') {
             await checkAndApplyLevelDowngrade(userDocId);
         }
@@ -2472,3 +2482,5 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     </AppContext.Provider>
   );
 };
+
+    
