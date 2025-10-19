@@ -625,13 +625,28 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
             }
             const freshUserFound = userSnap.data() as User;
             const isFirstDeposit = newStatus === 'approved' && type === 'deposit' && !freshUserFound.firstDepositTime;
-            let referrerRef = null;
+            
+            // =================================================================
+            //  READ PHASE: Perform all reads upfront
+            // =================================================================
             let referrerSnap = null;
-            if (isFirstDeposit && freshUserFound.referredBy && freshUserFound.referredBy !== ADMIN_REFERRAL_CODE) {
-                referrerRef = doc(db, "users", freshUserFound.referredBy);
-                referrerSnap = await transaction.get(referrerRef);
+            const uplineSnaps = new Map<string, any>();
+            
+            if (isFirstDeposit) {
+                if (freshUserFound.referredBy && freshUserFound.referredBy !== ADMIN_REFERRAL_CODE) {
+                    const referrerRef = doc(db, "users", freshUserFound.referredBy);
+                    referrerSnap = await transaction.get(referrerRef);
+                }
+                for (const uplineId of freshUserFound.referralPath || []) {
+                    const uplineRef = doc(db, 'users', uplineId);
+                    const uplineSnap = await transaction.get(uplineRef);
+                    uplineSnaps.set(uplineId, uplineSnap);
+                }
             }
-
+            
+            // =================================================================
+            //  LOGIC & PREPARE WRITES PHASE
+            // =================================================================
             const userUpdates: any = {};
             let finalBalance = freshUserFound.balance;
             let finalTransactions = freshUserFound.transactions.map(tx =>
@@ -649,7 +664,6 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
                 description: adminTxDescription
             };
             finalTransactions.push(adminActionTx);
-
 
             if (newStatus === 'approved') {
                 switch (type) {
@@ -687,6 +701,7 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
             userUpdates.balance = finalBalance;
 
             if (isFirstDeposit) {
+                // Apply signup bonus
                 if (signUpBonusSettings.isEnabled && originalRequest!.amount >= signUpBonusSettings.minDeposit) {
                     userUpdates.balance += signUpBonusSettings.bonusAmount;
                     const bonusTx: Transaction = {
@@ -696,6 +711,7 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
                     finalTransactions.push(bonusTx);
                 }
 
+                // Check for level up
                 const tempUpdatedUser = { ...freshUserFound, balance: finalBalance };
                 let newLevel = tempUpdatedUser.level;
                 const sortedLevels = Object.keys(levels).map(Number).sort((a, b) => b - a);
@@ -713,7 +729,8 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
                     userUpdates.level = newLevel;
                 }
 
-                if (referrerRef && referrerSnap?.exists()) {
+                // Update referrer
+                if (referrerSnap?.exists()) {
                     const referrerData = referrerSnap.data() as User;
                     const referrerUpdates: any = {};
                     referrerUpdates.transactions = referrerData.transactions.map(
@@ -722,6 +739,7 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
                             : tx
                     );
                     referrerUpdates.directReferrals = (referrerData.directReferrals || 0) + 1;
+                    
                     if (referralBonusSettings.isEnabled && originalRequest!.amount >= referralBonusSettings.minDeposit) {
                         let bonusAmount = referralBonusSettings.bonusAmount;
                         const activeBoosters = (referrerData.activeBoosters || []).filter(b => b.type === 'referral_bonus_boost' && b.expiresAt > Date.now());
@@ -734,30 +752,28 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
                         };
                         referrerUpdates.transactions.push(bonusTx);
                     }
-                    transaction.update(referrerRef, referrerUpdates);
+                    transaction.update(referrerSnap.ref, referrerUpdates);
                 }
-            }
 
-            userUpdates.transactions = finalTransactions;
-            transaction.update(userRef, userUpdates);
-
-            if (newStatus === 'approved' && type === 'deposit') {
+                // Update upline team stats
                 const depositAmount = originalRequest!.amount;
                 for (const uplineId of freshUserFound.referralPath || []) {
-                    const uplineRef = doc(db, 'users', uplineId);
-                    const uplineSnap = await transaction.get(uplineRef);
-                    if (uplineSnap.exists()) {
+                    const uplineSnap = uplineSnaps.get(uplineId);
+                    if (uplineSnap && uplineSnap.exists()) {
                         const uplineData = uplineSnap.data();
-                        const updates: any = {
+                        const uplineUpdates: any = {
                             teamBusiness: (uplineData.teamBusiness || 0) + depositAmount,
                         };
-                         if (isFirstDeposit && (userUpdates.level > 0 || freshUserFound.level > 0)) {
-                            updates.teamSize = (uplineData.teamSize || 0) + 1;
+                        if (userUpdates.level > 0 || freshUserFound.level > 0) {
+                            uplineUpdates.teamSize = (uplineData.teamSize || 0) + 1;
                         }
-                        transaction.update(uplineRef, updates);
+                        transaction.update(uplineSnap.ref, uplineUpdates);
                     }
                 }
             }
+            
+            userUpdates.transactions = finalTransactions;
+            transaction.update(userRef, userUpdates);
         });
     
         if (newStatus === 'approved' && type === 'withdrawal') {
@@ -2007,7 +2023,7 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
             .find(r => r.teamSize > (currentUser.teamSize || 0));
     
         const nextTeamBusinessRewardResult = [...(teamBusinessRewards || [])]
-            .filter(r => r.isEnabled && !(currentUser.claimedTeamBusinessRewards || []).includes(r.id))
+            .filter(r => r.isEnabled && !(currentUser.claimedTeamBusinessRewards || [])).includes(r.id)
             .sort((a, b) => a.businessAmount - b.businessAmount)
             .find(r => r.businessAmount > (currentUser.teamBusiness || 0));
     
@@ -2450,5 +2466,7 @@ const processRequest = async (transactionId: string, newStatus: 'approved' | 'de
     </AppContext.Provider>
   );
 };
+
+    
 
     
