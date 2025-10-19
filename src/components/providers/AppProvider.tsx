@@ -705,90 +705,84 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 });
             }
             
-            // Now, check for level up with the potentially bonus-updated balance
             await checkAndApplyLevelUp(userDocId);
 
-            // Activate referrer and update team metrics
-            if (isFirstDeposit && userFound.referredBy && userFound.referredBy !== ADMIN_REFERRAL_CODE) {
-                const referrerRef = doc(db, "users", userFound.referredBy);
-                const referrerSnap = await getDoc(referrerRef);
-                
+            // Distribute team business for *every* deposit
+            for (const uplineId of userFound.referralPath) {
+                await runTransaction(db, async (transaction) => {
+                    const uplineRef = doc(db, 'users', uplineId);
+                    const uplineSnap = await transaction.get(uplineRef);
+                    if (uplineSnap.exists()) {
+                        const newBusiness = (uplineSnap.data().teamBusiness || 0) + originalRequest.amount;
+                        transaction.update(uplineRef, { teamBusiness: newBusiness });
+                    }
+                });
+            }
+
+            if (isFirstDeposit) {
                 // Fetch the newly updated user to check their level
                 const newlyActivatedUserSnap = await getDoc(userRef);
                 const newlyActivatedUserData = newlyActivatedUserSnap.data() as User;
                 const isNowActive = newlyActivatedUserData.level > 0;
 
-                if (referrerSnap.exists()) {
-                    const referrerData = referrerSnap.data() as User;
-                    
-                    if (isNowActive) {
-                        const batch = writeBatch(db);
-                        // Increment direct referrals for referrer
-                        batch.update(referrerRef, { directReferrals: (referrerData.directReferrals || 0) + 1, teamSize: (referrerData.teamSize || 0) + 1 });
+                if (isNowActive) {
+                    // Activate referrer and update team size for the entire upline
+                    if (userFound.referredBy && userFound.referredBy !== ADMIN_REFERRAL_CODE) {
+                        const referrerRef = doc(db, "users", userFound.referredBy);
+                        
+                        await runTransaction(db, async (transaction) => {
+                            const referrerSnap = await transaction.get(referrerRef);
+                            if (!referrerSnap.exists()) return;
+                            const referrerData = referrerSnap.data() as User;
 
-                        // Increment team size for the entire upline
-                        for (const uplineId of referrerData.referralPath) {
-                            const uplineRef = doc(db, 'users', uplineId);
-                            batch.update(uplineRef, { teamSize: (await getDoc(uplineRef)).data()?.teamSize + 1 });
-                        }
+                            // Update sponsor's transaction history
+                            const updatedSponsorTransactions = referrerData.transactions.filter(
+                                tx => !(tx.type === 'new_referral' && tx.referredUserId === userDocId)
+                            );
+                            const activationTx: Transaction = {
+                                id: generateTxnId(), userId: referrerData.id, type: 'new_referral', amount: 0, status: 'completed',
+                                description: `New user activated with your code: ${userFound!.email}`, referredUserId: userDocId
+                            };
+                            updatedSponsorTransactions.push(activationTx);
 
-                        // Update sponsor's transaction history
-                        const updatedSponsorTransactions = referrerData.transactions.filter(
-                            tx => !(tx.type === 'new_referral' && tx.referredUserId === userDocId)
-                        );
-                        const activationTx: Transaction = {
-                            id: generateTxnId(),
-                            userId: referrerData.id,
-                            type: 'new_referral',
-                            amount: 0,
-                            status: 'completed',
-                            description: `New user activated with your code: ${userFound.email}`,
-                            referredUserId: userDocId
-                        };
-                        updatedSponsorTransactions.push(activationTx);
-                        batch.update(referrerRef, { transactions: updatedSponsorTransactions });
-
-                        await batch.commit();
-
-
-                        // Award referral bonus if applicable
+                            // Increment direct referrals for sponsor
+                            transaction.update(referrerRef, { 
+                                directReferrals: (referrerData.directReferrals || 0) + 1,
+                                transactions: updatedSponsorTransactions
+                            });
+                        });
+                        
+                        // Award referral bonus
                         if (referralBonusSettings.isEnabled && originalRequest.amount >= referralBonusSettings.minDeposit) {
+                            const referrerData = (await getDoc(referrerRef)).data() as User;
                             const now = Date.now();
                             const activeBoosters = (referrerData.activeBoosters || []).filter(b => b.type === 'referral_bonus_boost' && b.expiresAt > now);
                             let bonusAmount = referralBonusSettings.bonusAmount;
                             const boostMultiplier = activeBoosters.reduce((acc, b) => acc * b.effectValue, 1);
                             bonusAmount *= boostMultiplier;
                             
-                            const sponsorRef = doc(db, 'users', referrerData.id);
-                            const sponsorSnap = await getDoc(sponsorRef);
-                            if(sponsorSnap.exists()) {
-                                await updateDoc(sponsorRef, { balance: sponsorSnap.data().balance + bonusAmount });
-                            }
+                            await updateDoc(referrerRef, { balance: referrerData.balance + bonusAmount });
                             await checkAndApplyLevelUp(referrerData.id);
-
                             await addTransaction(referrerData.id, {
-                                id: generateTxnId(),
-                                type: 'referral_bonus',
-                                amount: bonusAmount,
-                                status: 'credited',
+                                id: generateTxnId(), type: 'referral_bonus', amount: bonusAmount, status: 'credited',
                                 description: `You received a ${bonusAmount.toFixed(2)} USDT bonus for activating ${userFound!.email}! ${boostMultiplier > 1 ? '(Boosted!)' : ''}`
                             });
                         }
                     }
+
+                    // Increment team size for the entire upline
+                    for (const uplineId of userFound.referralPath) {
+                        await runTransaction(db, async (transaction) => {
+                            const uplineRef = doc(db, 'users', uplineId);
+                            const uplineSnap = await transaction.get(uplineRef);
+                            if (uplineSnap.exists()) {
+                                const newTeamSize = (uplineSnap.data().teamSize || 0) + 1;
+                                transaction.update(uplineRef, { teamSize: newTeamSize });
+                            }
+                        });
+                    }
                 }
             }
-
-
-            // Distribute team business
-            const batch = writeBatch(db);
-            for (const uplineId of userFound.referralPath) {
-                const uplineRef = doc(db, 'users', uplineId);
-                const uplineSnap = await getDoc(uplineRef);
-                if(uplineSnap.exists()){
-                    batch.update(uplineRef, { teamBusiness: (uplineSnap.data().teamBusiness || 0) + originalRequest.amount });
-                }
-            }
-            await batch.commit();
 
             await checkQuestProgress(userDocId, 'deposit_amount', originalRequest.amount);
         }
@@ -2525,3 +2519,4 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
 
     
+
