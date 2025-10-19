@@ -724,12 +724,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     if (isNowActive) {
                         const batch = writeBatch(db);
                         // Increment direct referrals for referrer
-                        batch.update(referrerRef, { directReferrals: (referrerData.directReferrals || 0) + 1, teamSize: (referrerData.teamSize || 0) + 1 });
+                        batch.update(referrerRef, { directReferrals: (referrerData.directReferrals || 0) + 1 });
 
                         // Increment team size for the entire upline
                         for (const uplineId of referrerData.referralPath) {
                             const uplineRef = doc(db, 'users', uplineId);
-                            batch.update(uplineRef, { teamSize: (await getDoc(uplineRef)).data()?.teamSize + 1 });
+                            const uplineSnap = await getDoc(uplineRef);
+                            if (uplineSnap.exists()) {
+                                batch.update(uplineRef, { teamSize: (uplineSnap.data().teamSize || 0) + 1 });
+                            }
                         }
 
                         // Update sponsor's transaction history
@@ -2525,3 +2528,4 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
 
     
+
