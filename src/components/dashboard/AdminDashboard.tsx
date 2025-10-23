@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -297,7 +297,11 @@ const AdminHomePanel = ({ onReply }: { onReply: (view: AdminModalView) => void }
                                                     </p>
                                                     <p className="text-sm text-gray-300 font-mono">{request.email}</p>
                                                 </div>
-                                                <p className="text-xs text-gray-400">{format(new Date(request.timestamp), 'PPpp')}</p>
+                                                <p className="text-xs text-gray-400">
+                                                    {request.timestamp && isValid(new Date(request.timestamp)) 
+                                                        ? format(new Date(request.timestamp), 'PPpp') 
+                                                        : 'Invalid date'}
+                                                </p>
                                             </div>
                                             
                                             <div className="text-xs text-gray-400 space-y-1">
@@ -346,7 +350,11 @@ const AdminHomePanel = ({ onReply }: { onReply: (view: AdminModalView) => void }
                                                     </p>
                                                     <p className="text-sm text-gray-300 font-mono">{request.email}</p>
                                                 </div>
-                                                <p className="text-xs text-gray-400">{format(new Date(request.timestamp), 'PPpp')}</p>
+                                                <p className="text-xs text-gray-400">
+                                                    {request.timestamp && isValid(new Date(request.timestamp))
+                                                        ? format(new Date(request.timestamp), 'PPpp')
+                                                        : 'Invalid date'}
+                                                </p>
                                             </div>
 
                                             <div className="text-xs text-gray-400 space-y-1">
